@@ -1,4 +1,3 @@
-// #include <BluetoothSerial.h>
 #include <BluetoothSerial.h>
 #include <M5Stack.h>
 #include <SD.h>
@@ -20,7 +19,13 @@ const int16_t COLOR_NAVI_TEXT = COLOR16(0, 32, 64);
 const int16_t COLOR_MENU_BODY = DARKGREY;
 const int16_t COLOR_MENU_SEL_BORDER = RED;
 const int16_t COLOR_MENU_SEL_BODY = LIGHTGREY;
-const int16_t COLOR_MENU_TEXT = COLOR16(0, 32, 64);
+const int16_t COLOR_MENU_TEXT = BLACK;
+
+typedef struct _app_status {
+  int8_t menuIndex;
+} appstatus_t;
+
+appstatus_t status;
 
 /**
  * タイトルバー表示
@@ -41,6 +46,8 @@ void drawTitleBar() {
   int16_t BATT_ICON_X = 297;
   int16_t BATT_ICON_Y = TITLE_BAR_Y + 2;
 
+  status.menuIndex = 0;
+
   // タイトルバークリア
   M5.Lcd.fillRect(0, 0, TITLE_BAR_W, TITLE_BAR_H, COLOR_BAR_BACK);
 
@@ -49,7 +56,7 @@ void drawTitleBar() {
     M5.Lcd.setTextSize(1);
     M5.Lcd.setTextColor(COLOR_BAR_TEXT);
     M5.Lcd.setCursor(2, 2);
-    M5.Lcd.printf("Nanika on M5Stack");
+    M5.Lcd.printf("SmallStepM5S");
   }
 
   {  // SDカード状態の表示
@@ -107,11 +114,11 @@ void drawTitleBar() {
                         COLOR_OBJ_ERROR);
       }
     } else {  // バッテリーレベル不明の表示
-      M5.Lcd.setTextFont(1);
+      //M5.Lcd.setTextFont(1);
       M5.Lcd.setTextSize(2);
       M5.Lcd.setTextColor(COLOR_OBJ_ERROR);
-      M5.Lcd.setCursor(BATT_ICON_X + 4, 4);
-      M5.Lcd.printf("?");
+      M5.Lcd.drawCentreString("?", BATT_ICON_X + (BATT_ICON_W / 2),
+                              BATT_ICON_Y + 3, 1);
     }
   }
 }
@@ -128,7 +135,7 @@ void drawNavigation() {
 
   const char* NAV_CAPTIONS[3] = {"Prev", "Next", "OK"};
 
-  M5.Lcd.setTextFont(4);
+  //M5.Lcd.setTextFont(4);
   M5.Lcd.setTextSize(1);
   M5.Lcd.setTextColor(COLOR_NAVI_TEXT);
 
@@ -154,13 +161,20 @@ void drawButton() {
   int16_t BUTTON_W = SCRN_W / 3 - (BORDER_W * 2);
   int16_t BUTTON_H = SCRN_H / 2 - (BORDER_H * 2);
 
+  const char* BTN_CAPTIONS[6] = {"Download Log", "Fix RTC", "Set Preset Cfg", 
+                                 "Erase Log", "Scan & Pairing", "App Settings"};
+
+  //M5.Lcd.setTextFont(1);
+  M5.Lcd.setTextSize(1);
+  M5.Lcd.setTextColor(COLOR_MENU_TEXT);
+
   for (int i = 0; i < 6; i++) {
     int16_t BUTTON_X =
         SCRN_X + BORDER_W + (BUTTON_W + (BORDER_W * 2)) * (i % 3);
     int16_t BUTTON_Y =
         SCRN_Y + BORDER_H + ((BUTTON_H + (BORDER_H * 2)) * (i / 3));
 
-    if (i == 0) {  // 選択状態メニュー
+    if (i == status.menuIndex) {  // 選択状態メニュー
       M5.Lcd.fillRoundRect(BUTTON_X, BUTTON_Y, BUTTON_W, BUTTON_H, 4,
                            COLOR_MENU_SEL_BODY);
       M5.Lcd.drawRoundRect(BUTTON_X, BUTTON_Y, BUTTON_W, BUTTON_H, 4,
@@ -169,6 +183,9 @@ void drawButton() {
       M5.Lcd.fillRoundRect(BUTTON_X, BUTTON_Y, BUTTON_W, BUTTON_H, 4,
                            COLOR_MENU_BODY);
     }
+
+    M5.Lcd.drawCentreString(BTN_CAPTIONS[i], BUTTON_X+(BUTTON_W/2),
+                            BUTTON_Y+(BUTTON_H - 12), 1);
   }
 }
 
@@ -193,6 +210,21 @@ void setup() {
 void loop() {
   M5.update();
 
+  if (M5.BtnA.wasPressed()) {
+    status.menuIndex = (status.menuIndex + 5) % 6;
+    drawButton();
+  } else if (M5.BtnB.wasPressed()) {
+    status.menuIndex = (status.menuIndex + 1) % 6;
+    drawButton();
+  } else if (M5.BtnC.wasPressed()) {
+    switch (status.menuIndex) {
+    case 0:
+      break;
+    
+    default:
+      break;
+    }
+  }
   
   delay(50);
 }
