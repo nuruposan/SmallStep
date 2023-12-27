@@ -7,19 +7,22 @@
 
 // BluetoothSerial gpsSerial;
 
+const char APP_NAME[] = "SmallStepM5S";
+const char APP_VERSION[] = "v0.01";
+
 const int16_t COLOR_SCR_BACK = BLACK;
-const int16_t COLOR_BAR_BACK = LIGHTGREY;
+const int16_t COLOR_BAR_BACK = COLOR16(64, 255, 192);
 const int16_t COLOR_BAR_TEXT = BLACK;
-const int16_t COLOR_OBJ_BODY = BLACK;
-const int16_t COLOR_OBJ_TEXT = LIGHTGREY;
-const int16_t COLOR_OBJ_ERROR = RED;
-const int16_t COLOR_SD_PIN = OLIVE;
-const int16_t COLOR_NAVI_BODY = LIGHTGREY;
-const int16_t COLOR_NAVI_TEXT = COLOR16(0, 32, 64);
+const int16_t COLOR_ICON_BACK = BLACK;
+const int16_t COLOR_ICON_METER = LIGHTGREY;
+const int16_t COLOR_ICON_ERROR = RED;
+const int16_t COLOR_ICON_SD_PIN = OLIVE;
 const int16_t COLOR_MENU_BODY = DARKGREY;
 const int16_t COLOR_MENU_SEL_BORDER = RED;
 const int16_t COLOR_MENU_SEL_BODY = LIGHTGREY;
 const int16_t COLOR_MENU_TEXT = BLACK;
+const int16_t COLOR_NAVI_BODY = LIGHTGREY;
+const int16_t COLOR_NAVI_TEXT = BLACK;
 
 typedef enum _appstatus {
   APP_IN_MENU  = 0x000000,
@@ -31,10 +34,16 @@ typedef enum _appstatus {
   APP_DO_MENU6 = 0x006000
 } appstatus_t;
 
+typedef struct _naviitem {
+  const char *caption;
+  bool disabled;
+  uint8_t (*wasPressed)();
+  void (*onClick)();
+} naviitem_t;
 
 typedef struct _menuitem {
   const char *caption;
-  int16_t *icon;
+  uint16_t *iconData;
   bool disabled;
   void (*onSelected)();
 } menuitem_t;
@@ -45,64 +54,90 @@ typedef struct _mainmenu {
 } mainmenu_t;
 
 //appstatus_t status;
-mainmenu_t menu;
+
+naviitem_t naviButtons[3];
+mainmenu_t mainMenu;
+
+/**
+ * M5.BtnA.wasPressedの戻り値をそのまま返す。
+ * インスタンスのメンバ関数を関数ポインタから呼ぶためのラッパー関数
+ */
+uint8_t M5BtnA_wasPressed() {
+  return (M5.BtnA.wasPressed());
+}
+
+/**
+ * M5.BtnB.wasPressedの戻り値をそのまま返す。
+ * インスタンスのメンバ関数を関数ポインタから呼ぶためのラッパー関数
+ */
+uint8_t M5BtnB_wasPressed() {
+  return (M5.BtnB.wasPressed());
+}
+
+/**
+ * M5.BtnC.wasPressedの戻り値をそのまま返す。
+ * インスタンスのメンバ関数を関数ポインタから呼ぶためのラッパー関数
+ */
+uint8_t M5BtnC_wasPressed() {
+  return (M5.BtnC.wasPressed());
+}
 
 /**
  * 
  */
 void onDownloadLogMenuSelected() {
-
+  Serial.printf("[DEBUG] onDownloadLogMenuSelected\n");
 }
 
 /**
  * 
  */
 void onFixRTCMenuSelected() {
-
+  Serial.printf("[DEBUG] onFixRTCMenuSelected\n");
 }
 
 /**
  * 
  */
 void onSetPresetConfigMenuSelected() {
-
+  Serial.printf("[DEBUG] onSetPresetConfigMenuSelected\n");
 }
 
 /**
  * 
  */
 void onShowLocationMenuSelected() {
-
+  Serial.printf("[DEBUG] onShowLocationMenuSelected\n");
 }
 
 /**
  * 
  */
 void onEraseLogMenuSelected() {
-
+  Serial.printf("[DEBUG] onEraseLogMenuSelected\n");
 }
 
 /**
  * 
  */
 void onAppSettingsMenuSelected() {
-
+  Serial.printf("[DEBUG] onAppSettingsMenuSelected\n");
 }
 
 /**
  * SDカードの状態表示アイコンの描画
  */
 void drawSDcardIcon(const int16_t POS_X, const int16_t POS_Y) {
-  int16_t ICON_W = 17;
-  int16_t ICON_H = 20;
-  int16_t PIN_W = 2;
-  int16_t PIN_H = 4;
+  const int16_t ICON_W = 17;
+  const int16_t ICON_H = 20;
+  const int16_t PIN_W = 2;
+  const int16_t PIN_H = 4;
 
   // SDカードの外枠を描画
-  M5.Lcd.fillRoundRect((POS_X + 2), POS_Y, (ICON_W - 2), 8, 2, COLOR_OBJ_BODY);  // 本体
-  M5.Lcd.fillRoundRect(POS_X, (POS_Y + 6), ICON_W, (ICON_H - 6), 2, COLOR_OBJ_BODY);  // 本体
+  M5.Lcd.fillRoundRect((POS_X + 2), POS_Y, (ICON_W - 2), 8, 2, COLOR_ICON_BACK);  // 本体
+  M5.Lcd.fillRoundRect(POS_X, (POS_Y + 6), ICON_W, (ICON_H - 6), 2, COLOR_ICON_BACK);  // 本体
   for (int i = 0; i < 4; i++) {                                  // 端子部
-    M5.Lcd.fillRect((POS_X + 4) + ((PIN_W + 1) * i), (POS_Y + 1), PIN_W, PIN_H, COLOR_SD_PIN);
+    M5.Lcd.fillRect((POS_X + 4) + ((PIN_W + 1) * i), (POS_Y + 1), PIN_W, PIN_H, COLOR_ICON_SD_PIN);
   }
 
   File root = SD.open("/");
@@ -110,14 +145,14 @@ void drawSDcardIcon(const int16_t POS_X, const int16_t POS_Y) {
     // テスト用に開いたファイルを閉じる
     root.close();
 
-    // 状態表示
-    M5.Lcd.setTextFont(1);
-    M5.Lcd.setTextSize(1);
-    M5.Lcd.setTextColor(COLOR_OBJ_TEXT);
-    M5.Lcd.drawCentreString("SD", (POS_X + 9), (POS_Y + 9), 1);
+    { // 状態表示
+      M5.Lcd.setTextSize(1);
+      M5.Lcd.setTextColor(COLOR_ICON_METER);
+      M5.Lcd.drawCentreString("SD", (POS_X + 9), (POS_Y + 9), 1);
+    }
   } else {  // SDカードが使用不能
-    M5.Lcd.drawEllipse((POS_X + 8), (POS_Y + 12), 5, 5, COLOR_OBJ_ERROR);
-    M5.Lcd.drawLine((POS_X + 11), (POS_Y + 9), (POS_X + 5), (POS_Y + 15), COLOR_OBJ_ERROR);
+    M5.Lcd.drawEllipse((POS_X + 8), (POS_Y + 12), 5, 5, COLOR_ICON_ERROR);
+    M5.Lcd.drawLine((POS_X + 11), (POS_Y + 9), (POS_X + 5), (POS_Y + 15), COLOR_ICON_ERROR);
   }
 }
 
@@ -131,8 +166,8 @@ void drawBatteryIcon(const int16_t POS_X, const int16_t POS_Y) {
   const int16_t METER_H = 12;
   
   // バッテリーの外枠を描画
-  M5.Lcd.fillRoundRect(POS_X, POS_Y, (ICON_W - 2), ICON_H, 2, COLOR_OBJ_BODY);  // 本体
-  M5.Lcd.fillRect((POS_X + (ICON_W - 2)), (POS_Y + 6), 2, 8, COLOR_OBJ_BODY);  // 凸部
+  M5.Lcd.fillRoundRect(POS_X, POS_Y, (ICON_W - 2), ICON_H, 2, COLOR_ICON_BACK);  // 本体
+  M5.Lcd.fillRect((POS_X + (ICON_W - 2)), (POS_Y + 6), 2, 8, COLOR_ICON_BACK);  // 凸部
 
   if (M5.Power.canControl()) {
     // 4段階でバッテリーレベルを取得 15%以下、40%以下、65%以下、100%以下
@@ -141,15 +176,14 @@ void drawBatteryIcon(const int16_t POS_X, const int16_t POS_Y) {
 
     // バッテリーレベルの表示
     for (int i = 0; i < battLevel; i++) {
-      M5.Lcd.fillRect((POS_X + 2) + ((METER_W+1) * i), (POS_Y + 4), METER_W, METER_H, COLOR_OBJ_TEXT);
+      M5.Lcd.fillRect((POS_X + 2) + ((METER_W+1) * i), (POS_Y + 4), METER_W, METER_H, COLOR_ICON_METER);
     }
     if (battLevel == 0) {
-      M5.Lcd.fillRect((POS_X + 2), (POS_Y + 4), METER_W, METER_H, COLOR_OBJ_ERROR);
+      M5.Lcd.fillRect((POS_X + 2), (POS_Y + 4), METER_W, METER_H, COLOR_ICON_METER);
     }
   } else {  // バッテリーレベル不明の表示
-    //M5.Lcd.setTextFont(1);
     M5.Lcd.setTextSize(2);
-    M5.Lcd.setTextColor(COLOR_OBJ_ERROR);
+    M5.Lcd.setTextColor(COLOR_ICON_ERROR);
     M5.Lcd.drawCentreString("?", POS_X + (ICON_W / 2), POS_Y + 3, 1);
   }
 }
@@ -158,88 +192,111 @@ void drawBatteryIcon(const int16_t POS_X, const int16_t POS_Y) {
  * タイトルバー表示
  */
 void drawTitleBar() {
-  int16_t TITLE_BAR_W = 320;
-  int16_t TITLE_BAR_H = 24;
-  int16_t TITLE_BAR_X = 0;
-  int16_t TITLE_BAR_Y = 0;
-//  status.menuIndex = 0;
-
-  // タイトルバークリア
+  const int16_t TITLE_BAR_W = 320;
+  const int16_t TITLE_BAR_H = 24;
+  const int16_t CAPTION_X = 2;
+  const int16_t CAPTION_Y = 2;
+  const int16_t BATTERY_ICON_X = (TITLE_BAR_W - 24);
+  const int16_t BATTERY_ICON_Y = 2;
+  const int16_t SDCARD_ICON_X = (BATTERY_ICON_X - 20);
+  const int16_t SDCARD_ICON_Y = 2;
+  
+  // タイトルバーの背景を描画
   M5.Lcd.fillRect(0, 0, TITLE_BAR_W, TITLE_BAR_H, COLOR_BAR_BACK);
 
   {  // タイトル文字の表示
     M5.Lcd.setTextFont(4);
     M5.Lcd.setTextSize(1);
     M5.Lcd.setTextColor(COLOR_BAR_TEXT);
-    M5.Lcd.setCursor(2, 2);
-    M5.Lcd.printf("SmallStepM5S");
+    M5.Lcd.drawString(APP_NAME, CAPTION_X, CAPTION_Y);
   }
 
-  drawSDcardIcon(276, 2);
-  drawBatteryIcon(296, 2);
-}
-
-/**
- * ボタンの操作ナビ表示
- */
-void drawNaviBar() {
-  int16_t NAVI_X = 25;
-  int16_t NAVI_Y = 216;
-  int16_t NAVI_BTN_W = 80;
-  int16_t NAVI_BTN_H = 24;
-  int16_t NAVI_BDR_W = 15;
-
-  const char* NAV_CAPTIONS[3] = {"Prev", "Next", "OK"};
-
-  //M5.Lcd.setTextFont(4);
-  M5.Lcd.setTextSize(1);
-  M5.Lcd.setTextColor(COLOR_NAVI_TEXT);
-
-  for (int i = 0; i < 3; i++) {
-    int16_t NAVI_BTN_X = NAVI_X + ((NAVI_BTN_W + NAVI_BDR_W) * i);
-    int16_t NAVI_BTN_Y = NAVI_Y;
-
-    M5.Lcd.fillRoundRect(NAVI_BTN_X, NAVI_BTN_Y, NAVI_BTN_W, NAVI_BTN_H, 2,
-                         COLOR_NAVI_BODY);
-
-    M5.Lcd.drawCentreString(NAV_CAPTIONS[i], (NAVI_BTN_X + (NAVI_BTN_W / 2)),
-                            (NAVI_BTN_Y + 2), 4);
-  }
+  // 状態表示アイコンの表示
+  drawSDcardIcon(SDCARD_ICON_X, SDCARD_ICON_Y); // SDカードステータス
+  drawBatteryIcon(BATTERY_ICON_X, BATTERY_ICON_Y); // バッテリーステータス
 }
 
 void drawMainMenu() {
-  int16_t SCRN_X = 0;
-  int16_t SCRN_Y = 30;
-  int16_t SCRN_W = 320;
-  int16_t SCRN_H = 180;
-  int16_t BORDER_W = 4;
-  int16_t BORDER_H = 5;
-  int16_t BUTTON_W = SCRN_W / 3 - (BORDER_W * 2);
-  int16_t BUTTON_H = SCRN_H / 2 - (BORDER_H * 2);
-
-  //M5.Lcd.setTextFont(1);
-  M5.Lcd.setTextSize(1);
-  M5.Lcd.setTextColor(COLOR_MENU_TEXT);
+  const int16_t MENUBTN_W = 98; // ボタンのサイズ指定
+  const int16_t MENUBTN_H = 83;
+  const int16_t MENUBTN1_X = 5; // 配置の基準とする左上ボタンの位置
+  const int16_t MENUBTN1_Y = 33;
 
   for (int i = 0; i < 6; i++) {
-    int16_t BUTTON_X =
-        SCRN_X + BORDER_W + (BUTTON_W + (BORDER_W * 2)) * (i % 3);
-    int16_t BUTTON_Y =
-        SCRN_Y + BORDER_H + ((BUTTON_H + (BORDER_H * 2)) * (i / 3));
+    int16_t POS_X = MENUBTN1_X + ((MENUBTN_W + 8) * (i % 3));
+    int16_t POS_Y = MENUBTN1_Y + ((MENUBTN_H + 7) * (i / 3));
+    int16_t ICON_X = POS_X + (MENUBTN_W / 2) - (60 / 2);
+    int16_t ICON_Y = POS_Y + (MENUBTN_H / 2) - (60 / 2);
 
-    if (i == menu.selectedIndex) {  // 選択状態メニュー
-      M5.Lcd.fillRoundRect(BUTTON_X, BUTTON_Y, BUTTON_W, BUTTON_H, 4,
+    // メインメニューのボタンの背景を描画
+    if (i == mainMenu.selectedIndex) {  // 選択状態メニュー
+      M5.Lcd.fillRoundRect(POS_X, POS_Y, MENUBTN_W, MENUBTN_H, 4,
                            COLOR_MENU_SEL_BODY);
-      M5.Lcd.drawRoundRect(BUTTON_X, BUTTON_Y, BUTTON_W, BUTTON_H, 4,
+      M5.Lcd.drawRoundRect(POS_X, POS_Y, MENUBTN_W, MENUBTN_H, 4,
                            COLOR_MENU_SEL_BORDER);
     } else {  // 非選択状態メニュー
-      M5.Lcd.fillRoundRect(BUTTON_X, BUTTON_Y, BUTTON_W, BUTTON_H, 4,
+      M5.Lcd.fillRoundRect(POS_X, POS_Y, MENUBTN_W, MENUBTN_H, 4,
                            COLOR_MENU_BODY);
     }
 
-    M5.Lcd.drawCentreString(menu.items[i].caption, BUTTON_X+(BUTTON_W/2),
-                            BUTTON_Y+(BUTTON_H - 12), 1);
+    // ボタンのアイコンを描画
+    //M5.Lcd.drawBitmap(ICON_X, ICON_Y, 60, 60, iconData);
+
+    { // ボタンのキャプションを描画
+      M5.Lcd.setTextSize(1);
+      M5.Lcd.setTextColor(COLOR_MENU_TEXT);
+      M5.Lcd.drawCentreString(mainMenu.items[i].caption, POS_X+(MENUBTN_W/2),
+                              POS_Y+(MENUBTN_H - 12), 1);
+    }
   }
+}
+
+/**
+ * 物理ボタンの操作ナビゲーションボタンを描画する。
+ * ボタンのキャプションや有効状態はグローバル変数のnaviitem_t naviButtons[3]を参照
+ */
+void drawNaviBar() {
+  int16_t NAVIBTN_W = 86;
+  int16_t NAVIBTN_H = 24;
+  int16_t NAVIBTN1_X = 65 - (NAVIBTN_W / 2);
+  int16_t NAVIBTN1_Y = 240 - NAVIBTN_H;
+
+  M5.Lcd.setTextSize(1);
+  M5.Lcd.setTextColor(COLOR_NAVI_TEXT);
+
+  // 物理ボタンに対応する操作ナビゲーションボタンを3つ左から描画
+  for (int i = 0; i < 3; i++) {
+    // ボタンが無効なら描画しない
+    if (naviButtons[i].disabled) continue;
+
+    // ボタンの描画位置の決定
+    int16_t POS_X = NAVIBTN1_X + ((NAVIBTN_W + 8) * i);
+    int16_t POS_Y = NAVIBTN1_Y;
+
+    // ボタンの枠
+    M5.Lcd.fillRoundRect(POS_X, POS_Y, NAVIBTN_W, NAVIBTN_H, 2,
+                         COLOR_NAVI_BODY);
+
+    // キャプション
+    M5.Lcd.drawCentreString(naviButtons[i].caption, (POS_X + (NAVIBTN_W / 2)),
+                            (POS_Y + 2), 4);
+  }
+}
+
+void onNaviPrevButtonClick() {
+  mainMenu.selectedIndex = (mainMenu.selectedIndex + 5) % 6;
+  drawMainMenu();
+}
+
+void onNaviNextButtonClick() {
+  mainMenu.selectedIndex = (mainMenu.selectedIndex + 1) % 6;
+  drawMainMenu();
+
+}
+
+void onNaviEnterButtonClock() {
+  menuitem_t *mi = &mainMenu.items[mainMenu.selectedIndex];
+  if (mi->onSelected != NULL) mi->onSelected();
 }
 
 void setup() {
@@ -254,22 +311,33 @@ void setup() {
   // SDカードの開始
   SD.begin(GPIO_NUM_4, SPI, SD_ACCESS_SPEED);
 
+  memset(&naviButtons, 0, sizeof(naviButtons));
+  naviButtons[0].caption = "Prev";
+  naviButtons[0].wasPressed = &(M5BtnA_wasPressed);
+  naviButtons[0].onClick = &(onNaviPrevButtonClick);
+  naviButtons[1].caption = "Next";
+  naviButtons[1].wasPressed = &(M5BtnB_wasPressed);
+  naviButtons[1].onClick = &(onNaviNextButtonClick);
+  naviButtons[2].caption = "Select";
+  naviButtons[2].wasPressed = &(M5BtnC_wasPressed);
+  naviButtons[2].onClick = &(onNaviEnterButtonClock);
+
+  memset(&mainMenu, 0, sizeof(mainMenu));
+  mainMenu.items[0].caption = "Download Log";
+  mainMenu.items[0].onSelected = &onDownloadLogMenuSelected;
+  mainMenu.items[1].caption = "Fix RTC";
+  mainMenu.items[1].onSelected = &onFixRTCMenuSelected;
+  mainMenu.items[2].caption = "Set Preset Cfg";
+  mainMenu.items[2].onSelected = &onSetPresetConfigMenuSelected;
+  mainMenu.items[3].caption = "Show Location";
+  mainMenu.items[3].onSelected = &onShowLocationMenuSelected;
+  mainMenu.items[4].caption = "Erase Log";
+  mainMenu.items[4].onSelected = &onEraseLogMenuSelected;
+  mainMenu.items[5].caption = "App Settings";
+  mainMenu.items[5].onSelected = &onAppSettingsMenuSelected;
+
   // スクリーンを全域クリア
   M5.Lcd.clear(COLOR_SCR_BACK);
-
-  memset(&menu, 0, sizeof(menu));
-  menu.items[0].caption = "Download Log";
-  menu.items[0].onSelected = &onDownloadLogMenuSelected;
-  menu.items[1].caption = "Fix RTC";
-  menu.items[1].onSelected = &onFixRTCMenuSelected;
-  menu.items[2].caption = "Set Preset Cfg";
-  menu.items[2].onSelected = &onSetPresetConfigMenuSelected;
-  menu.items[3].caption = "Show Location";
-  menu.items[0].onSelected = &onShowLocationMenuSelected;
-  menu.items[4].caption = "Erase Log";
-  menu.items[4].onSelected = &onEraseLogMenuSelected;
-  menu.items[5].caption = "App Settings";
-  menu.items[5].onSelected = &onAppSettingsMenuSelected;
 
   // タイトルバーを描画
   drawTitleBar();
@@ -280,17 +348,15 @@ void setup() {
 void loop() {
   M5.update(); // M5Stackのステータス更新
 
-  if (M5.BtnA.wasPressed()) {
-    menu.selectedIndex = (menu.selectedIndex + 5) % 6;
-    drawMainMenu();
+  // 物理ボタンの処理 (ナビボタンを押したものとして扱う)
+  for (int i=0; i<3; i++) {
+    naviitem_t *nb = &naviButtons[i]; // 判定対象のボタンを取得
     
-  } else if (M5.BtnB.wasPressed()) {
-    menu.selectedIndex = (menu.selectedIndex + 1) % 6;
-    drawMainMenu();
-
-  } else if (M5.BtnC.wasPressed()) {
-    menuitem_t *mi = &menu.items[menu.selectedIndex];
-    if (mi->onSelected != NULL) mi->onSelected();
+    // 物理ボタンが押されていればイベントハンドラを呼び出す
+    if ((nb->disabled == false) && (nb->wasPressed())) {
+      if (nb->onClick != NULL) nb->onClick(); 
+      break;  // 同時押しがあっても両方処理しない
+    }
   }
   
   delay(50);
