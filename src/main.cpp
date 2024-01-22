@@ -1,60 +1,18 @@
+#include <BTScan.h>
 #include <BluetoothSerial.h>
 #include <M5Stack.h>
 #include <SD.h>
 
+#include "MyObject.hpp"
+
 #define SD_ACCESS_SPEED 15000000
 #define COLOR16(r, g, b) (int16_t)((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
-
-uint8_t ICON_APP[] = {  // 16x12
-    16,         12,         0b00000110, 0b00110000, 0b00001111, 0b01111000,
-    0b00001111, 0b01111000, 0b00110110, 0b00110110, 0b01111001, 0b11001111,
-    0b01111011, 0b11101111, 0b00110111, 0b11110110, 0b00001111, 0b11111000,
-    0b00011111, 0b11111100, 0b00011111, 0b11111100, 0b00011111, 0b11111100,
-    0b00000111, 0b11110000};
-
-uint8_t ICON_BT_BG[] = {  // 16x19
-    16,         19,         0b00001111, 0b11110000, 0b00111111, 0b11111100,
-    0b01111111, 0b11111110, 0b01111111, 0b11111110, 0b01111111, 0b11111110,
-    0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111,
-    0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111,
-    0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111,
-    0b01111111, 0b11111110, 0b01111111, 0b11111110, 0b01111111, 0b11111110,
-    0b00111111, 0b11111100, 0b00001111, 0b11110000};
-uint8_t ICON_BT_FG[] = {  // 16x19
-    16,         19,         0b00000001, 0b10000000, 0b00000001, 0b11000000,
-    0b00000001, 0b11100000, 0b00000001, 0b10110000, 0b00100001, 0b10011000,
-    0b00110001, 0b10001100, 0b00011001, 0b10011000, 0b00001101, 0b10110000,
-    0b00000111, 0b11100000, 0b00000011, 0b11000000, 0b00000111, 0b11100000,
-    0b00001101, 0b10110000, 0b00011001, 0b10011000, 0b00110001, 0b10001100,
-    0b00100001, 0b10011000, 0b00000001, 0b10110000, 0b00000001, 0b11100000,
-    0b00000001, 0b11000000, 0b00000001, 0b10000000};
-
-BluetoothSerial gpsSerial;
-
-const char APP_NAME[] = "SmallStepM5S";
-const char APP_VERSION[] = "v0.01";
-
-const int16_t COLOR_SCREEN = BLACK;
-const int16_t COLOR_TITLE_BACK = LIGHTGREY;
-// COLOR16(160, 192, 255);
-const int16_t COLOR_TITLE_TEXT = BLACK;
-const int16_t COLOR_ICON_BODY = BLACK;
-const int16_t COLOR_ICON_TEXT = LIGHTGREY;
-const int16_t COLOR_ICON_ERROR = RED;
-const int16_t COLOR_ICON_SD_PIN = OLIVE;
-const int16_t COLOR_MENU_BACK = DARKGREY;
-const int16_t COLOR_MENU_TEXT = BLACK;
-const int16_t COLOR_MENU_SEL_BORDER = BLUE;
-const int16_t COLOR_MENU_SEL_BACK = LIGHTGREY;
-const int16_t COLOR_NAVI_BACK = LIGHTGREY;
-const int16_t COLOR_NAVI_TEXT = BLACK;
 
 typedef enum { BID_BTN_A = 0, BID_BTN_B = 1, BID_BTN_C = 2 } btnid_t;
 
 typedef struct _naviitem {
   const char *caption;
   bool disabled;
-  uint8_t (*wasPressed)();
 } naviitem_t;
 
 typedef struct _navimenu {
@@ -82,48 +40,147 @@ typedef struct _loggerinfo {
 
 typedef struct _appstatus {
   navimenu_t *navi;
+  navimenu_t *prevNavi;
   mainmenu_t *menu;
+  Button *buttons[3];
   loggerinfo_t loggerSelected;
   loggerinfo_t loggerDiscovered;
 } appstatus_t;
 
-appstatus_t app;
+// ******** resource data ********
 
+const uint8_t ICON_APP[] = {
+    16,             // Width
+    12,             // Height
+    0,          0,  // 16bit color
+    0b00000110, 0b00110000, 0b00001111, 0b01111000, 0b00001111, 0b01111000,
+    0b00110110, 0b00110110, 0b01111001, 0b11001111, 0b01111011, 0b11101111,
+    0b00110111, 0b11110110, 0b00001111, 0b11111000, 0b00011111, 0b11111100,
+    0b00011111, 0b11111100, 0b00011111, 0b11111100, 0b00000111, 0b11110000};
+const uint8_t ICON_BT_BG[] = {
+    16,         19,         0,          0,  // Width, Height, Color
+    0b00001111, 0b11110000, 0b00111111, 0b11111100, 0b01111111, 0b11111110,
+    0b01111111, 0b11111110, 0b01111111, 0b11111110, 0b11111111, 0b11111111,
+    0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111,
+    0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111,
+    0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b01111111, 0b11111110,
+    0b01111111, 0b11111110, 0b01111111, 0b11111110, 0b00111111, 0b11111100,
+    0b00001111, 0b11110000};
+const uint8_t ICON_BT_FG[] = {
+    16,         19,         0,          0,  // Width, Height, Color
+    0b00000001, 0b10000000, 0b00000001, 0b11000000, 0b00000001, 0b11100000,
+    0b00000001, 0b10110000, 0b00100001, 0b10011000, 0b00110001, 0b10001100,
+    0b00011001, 0b10011000, 0b00001101, 0b10110000, 0b00000111, 0b11100000,
+    0b00000011, 0b11000000, 0b00000111, 0b11100000, 0b00001101, 0b10110000,
+    0b00011001, 0b10011000, 0b00110001, 0b10001100, 0b00100001, 0b10011000,
+    0b00000001, 0b10110000, 0b00000001, 0b11100000, 0b00000001, 0b11000000,
+    0b00000001, 0b10000000};
+const uint8_t ICON_DOWNLOAD[] = {
+    48,         43,         0,          0,  // Width, Height, Color
+    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000011, 0b11000000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
+    0b00000000, 0b00000011, 0b11111111, 0b11111111, 0b11000000, 0b00000000,
+    0b00111100, 0b00000001, 0b11111111, 0b11111111, 0b10000000, 0b00111100,
+    0b01111110, 0b00000000, 0b11111111, 0b11111111, 0b00000000, 0b01111110,
+    0b01111110, 0b00000000, 0b01111111, 0b11111110, 0b00000000, 0b01111110,
+    0b01111110, 0b00000000, 0b00111111, 0b11111100, 0b00000000, 0b01111110,
+    0b01111110, 0b00000000, 0b00011111, 0b11111000, 0b00000000, 0b01111110,
+    0b01111110, 0b00000000, 0b00001111, 0b11110000, 0b00000000, 0b01111110,
+    0b01111110, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b01111110,
+    0b01111110, 0b00000000, 0b00000011, 0b11000000, 0b00000000, 0b01111110,
+    0b01111110, 0b00000000, 0b00000001, 0b10000000, 0b00000000, 0b01111110,
+    0b01111110, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b01111110,
+    0b01111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111110,
+    0b01111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111110,
+    0b01111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111110,
+    0b01111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111110,
+    0b01111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111110,
+    0b00111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111100};
+
+// ******** function prototypes ********
+
+uint8_t calcNmeaChecksum(char *, uint16_t);
+bool sendNmeaCommand(char *, uint16_t);
+void sendDownloadCommand(int, int);
+void onBluetoothDiscoverCallback(esp_spp_cb_event_t, esp_spp_cb_param_t *);
+void onDownloadLogMenuSelected();
+void onFixRTCMenuSelected();
+void onSetPresetConfigMenuSelected();
+void onShowLocationMenuSelected();
+void onEraseLogMenuSelected();
+void onAppSettingsMenuSelected();
+void drawProgressBar(char *, uint8_t);
+void drawDialog(const char *, const char *);
+void draw1bitBitmap(TFT_eSprite *, const uint8_t *, int16_t, int16_t, int32_t);
+void drawApplicationIcon(TFT_eSprite *, int16_t, int16_t);
+void drawBluetoothIcon(TFT_eSprite *, int16_t, int16_t);
+void drawSDcardIcon(TFT_eSprite *, int16_t, int16_t);
+void drawBatteryIcon(TFT_eSprite *, int16_t, int16_t);
+void drawTitleBar();
+void drawMainMenu();
+void drawNaviBar();
+void onNaviPrevButtonClick();
+void onNaviNextButtonClick();
+void onNaviEnterButtonClick();
+void onMainNaviButtonPress(btnid_t);
+void onDialogOKButtonClick();
+void onDialogCancelButtonClick();
+void onDialogNaviButtonPress(btnid_t);
+
+const char APP_NAME[] = "SmallStepM5S";
+const char BT_NAME[] = "ESP32";
+const char APP_VERSION[] = "v0.01";
+
+const int16_t COLOR_SCREEN = BLACK;
+const int16_t COLOR_TITLE_BACK = LIGHTGREY;
+const int16_t COLOR_TITLE_TEXT = BLACK;
+const int16_t COLOR_ICON_BODY = BLACK;
+const int16_t COLOR_ICON_TEXT = LIGHTGREY;
+const int16_t COLOR_ICON_ERROR = RED;
+const int16_t COLOR_ICON_SD_PIN = OLIVE;
+const int16_t COLOR_MENU_BACK = DARKGREY;
+const int16_t COLOR_MENU_TEXT = BLACK;
+const int16_t COLOR_MENU_SEL_BORDER = BLUE;
+const int16_t COLOR_MENU_SEL_BACK = LIGHTGREY;
+const int16_t COLOR_NAVI_BACK = LIGHTGREY;
+const int16_t COLOR_NAVI_TEXT = BLACK;
+
+BluetoothSerial gpsSerial;
 TFT_eSprite sprite = TFT_eSprite(&M5.Lcd);
+appstatus_t app;
+MyObject *obj;
 
 /**
- * M5.BtnA.wasPressedの戻り値をそのまま返す。
- * インスタンスのメンバ関数を関数ポインタから呼ぶためのラッパー関数
+ * NMEAコマンドのチェックサム計算を行う
+ * (printfのフォーマット%Xで送る値を生成)
  */
-uint8_t M5BtnA_wasPressed() {
-  // M5.BtnA.wasPressed()を実行して戻り値をそのまま返す
-  return (M5.BtnA.wasPressed());
-}
-
-/**
- * M5.BtnB.wasPressedの戻り値をそのまま返す。
- * インスタンスのメンバ関数を関数ポインタから呼ぶためのラッパー関数
- */
-uint8_t M5BtnB_wasPressed() {
-  // M5.BtnB.wasPressed()を実行して戻り値をそのまま返す
-  return (M5.BtnB.wasPressed());
-}
-
-/**
- * M5.BtnC.wasPressedの戻り値をそのまま返す。
- * インスタンスのメンバ関数を関数ポインタから呼ぶためのラッパー関数
- */
-uint8_t M5BtnC_wasPressed() {
-  // M5.BtnC.wasPressed()を実行して戻り値をそのまま返す
-  return (M5.BtnC.wasPressed());
-}
-
-/**
- * NMEAコマンドのチェックサム計算を行う (printfのフォーマット%Xで送る値を生成)
- */
-byte calcNmeaChecksum(char *cmd, byte len) {
-  byte chk = 0;
-  for (byte i = 0; (i < len) && (cmd[i] != 0); i++) {
+uint8_t calcNmeaChecksum(char *cmd, uint16_t len) {
+  uint8_t chk = 0;
+  for (uint16_t i = 0; (i < len) && (cmd[i] != 0); i++) {
     chk ^= (byte)(cmd[i]);
   }
   return chk;
@@ -132,10 +189,10 @@ byte calcNmeaChecksum(char *cmd, byte len) {
 /**
  * NMEAコマンドにチェックサムをつけてSerialBTに書き出す
  */
-bool sendNmeaCommand(char *cmd, byte len) {
+bool sendNmeaCommand(char *cmd, uint16_t len) {
   if (gpsSerial.connected() == false) return false;
 
-  word len2 = (word)(len) + 8;
+  uint16_t len2 = len + 8;
   char buf[len2];
 
   byte chk = calcNmeaChecksum(cmd, len);
@@ -154,7 +211,7 @@ bool sendNmeaCommand(char *cmd, byte len) {
 
 // PMTK182,7コマンドを送る (ログのダウンロードコマンド)
 void sendDownloadCommand(int startPos, int reqSize) {
-  char cmdstr[32];
+  char cmdstr[40];
   sprintf(cmdstr, "PMTK182,7,%08X,%08X", startPos, reqSize);
   sendNmeaCommand(cmdstr, sizeof(cmdstr));
 }
@@ -168,6 +225,22 @@ void onBluetoothDiscoverCallback(esp_spp_cb_event_t event,
   }
 }
 
+void drawProgressBar(char *caption, uint8_t progress) {
+  // 進捗率の指定のレンジ補正
+  if (progress > 100) progress = 100;
+
+  sprite.createSprite(300, 40);
+
+  sprite.setTextColor(LIGHTGREY);
+  sprite.drawString(caption, 8, 154, 4);
+  sprite.fillRect((progress / 100) * 300, 25, 300, 16, LIGHTGREY);
+  sprite.fillRect(0, 25, (progress / 100) * 300, 16, BLUE);
+  sprite.drawRect(0, 25, 300, 40, DARKGREY);
+
+  sprite.pushSprite(10, 180);
+  sprite.deleteSprite();
+}
+
 void drawDialog(const char *title, const char *msg) {
   const int16_t MARGIN = 4;
   const int16_t DIALOG_X = MARGIN;
@@ -177,13 +250,13 @@ void drawDialog(const char *title, const char *msg) {
   const int16_t TITLE_X = 2;
   const int16_t TITLE_Y = 2;
   const int16_t MSG_X = 8;
-  const int16_t MSG_Y = 28;
+  const int16_t MSG_Y = 30;
 
   sprite.setColorDepth(8);
   sprite.createSprite(DIALOG_W, DIALOG_H);
 
   sprite.fillRect(0, 0, sprite.width(), sprite.height(), LIGHTGREY);
-  sprite.fillRect(0, 0, sprite.width(), 24, COLOR16(0, 128, 255));
+  sprite.fillRect(0, 0, sprite.width(), 26, COLOR16(0, 128, 255));
   sprite.drawRect(0, 0, sprite.width(), sprite.height(), BLUE);
 
   sprite.setTextSize(1);
@@ -199,38 +272,52 @@ void drawDialog(const char *title, const char *msg) {
  *
  */
 void onDownloadLogMenuSelected() {
+  {
+    navimenu_t *nm = (navimenu_t *)malloc(sizeof(navimenu_t));
+    memset(nm, 0, sizeof(navimenu_t));
+
+    nm->onButtonPress = onDialogNaviButtonPress;
+    nm->items[0].caption = "OK";
+    nm->items[1].disabled = true;
+    nm->items[2].disabled = "Cancel";
+
+    app.prevNavi = app.navi;
+    app.navi = nm;
+
+    drawNaviBar();
+  }
+
   const char gpsPinCode[] = "0000";  // SPP接続時のPinコード。通常は"0000"で固定
 
+  // BT初期化
   gpsSerial.register_callback(onBluetoothDiscoverCallback);
   gpsSerial.setTimeout(5000);
   gpsSerial.setPin(gpsPinCode);  // Pinコードをセット。これがないと繋がらない
 
   // char deviceNames[][] = {"747PRO GPS", "Holux_M-241"};
 
-  drawDialog("Discovering", "Trying to connect to\n \"747PRO GPS\"...");
-  if (gpsSerial.connect("747PRO GPS")) {
-    drawDialog("Success", "logger found!");
+  drawDialog("Please wait", "Finding GPS logger\"...");
+  M5.Lcd.setTextColor(LIGHTGREY);
+  for (int i = 0; i < 31; i++) {
+    char buf[20];
+    sprintf(buf, "%d\%", (100 * i / 30));
 
-    //    for (int i = 0; i < 6; i++) {
-    //      Serial.printf("%02x", loggerDiscovered.address[i]);
-    //    }
-    //    Serial.printf("\n");
+    drawProgressBar(buf, (100 * i / 30));
+    delay(1000);
+  }
+  BTScanResults *devList = gpsSerial.discover(30000);
+  if (devList) {
+    Serial.printf("Bluetooth scan result: %d devices\n", devList->getCount());
 
-    char cmd[] = "PMTK605";
-    sendNmeaCommand(cmd, sizeof(cmd));
+    for (int16_t i = 0; i < devList->getCount(); i++) {
+      BTAdvertisedDevice *device = devList->getDevice(i);
 
-    int n = 0;
-    sprite.setCursor(0, 20);
-    while (n < 500) {
-      while (gpsSerial.available()) {
-        Serial.print((char)gpsSerial.read());
-        n++;
-      }
-      delay(1);
+      Serial.printf("device[%d] name=%s, addr=%s\n", i,
+                    device->getName().c_str(),
+                    device->getAddress().toString().c_str());
     }
-    gpsSerial.disconnect();
   } else {
-    drawDialog("Failed", "No logger found.");
+    Serial.println("No Bluetooth device found");
   }
 }
 
@@ -267,23 +354,33 @@ void onAppSettingsMenuSelected() {
   Serial.printf("[DEBUG] onAppSettingsMenuSelected\n");
 }
 
-void draw1bppBitmap(TFT_eSprite *spr, uint8_t *iconData, int16_t x0, int16_t y0,
-                    int32_t color) {
-  // uint8_t width,
-  // uint8_t height,
+void draw1bitBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x0,
+                    int16_t y0, int32_t color) {
+  // iconDataはuint8_tの配列へのポインタ。想定データフォーマットは以下の通り
+  // - 1st byte: uint8_t width
+  // - 2nd byte: uint8_t height
+  // - 3rd-4th byte: uint16_t color (**currently unused**)
+  // - 5th byte to the end: uint8_t pixelBits[]
+  //
+  // データフォーマットに関する備考
+  // - 標準フォーマットのビットマップデータではない
+  // - 画像サイズは255x255まで
+  // - アイコンの1行の区切りをbyte単位に揃える必要はない
 
-  uint8_t iconW = *iconData++;
-  uint8_t iconH = *iconData++;
-  uint16_t pixelsTotal = (iconW * iconH);
+  uint8_t iconW = *iconData++;  // 1バイト目は幅
+  uint8_t iconH = *iconData++;  // 2バイト目は高さ
+  iconData += 2;  // 3-4バイト目を無視。色の指定は引数で行う
+  uint16_t pixelsTotal = (iconW * iconH);  // ピクセル数を幅×高さで計算
 
-  for (int i = 0; i < pixelsTotal; i++) {
-    if (*iconData & (0b10000000 >> (i % 8))) {
+  // 左上からピクセルデータを読み込んでいき、1pxずつ、対応するビットが1なら指定の色で塗る
+  for (int32_t i = 0; i < pixelsTotal; i++) {
+    if (*iconData & (0b10000000 >> (i % 8))) {  // 対応するビットが1なら
       int px = x0 + (i % iconW);
       int py = y0 + (i / iconW);
       spr->drawPixel(px, py, color);
     }
 
-    // 8ビット目まで見たら参照を次の1バイトへずらす
+    // 8ビット目まで見たら参照先を次の1バイトへずらす
     if ((i % 8) == 7) iconData++;
   }
 }
@@ -293,8 +390,8 @@ void drawApplicationIcon(TFT_eSprite *spr, int16_t x0, int16_t y0) {
   uint16_t color = COLOR16(0, 64, 255);
 
   // アイコンを描画 (2つセット)
-  draw1bppBitmap(spr, ICON_APP, x0, y0, color);
-  draw1bppBitmap(spr, ICON_APP, (x0 + 12), (y0 + 8), color);
+  draw1bitBitmap(spr, ICON_APP, x0, y0, color);
+  draw1bitBitmap(spr, ICON_APP, (x0 + 12), (y0 + 8), color);
 }
 
 void drawBluetoothIcon(TFT_eSprite *spr, int16_t x0, int16_t y0) {
@@ -307,8 +404,8 @@ void drawBluetoothIcon(TFT_eSprite *spr, int16_t x0, int16_t y0) {
   }
 
   // アイコンの背景・前景を指定位置に描画
-  draw1bppBitmap(spr, ICON_BT_BG, x0, y0, colorBG);
-  draw1bppBitmap(spr, ICON_BT_FG, x0, y0, colorFG);
+  draw1bitBitmap(spr, ICON_BT_BG, x0, y0, colorBG);
+  draw1bitBitmap(spr, ICON_BT_FG, x0, y0, colorFG);
 }
 
 /**
@@ -325,15 +422,14 @@ void drawSDcardIcon(TFT_eSprite *spr, int16_t x0, int16_t y0) {
                      COLOR_ICON_BODY);  // 本体
   spr->fillRoundRect(x0, (y0 + 6), ICON_W, (ICON_H - 6), 2,
                      COLOR_ICON_BODY);  // 本体
-  for (int i = 0; i < 4; i++) {         // 端子部
+  for (int16_t i = 0; i < 4; i++) {     // 端子部
     spr->fillRect((x0 + 4) + ((PIN_W + 1) * i), (y0 + 1), PIN_W, PIN_H,
                   COLOR_ICON_SD_PIN);
   }
 
   File root = SD.open("/");
-  if (root) {  // SDカードが使用可能な場合
-               // (ルートディレクトリがオープンできる)
-    // テスト用に開いたファイルを閉じる
+  if (root) {  // SDカードが使用可能な場合。SDの文字をつける
+    // テスト用に開いたディレクトリを閉じる
     root.close();
 
     {  // 状態表示
@@ -341,7 +437,7 @@ void drawSDcardIcon(TFT_eSprite *spr, int16_t x0, int16_t y0) {
       spr->setTextColor(COLOR_ICON_TEXT);
       spr->drawCentreString("SD", (x0 + 9), (y0 + 9), 1);
     }
-  } else {  // SDカードが使用不能な場合
+  } else {  // SDカードが使用不能な場合。赤丸に斜線マーク
     spr->drawEllipse((x0 + 8), (y0 + 12), 5, 5, COLOR_ICON_ERROR);
     spr->drawLine((x0 + 11), (y0 + 9), (x0 + 5), (y0 + 15), COLOR_ICON_ERROR);
   }
@@ -363,12 +459,13 @@ void drawBatteryIcon(TFT_eSprite *spr, int16_t x0, int16_t y0) {
                 COLOR_ICON_BODY);  // 凸部
 
   if (M5.Power.canControl()) {
-    // 4段階でバッテリーレベルを取得 0-bias%以下、2540%以下、65%以下、100%以下
+    // 4段階でバッテリーレベルを取得
+    // 0-bias%以下、2540%以下、65%以下、100%以下
     int8_t battBias = 15;
     int8_t battLevel = (battBias + M5.Power.getBatteryLevel()) / 25;
 
     // バッテリーレベルの表示
-    for (int i = 0; i < battLevel; i++) {
+    for (int16_t i = 0; i < battLevel; i++) {
       spr->fillRect((x0 + 2) + ((METER_W + 1) * i), (y0 + 4), METER_W, METER_H,
                     COLOR_ICON_TEXT);
     }
@@ -440,7 +537,7 @@ void drawMainMenu() {
   sprite.createSprite(MENUAREA_W, MENUAREA_H);
   sprite.fillScreen(COLOR_SCREEN);
 
-  for (int i = 0; i < 6; i++) {
+  for (int16_t i = 0; i < 6; i++) {
     int16_t POS_X = MENUBTN1_X + ((MENUBTN_W + MARGIN_X) * (i % 3));
     int16_t POS_Y = MENUBTN1_Y + ((MENUBTN_H + MARGIN_Y) * (i / 3));
 
@@ -455,53 +552,8 @@ void drawMainMenu() {
                            COLOR_MENU_BACK);
     }
 
-    uint8_t iconData[] = {
-        48,         43,         0b00000000, 0b00000000, 0b00000000, 0b00000000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000011, 0b11000000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b00000000, 0b00000000, 0b00000011, 0b11111111, 0b11111111,
-        0b11000000, 0b00000000, 0b00111100, 0b00000001, 0b11111111, 0b11111111,
-        0b10000000, 0b00111100, 0b01111110, 0b00000000, 0b11111111, 0b11111111,
-        0b00000000, 0b01111110, 0b01111110, 0b00000000, 0b01111111, 0b11111110,
-        0b00000000, 0b01111110, 0b01111110, 0b00000000, 0b00111111, 0b11111100,
-        0b00000000, 0b01111110, 0b01111110, 0b00000000, 0b00011111, 0b11111000,
-        0b00000000, 0b01111110, 0b01111110, 0b00000000, 0b00001111, 0b11110000,
-        0b00000000, 0b01111110, 0b01111110, 0b00000000, 0b00000111, 0b11100000,
-        0b00000000, 0b01111110, 0b01111110, 0b00000000, 0b00000011, 0b11000000,
-        0b00000000, 0b01111110, 0b01111110, 0b00000000, 0b00000001, 0b10000000,
-        0b00000000, 0b01111110, 0b01111110, 0b00000000, 0b00000000, 0b00000000,
-        0b00000000, 0b01111110, 0b01111111, 0b11111111, 0b11111111, 0b11111111,
-        0b11111111, 0b11111110, 0b01111111, 0b11111111, 0b11111111, 0b11111111,
-        0b11111111, 0b11111110, 0b01111111, 0b11111111, 0b11111111, 0b11111111,
-        0b11111111, 0b11111110, 0b01111111, 0b11111111, 0b11111111, 0b11111111,
-        0b11111111, 0b11111110, 0b01111111, 0b11111111, 0b11111111, 0b11111111,
-        0b11111111, 0b11111110, 0b00111111, 0b11111111, 0b11111111, 0b11111111,
-        0b11111111, 0b11111100};
-    draw1bppBitmap(&sprite, iconData, (POS_X + (MENUBTN_W / 2) - (48 / 2)),
-                   (POS_Y + 12), BLACK);
+    draw1bitBitmap(&sprite, ICON_DOWNLOAD, (POS_X + (MENUBTN_W / 2) - (48 / 2)),
+                   (POS_Y + 12), COLOR16(0, 32, 32));
 
     {  // ボタンのキャプションを描画
       sprite.setTextSize(1);
@@ -538,7 +590,7 @@ void drawNaviBar() {
   sprite.fillScreen(COLOR_SCREEN);
 
   // 物理ボタンに対応する操作ナビゲーションボタンを3つ左から描画
-  for (int i = 0; i < 3; i++) {
+  for (int16_t i = 0; i < 3; i++) {
     // 対象のボタンアイテム情報を取得
     naviitem_t *ni = &(app.navi->items[i]);
 
@@ -580,7 +632,7 @@ void onNaviEnterButtonClick() {
   if (mi->onSelected != NULL) mi->onSelected();
 }
 
-void onNaviButtonPress(btnid_t bid) {
+void onMainNaviButtonPress(btnid_t bid) {
   switch (bid) {
     case BID_BTN_A:
       onNaviPrevButtonClick();
@@ -592,11 +644,34 @@ void onNaviButtonPress(btnid_t bid) {
       onNaviEnterButtonClick();
       break;
   }
+}
 
-  // Memo:
-  // mainMenu.items[i]にイベントハンドラを含めればループでイベント
-  // ハンドラ呼び出しもループとif文で処理できるのだが、画面切り替え時の
-  // インスタンス置き換えが若干面倒くさいうえに直感的にわかりづらいコードになる
+void onDialogOKButtonClick() {
+  // TODO
+  free(app.navi);
+  app.navi = app.prevNavi;
+  app.prevNavi = NULL;
+
+  drawMainMenu();
+  drawNaviBar();
+}
+
+void onDialogCancelButtonClick() {
+  // TODO
+  //
+}
+
+void onDialogNaviButtonPress(btnid_t bid) {
+  switch (bid) {
+    case BID_BTN_A:
+      onDialogOKButtonClick();
+      break;
+    case BID_BTN_B:
+      break;
+    case BID_BTN_C:
+      onDialogCancelButtonClick();
+      break;
+  }
 }
 
 void setup() {
@@ -614,21 +689,23 @@ void setup() {
   // スプライトの初期化
   sprite.setColorDepth(8);
 
+  // BTの開始
+  gpsSerial.begin("ESP32", true);  // start bluetooth serial as a master
+
   // SDカードの開始
   SD.begin(GPIO_NUM_4, SPI, SD_ACCESS_SPEED);
 
-  // BT初期化
-  gpsSerial.begin(APP_NAME, true);  // start bluetooth serial as a master
+  app.buttons[0] = &M5.BtnA;
+  app.buttons[1] = &M5.BtnB;
+  app.buttons[2] = &M5.BtnC;
 
   app.navi = (navimenu_t *)malloc(sizeof(navimenu_t));
   memset(app.navi, 0, sizeof(navimenu_t));
-  app.navi->onButtonPress = &(onNaviButtonPress);
+  app.navi->onButtonPress = &(onMainNaviButtonPress);
   app.navi->items[0].caption = "Prev";
-  app.navi->items[0].wasPressed = &(M5BtnA_wasPressed);
   app.navi->items[1].caption = "Next";
-  app.navi->items[1].wasPressed = &(M5BtnB_wasPressed);
   app.navi->items[2].caption = "Select";
-  app.navi->items[2].wasPressed = &(M5BtnC_wasPressed);
+  app.prevNavi = NULL;
 
   app.menu = (mainmenu_t *)malloc(sizeof(mainmenu_t));
   memset(app.menu, 0, sizeof(mainmenu_t));
@@ -649,20 +726,18 @@ void setup() {
   drawTitleBar();
   drawNaviBar();
   drawMainMenu();
+
+  obj = new MyObject;
 }
 
 void loop() {
   M5.update();  // M5Stackのステータス更新
 
   // 物理ボタンの処理 (ナビボタンを押したものとして扱う)
-  for (int i = 0; i < 3; i++) {
-    naviitem_t *ni = &(app.navi->items[i]);  // 判定対象のボタンを取得
-
-    // 物理ボタンが押されていればイベントハンドラを呼び出す
-    if ((ni->disabled == false) && (ni->wasPressed())) {
-      if (app.navi->onButtonPress != NULL) {
-        app.navi->onButtonPress((btnid_t)(i));
-      }
+  for (int16_t i = 0; i < 3; i++) {
+    Button *b = app.buttons[i];  // 判定するボタン
+    if (b->wasPressed()) {
+      app.navi->onButtonPress((btnid_t)(i));
       break;  // 左・中・右の順に1回だけ処理。同時に複数の処理はしない
     }
   }
