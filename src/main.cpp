@@ -3,6 +3,8 @@
 #include <M5Stack.h>
 #include <SD.h>
 
+// #include <stack>
+
 #include "MyObject.hpp"
 
 #define SD_ACCESS_SPEED 15000000
@@ -169,9 +171,14 @@ const int16_t COLOR_MENU_SEL_BACK = LIGHTGREY;
 const int16_t COLOR_NAVI_BACK = LIGHTGREY;
 const int16_t COLOR_NAVI_TEXT = BLACK;
 
+typedef struct phandler {
+  void (*run)();
+} phandler_t;
+
 BluetoothSerial gpsSerial;
 TFT_eSprite sprite = TFT_eSprite(&M5.Lcd);
 appstatus_t app;
+// std::stack<int> handlerStack;
 MyObject *obj;
 
 /**
@@ -726,8 +733,6 @@ void setup() {
   drawTitleBar();
   drawNaviBar();
   drawMainMenu();
-
-  obj = new MyObject;
 }
 
 void loop() {

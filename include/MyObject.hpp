@@ -2,6 +2,7 @@
 
 class MyObject {
  private:
+ protected:
  public:
   MyObject();
   ~MyObject();
