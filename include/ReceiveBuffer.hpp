@@ -10,13 +10,13 @@ typedef struct bufferpage {
 
 class ReceiveBuffer {
  private:
-  bufferpage_t *rPage;
-  bufferpage_t *cPage;
+  bufferpage_t *rootPage;
+  bufferpage_t *currentPage;
   uint8_t ptr;
-  uint32_t dLen;
-  uint8_t cCnt;
-  uint8_t cChk;
-  uint8_t rChk;
+  uint32_t dataLength;
+  uint8_t columnCount;
+  uint8_t calculatedChecksum;
+  uint8_t receivedChecksum;
 
   static bool isTextChar(const char ch);
   static uint8_t hexCharToByte(const char ch);
@@ -33,8 +33,8 @@ class ReceiveBuffer {
   char get();
   bool readHexByteFull(byte *by);
   bool readHexByteHalf(byte *by);
-  bool seek(const uint8_t clm);
+  bool readColumnAsInt(const uint8_t clm, int32_t *num);
+  bool seekToColumn(const uint8_t clm);
   bool isChecksumCorrect();
-  void print_d();
   bool match(const char *str);
 };

@@ -5,7 +5,7 @@
 
 // #include <stack>
 
-#include "MyObject.hpp"
+#include "ReceiveBuffer.hpp"
 
 #define SD_ACCESS_SPEED 15000000
 #define COLOR16(r, g, b) (int16_t)((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
@@ -123,13 +123,13 @@ const uint8_t ICON_DOWNLOAD[] = {
     0b01111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111110,
     0b00111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111100};
 
-// ******** function prototypes ********
 
+// ******** function prototypes ********
 uint8_t calcNmeaChecksum(char *, uint16_t);
 bool sendNmeaCommand(char *, uint16_t);
 void sendDownloadCommand(int, int);
 void onBluetoothDiscoverCallback(esp_spp_cb_event_t, esp_spp_cb_param_t *);
-void onDownloadLogMenuSelected();
+void onDownloadMenuSelected();
 void onFixRTCMenuSelected();
 void onSetPresetConfigMenuSelected();
 void onShowLocationMenuSelected();
@@ -154,8 +154,8 @@ void onDialogCancelButtonClick();
 void onDialogNaviButtonPress(btnid_t);
 
 const char APP_NAME[] = "SmallStepM5S";
-const char BT_NAME[] = "ESP32";
 const char APP_VERSION[] = "v0.01";
+const char LCD_BRIGHTNESS = 16;
 
 const int16_t COLOR_SCREEN = BLACK;
 const int16_t COLOR_TITLE_BACK = LIGHTGREY;
@@ -178,8 +178,6 @@ typedef struct phandler {
 BluetoothSerial gpsSerial;
 TFT_eSprite sprite = TFT_eSprite(&M5.Lcd);
 appstatus_t app;
-// std::stack<int> handlerStack;
-MyObject *obj;
 
 /**
  * NMEAコマンドのチェックサム計算を行う
@@ -205,12 +203,8 @@ bool sendNmeaCommand(char *cmd, uint16_t len) {
   byte chk = calcNmeaChecksum(cmd, len);
   memset(buf, 0, len2);
   sprintf(buf, "$%s*%X\r\n", cmd, chk);
-
-  Serial.print("[DEBUG] sendNmeaCommand: >");
-
   for (short i = 0; (i < len2) && (buf[i] != 0); i++) {
     gpsSerial.write(buf[i]);
-    Serial.print(buf[i]);
   }
 
   return true;
@@ -278,8 +272,9 @@ void drawDialog(const char *title, const char *msg) {
 /**
  *
  */
-void onDownloadLogMenuSelected() {
-  {
+void onDownloadMenuSelected() {
+  const char PATH_BIN[] = "/tmp.bin";
+/*  {
     navimenu_t *nm = (navimenu_t *)malloc(sizeof(navimenu_t));
     memset(nm, 0, sizeof(navimenu_t));
 
@@ -292,40 +287,118 @@ void onDownloadLogMenuSelected() {
     app.navi = nm;
 
     drawNaviBar();
-  }
-
-  const char gpsPinCode[] = "0000";  // SPP接続時のPinコード。通常は"0000"で固定
+  } */
 
   // BT初期化
+  gpsSerial.begin(APP_NAME, true);
   gpsSerial.register_callback(onBluetoothDiscoverCallback);
-  gpsSerial.setTimeout(5000);
-  gpsSerial.setPin(gpsPinCode);  // Pinコードをセット。これがないと繋がらない
+  gpsSerial.setTimeout(1000);
+  gpsSerial.setPin("0000");  // Pinコードをセット。これがないと繋がらない
 
-  // char deviceNames[][] = {"747PRO GPS", "Holux_M-241"};
+  Serial.printf("connecting to 747PRO GPS...\n");
 
-  drawDialog("Please wait", "Finding GPS logger\"...");
-  M5.Lcd.setTextColor(LIGHTGREY);
-  for (int i = 0; i < 31; i++) {
-    char buf[20];
-    sprintf(buf, "%d\%", (100 * i / 30));
-
-    drawProgressBar(buf, (100 * i / 30));
-    delay(1000);
+  bool gpsConn = gpsSerial.connect("747PRO GPS");
+  File binFile = SD.open("/download.bin", "w", true);
+  
+  if ((!gpsConn) || (!binFile)) {
+    Serial.printf("failed. GPS logger is offline or SD card is not exist?\n");
+    gpsSerial.end();
+    return;
   }
-  BTScanResults *devList = gpsSerial.discover(30000);
-  if (devList) {
-    Serial.printf("Bluetooth scan result: %d devices\n", devList->getCount());
 
-    for (int16_t i = 0; i < devList->getCount(); i++) {
-      BTAdvertisedDevice *device = devList->getDevice(i);
+  bool dataFinished = false;
+  uint64_t timePeriod = millis() + 2000;
+  int32_t requestSize = 0x4000; // 0x0800の倍数で定義、
+  int32_t receivedSize = 0;
+  int32_t nextAddr = 0;
+  int8_t retryCount = 0;
+  bool nextRequest = true;
+  ReceiveBuffer *recvBuf = new ReceiveBuffer();
 
-      Serial.printf("device[%d] name=%s, addr=%s\n", i,
-                    device->getName().c_str(),
-                    device->getAddress().toString().c_str());
+  while ((dataFinished == false) && (gpsSerial.connected() == true) && (retryCount < 5)) {
+    // ダウンロード残りサイズがなくなったら次をリクエスト
+    if (nextRequest) {
+      Serial.printf("---\n");
+      Serial.printf("REQ_NEXT_DATA: addr=0x%04X, size=0x%04X, retries=%d\n", nextAddr, requestSize, retryCount);
+
+      sendDownloadCommand(nextAddr, requestSize);
+      nextRequest = false;
+      receivedSize = 0;
+
     }
-  } else {
-    Serial.println("No Bluetooth device found");
-  }
+
+    if (millis() > timePeriod) {
+      Serial.printf("REQ_NEXT_DATA: addr=0x%04X, size=0x%04X, retries=%d\n", nextAddr, requestSize, retryCount);
+
+      nextRequest = true;
+      retryCount += 1;
+      continue;
+    }
+
+    while (gpsSerial.available()) {
+      // シリアルから1文字読み込み、センテンスが完成するまでバッファにためる
+      if (recvBuf->put(gpsSerial.read()) == false) continue;
+
+      // センテンスのチェックサムが違う場合は無視
+      // 備考：データ行がロストしたときはアドレスずれで検知・リトライされる
+      if (recvBuf->isChecksumCorrect() == false) continue;
+
+      if (recvBuf->match("$PMTK182,8,") == true) {
+        int32_t startAddr = 0;
+        recvBuf->readColumnAsInt(2, &startAddr);
+
+        // 受信データの開始アドレスが合わない場合はスルー(ACKまで待ってリトライ)
+        if (startAddr != nextAddr) {
+          Serial.printf("RECV_ADDR_NOT_MATCH: expected=0x%04X, received=0x%04X\n", nextAddr, startAddr);
+          continue;
+        }
+
+        Serial.printf("RECV_DATA_LINE: addr=%04X\n", nextAddr);
+
+        uint8_t b = 0;
+        uint16_t ffCount = 0;
+        recvBuf->seekToColumn(3);
+        while (recvBuf->readHexByteFull(&b) == true) {
+          binFile.write(b);
+
+          ffCount = (b != 0xFF) ? 0 : ffCount+1;
+          if (ffCount >= 0x0200) { // 0xFFがヘッダサイズ以上の長さ連続した
+            Serial.printf("REACHED_DATA_END: found 512 consecutive 0xFF\n");
+
+            dataFinished = true;
+            break;
+          }
+        }
+
+        timePeriod = millis() + 2000;
+        nextAddr += 0x0800;
+        receivedSize += 0x0800;
+        continue;
+
+      } else if (recvBuf->match("$PMTK001,182,7,") == true) {
+        int32_t code = 0;
+        recvBuf->readColumnAsInt(3, &code);
+        Serial.printf("RECV_ACK_LINE: code=%d, nextAddr=%04X\n", code, nextAddr);
+
+        nextRequest = true;
+        if ((code != 3) || (receivedSize != requestSize)) retryCount += 1;
+
+        break;
+      }
+    }
+  }    
+  
+  delete(recvBuf);
+  gpsSerial.disconnect();
+  gpsSerial.end();
+  binFile.close();
+
+  Serial.print("done.\n");
+
+  /////////////////////////
+
+
+
 }
 
 /**
@@ -405,10 +478,11 @@ void drawBluetoothIcon(TFT_eSprite *spr, int16_t x0, int16_t y0) {
   // 描画色の決定。Bluetoothが未接続の場合はアイコンを灰色背景にする
   uint16_t colorBG = BLUE;
   uint16_t colorFG = WHITE;
-  if (gpsSerial.connected() == false) {
-    colorBG = DARKGREY;
-    colorFG = WHITE;
-  }
+
+//  if (gpsSerial.connected() == false) {
+//    colorBG = DARKGREY;
+//    colorFG = WHITE;
+//  }
 
   // アイコンの背景・前景を指定位置に描画
   draw1bitBitmap(spr, ICON_BT_BG, x0, y0, colorBG);
@@ -507,7 +581,7 @@ void drawTitleBar() {
   sprite.createSprite(TITLEBAR_W, TITLEBAR_H);
   sprite.fillScreen(COLOR_TITLE_BACK);
 
-  //
+  // アプリアイコンを描画
   drawApplicationIcon(&sprite, 2, ICON_Y);
 
   {  // タイトル文字の表示
@@ -690,22 +764,21 @@ void setup() {
   M5.Power.begin();
 
   // 画面の初期化
-  M5.Lcd.setBrightness(32);
+  M5.Lcd.setBrightness(LCD_BRIGHTNESS);
   M5.Lcd.clearDisplay(BLACK);
 
   // スプライトの初期化
   sprite.setColorDepth(8);
 
-  // BTの開始
-  gpsSerial.begin("ESP32", true);  // start bluetooth serial as a master
-
   // SDカードの開始
   SD.begin(GPIO_NUM_4, SPI, SD_ACCESS_SPEED);
 
+  // ボタンの参照配列を作る
   app.buttons[0] = &M5.BtnA;
   app.buttons[1] = &M5.BtnB;
   app.buttons[2] = &M5.BtnC;
 
+  // メニュー
   app.navi = (navimenu_t *)malloc(sizeof(navimenu_t));
   memset(app.navi, 0, sizeof(navimenu_t));
   app.navi->onButtonPress = &(onMainNaviButtonPress);
@@ -717,7 +790,7 @@ void setup() {
   app.menu = (mainmenu_t *)malloc(sizeof(mainmenu_t));
   memset(app.menu, 0, sizeof(mainmenu_t));
   app.menu->items[0].caption = "Download Log";
-  app.menu->items[0].onSelected = &(onDownloadLogMenuSelected);
+  app.menu->items[0].onSelected = &(onDownloadMenuSelected);
   app.menu->items[1].caption = "Fix RTC";
   app.menu->items[1].onSelected = &(onFixRTCMenuSelected);
   app.menu->items[2].caption = "Set Preset Cfg";
@@ -733,6 +806,7 @@ void setup() {
   drawTitleBar();
   drawNaviBar();
   drawMainMenu();
+
 }
 
 void loop() {
