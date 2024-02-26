@@ -11,13 +11,13 @@
 
 ReceiveBuffer::ReceiveBuffer() {
     // constructor: initialize member variables
-    cPage = allocatePage(&rPage);
+    currentPage = allocatePage(&rootPage);
     clear();
 }
 
 ReceiveBuffer::~ReceiveBuffer() {
     // destuctor: release dynamically allocated buffer
-    freePages(rPage);
+    freePages(rootPage);
 }
 
 void ReceiveBuffer::freePages(bufferpage_t *pg) {
@@ -41,25 +41,28 @@ bufferpage_t *ReceiveBuffer::allocatePage(bufferpage_t **pg) {
         *pg = np;
     }
 
-    // return the page
+    // return pointer of the new page
     return np;
 }
 
 void ReceiveBuffer::clear() {
     // release second and subsequent pages, zero-fill the first page
-    freePages(rPage->next);
-    memset(rPage, 0, sizeof(bufferpage_t));
+    freePages(rootPage->next);
+    memset(rootPage, 0, sizeof(bufferpage_t));
 
     // clear member variables
-    cPage = rPage;
+    currentPage = rootPage;
     ptr = 0;
-    dLen = 0;
-    cCnt = 0;
-    cChk = 0;
-    rChk = 0;
+    dataLength = 0;
+    columnCount = 0;
+    calculatedChecksum = 0;
+    receivedChecksum = 0;
 }
 
-bool ReceiveBuffer::isChecksumCorrect() { return (cChk == rChk); }
+bool ReceiveBuffer::isChecksumCorrect() {
+    // return calculated checksum equals received
+    return (calculatedChecksum == receivedChecksum);
+}
 
 bool ReceiveBuffer::isTextChar(const char ch) {
     // return true if the given chars is usable in PMTK sentence
@@ -95,41 +98,41 @@ uint8_t ReceiveBuffer::hexCharToByte(const char ch) {
 
 void ReceiveBuffer::appendToBuffer(const char ch) {
     if (ptr < BP_BUFFER_SIZE) {
-        cPage->buf[ptr] = ch;
+        currentPage->buf[ptr] = ch;
         ptr += 1;
     }
 
     if (ptr == BP_BUFFER_SIZE) {
-        cPage = allocatePage(&(cPage->next));
+        currentPage = allocatePage(&(currentPage->next));
         ptr = 0;
     }
 }
 
 void ReceiveBuffer::updateChecksum(const char ch) {
-    if (cCnt < RB_CCNT_CHKSUM) {  // calculate checksum of sentence text
+    if (columnCount < RB_CCNT_CHKSUM) {  // calculate checksum of sentence text
         switch (ch) {
             case '0' ... '9':
             case 'a' ... 'z':
             case 'A' ... 'Z':
             case ',':
-                cChk ^= (byte)ch;
+                calculatedChecksum ^= (byte)ch;
                 break;
         }
     } else {  // store received checksum value
-        rChk = (rChk << 4) + hexCharToByte(ch);
+        receivedChecksum = (receivedChecksum << 4) + hexCharToByte(ch);
     }
 }
 
 bool ReceiveBuffer::put(const char ch) {
     switch (ch) {
-        case '$':
+        case '$': // begining of a new sentense
             clear();
             break;
-        case ',':
-            cCnt += 1;
+        case ',': // delimiter of columns in a sentense
+            columnCount += 1;
             break;
-        case '*':
-            cCnt = RB_CCNT_CHKSUM;
+        case '*': // begining of checksum field
+            columnCount = RB_CCNT_CHKSUM;
             break;
     }
 
@@ -140,25 +143,39 @@ bool ReceiveBuffer::put(const char ch) {
         appendToBuffer(ch);
         updateChecksum(ch);
 
-        dLen += 1;
+        dataLength += 1;
     }
 
     return (ch == CHAR_LF);
 }
 
 char ReceiveBuffer::get() {
-    char ch = cPage->buf[ptr];
+    char ch = currentPage->buf[ptr];
 
     if ((ch != 0) && (ptr < BP_BUFFER_SIZE)) {
         ptr += 1;
 
-        if ((ptr == BP_BUFFER_SIZE) && (cPage->next != NULL)) {
-            cPage = cPage->next;
+        if ((ptr == BP_BUFFER_SIZE) && (currentPage->next != NULL)) {
+            currentPage = currentPage->next;
             ptr = 0;
         }
     }
 
     return ch;
+}
+
+bool ReceiveBuffer::readColumnAsInt(const uint8_t clm, int32_t *num) {
+    if (seekToColumn(clm) == false) return false;
+
+    uint8_t b = 0;
+    int32_t n = 0; 
+
+    while (readHexByteHalf(&b)) {
+        n = (n<<4) + b;
+    }
+    *num = n;
+
+    return true;
 }
 
 bool ReceiveBuffer::readHexByteFull(byte *by) {
@@ -186,34 +203,12 @@ bool ReceiveBuffer::readHexByteHalf(byte *by) {
     return true;
 }
 
-void ReceiveBuffer::print_d() {
-    // put NMEA sentense stored on this buffer to stdout
-    uint8_t pn = 0;
-    bufferpage_t *cp = rPage;
-    while (cp != NULL) {
-        printf("**debug RB.print_d: page[%02i]@%p=", pn++, cp);
-        for (byte i = 0; i < (BP_BUFFER_SIZE); i++) {
-            if (cp->buf[i] == 0) break;
-
-            printf("%c", cp->buf[i]);
-        }
-        printf("\n");
-
-        cp = cp->next;
-
-        // put only 1 line with break
-        break;
-    }
-
-    //printf("**debug** RB.print_d: dLen=%d, cChk=%02X, rChk=%02X\n", dLen, cChk, rChk);
-}
-
 bool ReceiveBuffer::match(const char *str) {
-    return (strstr(rPage->buf, str) != NULL);
+    return (strstr(rootPage->buf, str) != NULL);
 }
 
-bool ReceiveBuffer::seek(const uint8_t clm) {
-    bufferpage_t *pg = rPage;
+bool ReceiveBuffer::seekToColumn(const uint8_t clm) {
+    bufferpage_t *pg = rootPage;
     uint8_t pt = 0;
     uint8_t cc = 0;
 
@@ -239,9 +234,9 @@ bool ReceiveBuffer::seek(const uint8_t clm) {
     }
 
     if (cc == clm) {
-        cPage = pg;
+        currentPage = pg;
         ptr = pt;
-        cCnt = cc;
+        columnCount = cc;
     }
 
     // printf("**debug** RB.seek: seekTo=%d, result=%d, cPage=%p, ptr=%d\n", clm, (cc == clm), cPage, pt);
