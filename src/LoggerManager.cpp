@@ -41,4 +41,6 @@ bool LoggerManager::sendCommand(char *cmd, byte len) {
   for (short i = 0; (i < len2) && (buf[i] != 0); i++) {
     //    SerialBT.write(buf[i]);
   }
+
+  return true;
 }

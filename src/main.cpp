@@ -122,7 +122,8 @@ const uint8_t ICON_DOWNLOAD[] = {
     0b01111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111110,
     0b01111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111110,
     0b00111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111100};
-
+const uint8_t ICON_FIXRTC[] = {
+    0b00000001, 0b00000001, 0b00000000, 0b00000000};
 
 // ******** function prototypes ********
 uint8_t calcNmeaChecksum(char *, uint16_t);
@@ -195,11 +196,13 @@ uint8_t calcNmeaChecksum(char *cmd, uint16_t len) {
  * NMEAコマンドにチェックサムをつけてSerialBTに書き出す
  */
 bool sendNmeaCommand(char *cmd, uint16_t len) {
+  // GPSロガーに接続できていない場合は何もしない
   if (gpsSerial.connected() == false) return false;
 
   uint16_t len2 = len + 8;
   char buf[len2];
 
+  // NMEAコマンドにチェックサムをつけてSPPで送信
   byte chk = calcNmeaChecksum(cmd, len);
   memset(buf, 0, len2);
   sprintf(buf, "$%s*%X\r\n", cmd, chk);
@@ -210,16 +213,18 @@ bool sendNmeaCommand(char *cmd, uint16_t len) {
   return true;
 }
 
-// PMTK182,7コマンドを送る (ログのダウンロードコマンド)
+/**
+ * PMTK182,7コマンドを送る (ログのダウンロードコマンド)
+ */
 void sendDownloadCommand(int startPos, int reqSize) {
   char cmdstr[40];
-  sprintf(cmdstr, "PMTK182,7,%08X,%08X", startPos, reqSize);
+  sprintf(cmdstr, "PMTK182,7,%06X,%06X", startPos, reqSize);
   sendNmeaCommand(cmdstr, sizeof(cmdstr));
 }
 
 void onBluetoothDiscoverCallback(esp_spp_cb_event_t event,
                                  esp_spp_cb_param_t *param) {
-  if (event == ESP_SPP_OPEN_EVT) {
+  if (event == ESP_SPP_OPEN_EVT) { // SPPで接続した
     app.loggerDiscovered.found = true;
     memcpy(&(app.loggerDiscovered.address), &(param->open.rem_bda),
            sizeof(app.loggerDiscovered.address));
@@ -230,14 +235,17 @@ void drawProgressBar(char *caption, uint8_t progress) {
   // 進捗率の指定のレンジ補正
   if (progress > 100) progress = 100;
 
+  // スプライトを作成
   sprite.createSprite(300, 40);
 
+  // プログレスバーの描画
   sprite.setTextColor(LIGHTGREY);
   sprite.drawString(caption, 8, 154, 4);
   sprite.fillRect((progress / 100) * 300, 25, 300, 16, LIGHTGREY);
   sprite.fillRect(0, 25, (progress / 100) * 300, 16, BLUE);
   sprite.drawRect(0, 25, 300, 40, DARKGREY);
 
+  // スプライトをLCDに転送
   sprite.pushSprite(10, 180);
   sprite.deleteSprite();
 }
@@ -253,21 +261,58 @@ void drawDialog(const char *title, const char *msg) {
   const int16_t MSG_X = 8;
   const int16_t MSG_Y = 30;
 
+  // スプライトを作成
   sprite.setColorDepth(8);
   sprite.createSprite(DIALOG_W, DIALOG_H);
 
+  // ダイアログのウインドウっぽい枠を描画
   sprite.fillRect(0, 0, sprite.width(), sprite.height(), LIGHTGREY);
   sprite.fillRect(0, 0, sprite.width(), 26, COLOR16(0, 128, 255));
   sprite.drawRect(0, 0, sprite.width(), sprite.height(), BLUE);
 
+  // タイトルをメッセージを描画
   sprite.setTextSize(1);
   sprite.setTextColor(BLACK);
   sprite.drawString(title, TITLE_X, TITLE_Y, 4);
   sprite.drawString(msg, MSG_X, MSG_Y, 4);
 
+  // 描画したスプライトをLCDに転送
   sprite.pushSprite(DIALOG_X, DIALOG_Y);
   sprite.deleteSprite();
 }
+
+/**
+ * 
+ * 
+	public static final int FLASH_SIZE_8MBIT  = 0x00100000; // (8bit*1024^2)/8 byte;
+	public static final int FLASH_SIZE_16MBIT = 0x00200000; // (16bit*1024^2)/8 byte;
+	public static final int FLASH_SIZE_32MBIT = 0x00400000; // (32bit*1024^2)/8 byte;
+
+	public static final String PMTK_COMMAND_SUCCESS = "3";
+	public static final String PMTK_COMMAND_FAILED  = "2";
+
+    private static final String QUERY_LOG_BY_TIME_COMMAND  = "PMTK182,2,3,0";
+    private static final String QUERY_LOG_BY_TIME_RESPONSE = "^\\$(PMTK182,3,3,(\\w+))\\*(\\w+)$";
+    private static final String QUERY_LOG_BY_DIST_COMMAND  = "PMTK182,2,4,0";
+    private static final String QUERY_LOG_BY_DIST_RESPONSE = "^\\$(PMTK182,3,4,(\\w+))\\*(\\w+)$";
+    private static final String QUERY_LOG_BY_SPD_COMMAND   = "PMTK182,2,5,0";
+    private static final String QUERY_LOG_BY_SPD_RESPONSE  = "^\\$(PMTK182,3,5,(\\w+))\\*(\\w+)$";
+	private static final String QUERY_LOG_RCD_COMMAND     = "PMTK182,2,6";
+	private static final String QUERY_LOG_RCD_RESPONSE    = "^\\$(PMTK182,3,6,(\\d+))\\*(\\w+)$";
+    private static final String QUERY_LOG_STATUS_COMMAND  = "PMTK182,2,7";
+    private static final String QUERY_LOG_STATUS_RESPONSE = "^\\$(PMTK182,3,7,(\\w+))\\*(\\w+)$";
+	private static final String QUERY_RCD_ADDR_COMMAND    = "PMTK182,2,8";
+	private static final String QUERY_RCD_ADDR_RESPONSE   = "^\\$(PMTK182,3,8,(\\w+))\\*(\\w+)$";
+    private static final String QUERY_RCD_RCNT_COMMAND    = "PMTK182,2,10";
+    private static final String QUERY_RCD_RCNT_RESPONSE   = "^\\$(PMTK182,3,10,(\\w+))\\*(\\w+)$";
+    private static final String QUERY_RELEASE_COMMAND     = "PMTK605";
+    private static final String QUERT_RELEASE_RESPONSE    = "^\\$(PMTK705,[\\w\\.\\-]+,(\\d+).*)\\*(\\w+)$";
+	private static final String CLEAR_MEMORY_COMMAND   = "PMTK182,6,1";
+	private static final String CLEAR_MEMORY_RESPONSE  = "^\\$(PMTK001,182,6,(3))\\*(\\w+)$"; 
+	private static final String FACTORY_RESET_COMMAND  = "PMTK104";
+	private static final String RESTART_RESPONSE       = "^\\$(PMTK010,(001))\\*(\\w+)$";
+ */
+
 
 /**
  *
@@ -289,116 +334,218 @@ void onDownloadMenuSelected() {
     drawNaviBar();
   } */
 
-  // BT初期化
-  gpsSerial.begin(APP_NAME, true);
-  gpsSerial.register_callback(onBluetoothDiscoverCallback);
-  gpsSerial.setTimeout(1000);
-  gpsSerial.setPin("0000");  // Pinコードをセット。これがないと繋がらない
+  // SPPの開始・初期化
+  gpsSerial.begin(APP_NAME, true); // SPPをマスターとして開始
+  gpsSerial.register_callback(onBluetoothDiscoverCallback); // コールバックを登録
+  gpsSerial.setTimeout(1000); // タイムアウトを1秒に設定
+  gpsSerial.setPin("0000");  // Pinコードをセット。SPPの場合はこれが必要
+  uint8_t gpsAddress[6] = {0x00, 0x1B, 0xC1, 0x07, 0xB3, 0xD5}; 
 
-  Serial.printf("connecting to 747PRO GPS...\n");
+  Serial.printf("DEBUG: connecting to GPS logger...\n");
 
-  bool gpsConn = gpsSerial.connect("747PRO GPS");
-  File binFile = SD.open("/download.bin", "w", true);
+  bool gpsConn = gpsSerial.connect(gpsAddress);
+//  bool gpsConn = gpsSerial.connect("747PRO GPS");
+  File binFile = SD.open("/_gpsdl.mtkbin", "w", true); // ダウンロード用のファイルを作成
   
-  if ((!gpsConn) || (!binFile)) {
-    Serial.printf("failed. GPS logger is offline or SD card is not exist?\n");
+  if ((!gpsConn) || (!binFile)) { // 接続失敗またはファイルが開けない場合
+    // SPPを閉じて終了
+    Serial.printf("DEBUG: failed to connect to GPS logger or open the output file.\n");
     gpsSerial.end();
     return;
   }
 
-  bool dataFinished = false;
-  uint64_t timePeriod = millis() + 2000;
-  int32_t requestSize = 0x4000; // 0x0800の倍数で定義、
-  int32_t receivedSize = 0;
-  int32_t nextAddr = 0;
-  int8_t retryCount = 0;
-  bool nextRequest = true;
+  Serial.printf("DEBUG: the download process is started.\n");
+
   ReceiveBuffer *recvBuf = new ReceiveBuffer();
+  unsigned long timePeriod = millis() + 3000;
 
-  while ((dataFinished == false) && (gpsSerial.connected() == true) && (retryCount < 5)) {
-    // ダウンロード残りサイズがなくなったら次をリクエスト
-    if (nextRequest) {
-      Serial.printf("---\n");
-      Serial.printf("REQ_NEXT_DATA: addr=0x%04X, size=0x%04X, retries=%d\n", nextAddr, requestSize, retryCount);
-
-      sendDownloadCommand(nextAddr, requestSize);
-      nextRequest = false;
-      receivedSize = 0;
-
-    }
-
-    if (millis() > timePeriod) {
-      Serial.printf("REQ_NEXT_DATA: addr=0x%04X, size=0x%04X, retries=%d\n", nextAddr, requestSize, retryCount);
-
-      nextRequest = true;
-      retryCount += 1;
-      continue;
-    }
-
+  // get the last address of the log data to be downloaded
+  int32_t endAddr = 0;
+  sendNmeaCommand("PMTK182,2,6", 13); // query log recording mode
+  while (gpsSerial.connected() && (endAddr == 0)) {
     while (gpsSerial.available()) {
-      // シリアルから1文字読み込み、センテンスが完成するまでバッファにためる
+      // read the data from the GPS logger and put it into the buffer
+      // until NMEA sentence (line) is completed
       if (recvBuf->put(gpsSerial.read()) == false) continue;
 
-      // センテンスのチェックサムが違う場合は無視
-      // 備考：データ行がロストしたときはアドレスずれで検知・リトライされる
+      // ignore the line if the checksum is incorrect
       if (recvBuf->isChecksumCorrect() == false) continue;
 
-      if (recvBuf->match("$PMTK182,8,") == true) {
+      // abort queries if the timeout reached
+      if (millis() > timePeriod) { // timeout reached
+        endAddr = -1; // set the last address to -1 (this means timeout occurred)
+        break;
+      }
+
+      // check if the received line is the expected responses
+      if (recvBuf->match("$PMTK182,3,6,")) { // response to the query log recording mode 
+        int32_t logMode = 0;
+        recvBuf->readColumnAsInt(3, &logMode);
+
+        Serial.printf("DEBUG: got the log mode. [logMode=%d]\n", logMode);
+
+        // determine the log recording mode (overwrap or fullstop)
+        if (logMode == 2) { // fullstop mode
+          sendNmeaCommand("PMTK182,2,8", 13); // query the record address
+        } else { // overwrite mode
+          sendNmeaCommand("PMTK605", 8); // query the firmware release
+        }
+        continue; // continue to read the next line
+
+      } else if (recvBuf->match("$PMTK182,3,8,")) { // response to the query record address
+        recvBuf->readColumnAsInt(3, &endAddr); // read the address from the 4th column
+
+        Serial.printf("DEBUG: got the address of the last record. [endAddr=0x%06X]\n", endAddr);
+
+        continue; // continue to read the next line
+      } else if (recvBuf->match("$PMTK705,")) { // response to the query firmware release
+        int32_t modelId = 0;
+        recvBuf->readColumnAsInt(2, &modelId); // read the firmware ID from the 3rd column
+
+        Serial.printf("DEBUG: got the model ID of GPS logger. [modelId: 0x%04X]\n", modelId);
+        
+        // set the download size based on the model ID
+		    switch (modelId) {
+		    case 0x1388: // 757/ZI v1 
+		    case 0x5202: // 757/ZI v2
+		    	endAddr = 0x100000; // set the address to 2Mbit
+		    	break;
+		    case 0x0002: // Qstarz 815
+		    case 0x0021: // Holux M-241
+		    case 0x0023: // Holux M-241
+		    case 0x0043: // Holux M-241 (FW 1.13)
+		    case 0x0051: // i-Blue 737, Qstarz 810, Polaris iBT-GPS, Holux M1000
+		    case 0x001b: // i-Blue 747
+		    case 0x001d: // BT-Q1000 / BGL-32
+		    case 0x0131: // EB-85A
+			    endAddr = 0x200000; // set the address to 2Mbit
+			    break;
+		    case 0x0000: // Holux M-1200E
+		    case 0x0004: // 747 A+ GPS Trip Recorder
+		    case 0x0005: // Qstarz BT-Q1000P
+		    case 0x0006: // 747 A+ GPS Trip Recorder
+		    case 0x0008: // Pentagram PathFinder P 3106
+		    case 0x000F: // 747 A+ GPS Trip Recorder
+		    case 0x8300: // Qstarz BT-1200
+        default:     // assume 4Mbit for unknown models
+		    	endAddr = 0x400000; // set the address to 4Mbit
+          break;
+        }
+
+        Serial.printf("DEBUG: set to the download size to the flash size. [endAddr=0x%06X]\n", endAddr);
+
+      } // if (recvBuf->match("$PMTK182,3,6,")) else if ... else if (recvBuf->match("$PMTK705,") == true)
+    } // while (gpsSerial.available())
+  } // while (endAddr == 0)
+
+  // check if the download size is obtained
+  if (endAddr < 0) { // the download size is not obtained
+    Serial.printf("DEBUG: failed to get the information of the GPS logger, abort.\n");
+    delete(recvBuf); // delete the buffer object
+    gpsSerial.disconnect(); // disconnect the SPP
+    gpsSerial.end(); // end the SPP
+    binFile.close(); // close the output file
+    return;
+  }
+
+  bool nextRequest = true;
+  int32_t requestSize = 0x4000;
+  int32_t receivedSize = 0;
+  int32_t nextAddr = 0x000000;
+  int8_t retryCount = 0;
+
+  // download the log data from the GPS logger
+  while (gpsSerial.connected()) { // loop until the SPP is connected
+    // check if any termination condition is met
+    if (nextAddr >= endAddr) { // reached to the end of the data
+      Serial.printf("DEBUG: the download process is finished. [nextAddr=0x%06X, endAddr=0x%06X]\n", nextAddr, endAddr);
+      break;
+    } if (retryCount > 5) { // cause of too many retries
+      Serial.printf("DEBUG: too many retries has occurred, abort. [retries=%d]\n", retryCount);
+      break;
+    }
+
+    // check if the flag to send the next request is set
+    if (nextRequest) { // need to send the next download request
+
+      // send the download command to the GPS logger
+      sendDownloadCommand(nextAddr, requestSize);
+
+      nextRequest = false; // clear the flag to send the next request
+      receivedSize = 0; // clear the received size to 0
+      timePeriod = millis() + ((requestSize / 0x0800) * 1000); // set the timeout period
+
+      Serial.printf("DEBUG: sent the next request. [startAddr=0x%06X, reqSize=0x%04X, retries=%d]\n", 
+                    nextAddr, requestSize, retryCount);
+    }
+    
+    // set the flag to retry if the timeout reached
+    if (millis() > timePeriod) { // timeout reached
+      // set the flag to send the next request and increase the retry count
+      nextRequest = true;
+      retryCount += 1;
+
+      Serial.printf("DEBUG: timeout reached, abort. [retries=%d]\n", retryCount);
+
+      continue; // continue to send the next request
+    }
+
+    // receive data (NMEA sentenses) from the GPS logger and parse it
+    while (gpsSerial.available()) { // repeat until the SPP is available
+      // read the data from the GPS logger and put it into the buffer
+      // until NMEA sentence (line) is completed
+      if (recvBuf->put(gpsSerial.read()) == false) continue;
+
+      // ignore the line if the checksum is incorrect
+      if (recvBuf->isChecksumCorrect() == false) continue;
+
+      // check if the received line is the expected responses
+      if (recvBuf->match("$PMTK182,8,")) { // received log data line
+        // read the starting address from the 3rd column of the line
         int32_t startAddr = 0;
         recvBuf->readColumnAsInt(2, &startAddr);
 
-        // 受信データの開始アドレスが合わない場合はスルー(ACKまで待ってリトライ)
-        if (startAddr != nextAddr) {
-          Serial.printf("RECV_ADDR_NOT_MATCH: expected=0x%04X, received=0x%04X\n", nextAddr, startAddr);
-          continue;
+        // if the starting address is different from expected, ignore this line
+        if (startAddr != nextAddr) continue;
+
+        // print the starting address to the serial console for debug
+        Serial.printf("DEBUG: received the data line. [startAddr=0x%06X]\n", startAddr);
+
+        uint8_t b = 0; // variable to store the next byte
+        uint16_t ffCount = 0; // counter for how many 0xFFs are continuous
+        recvBuf->seekToColumn(3); // move to the 4th column (data column)
+        while (recvBuf->readHexByteFull(&b)) { // read the next byte 
+          binFile.write(b); // write the byte to the file
+          ffCount = (b != 0xFF) ? 0 : ffCount+1; // count the continuous 0xFFs
         }
 
-        Serial.printf("RECV_DATA_LINE: addr=%04X\n", nextAddr);
-
-        uint8_t b = 0;
-        uint16_t ffCount = 0;
-        recvBuf->seekToColumn(3);
-        while (recvBuf->readHexByteFull(&b) == true) {
-          binFile.write(b);
-
-          ffCount = (b != 0xFF) ? 0 : ffCount+1;
-          if (ffCount >= 0x0200) { // 0xFFがヘッダサイズ以上の長さ連続した
-            Serial.printf("REACHED_DATA_END: found 512 consecutive 0xFF\n");
-
-            dataFinished = true;
-            break;
-          }
-        }
-
-        timePeriod = millis() + 2000;
+        // update the next address and the received size
         nextAddr += 0x0800;
         receivedSize += 0x0800;
-        continue;
 
-      } else if (recvBuf->match("$PMTK001,182,7,") == true) {
-        int32_t code = 0;
-        recvBuf->readColumnAsInt(3, &code);
-        Serial.printf("RECV_ACK_LINE: code=%d, nextAddr=%04X\n", code, nextAddr);
+        // update the download size if the continuous 0xFFs are more than 0x200
+        if ((ffCount >= 0x0200) && (nextAddr < endAddr)) {
+          endAddr = nextAddr; // set the download size to the current address
+          Serial.printf("DEBUG: reached to the end of the data. [endAddr=0x%06X]\n", endAddr);
+        }
 
-        nextRequest = true;
-        if ((code != 3) || (receivedSize != requestSize)) retryCount += 1;
+        continue; // continue to read the next line
+      } else if (recvBuf->match("$PMTK001,182,7,")) { // received operation result line
+        nextRequest = true; // set the flag to send the next request
+        if (receivedSize < requestSize) retryCount += 1; // received size is less than requested size, increase retry count
 
-        break;
-      }
-    }
-  }    
+        break; // break the loop to send the next request
+      } // if (recvBuf->match("$PMTK182,8,") == true) else if (recvBuf->match("$PMTK001,182,7,"))
+    } // while (gpsSerial.available())
+  } // while (dataFinished == false)
   
-  delete(recvBuf);
-  gpsSerial.disconnect();
-  gpsSerial.end();
-  binFile.close();
+  // close the file and the SPP connection
+  delete(recvBuf); // delete the buffer object
+  gpsSerial.disconnect(); // disconnect the SPP
+  gpsSerial.end(); // end the SPP
+  binFile.close(); // close the output file
 
-  Serial.print("done.\n");
-
-  /////////////////////////
-
-
-
+  Serial.print("DEBUG: done.\n");
 }
 
 /**
