@@ -66,28 +66,15 @@ bool ReceiveBuffer::isChecksumCorrect() {
 
 bool ReceiveBuffer::isTextChar(const char ch) {
     // return true if the given chars is usable in PMTK sentence
-    switch (ch) {
-        case '$':
-        case '0' ... '9':
-        case 'a' ... 'z':
-        case 'A' ... 'Z':
-        case ',':
-        case '*':
-            return true;
-    }
-
-    // returns false for the others ([\r\n] and others)
-    return false;
+    return ((ch >= ' ') && (ch <= '~'));
 }
 
 uint8_t ReceiveBuffer::hexCharToByte(const char ch) {
     switch (ch) {
         case '0' ... '9':  // return 0-9 for '0'-'9'
             return (ch - '0');
-
         case 'a' ... 'f':  // return 10-16 for 'a'-'f'
             return (ch - 'a' + 10);
-
         case 'A' ... 'F':  // return 10-16 for 'A'-'F'
             return (ch - 'A' + 10);
     }
@@ -110,13 +97,8 @@ void ReceiveBuffer::appendToBuffer(const char ch) {
 
 void ReceiveBuffer::updateChecksum(const char ch) {
     if (columnCount < RB_CCNT_CHKSUM) {  // calculate checksum of sentence text
-        switch (ch) {
-            case '0' ... '9':
-            case 'a' ... 'z':
-            case 'A' ... 'Z':
-            case ',':
-                calculatedChecksum ^= (byte)ch;
-                break;
+        if ((ch != '$') && (ch != '*')) {  // exclude '$' and '*' from checksum
+            calculatedChecksum ^= (byte)ch;
         }
     } else {  // store received checksum value
         receivedChecksum = (receivedChecksum << 4) + hexCharToByte(ch);
@@ -136,8 +118,7 @@ bool ReceiveBuffer::put(const char ch) {
             break;
     }
 
-    //
-    if (isTextChar(ch) == true) {
+    if (isTextChar(ch)) {
         // append given char (when buffer available), then
         // calculate checksum of a receiving sentence or extract checksum value
         appendToBuffer(ch);

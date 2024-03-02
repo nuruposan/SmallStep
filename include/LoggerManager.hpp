@@ -24,7 +24,7 @@ class LoggerManager {
   bool connected;
   char pinCode[8];
   char address[6];
-  BluetoothSerial serial;
+  BluetoothSerial *gpsSerial;
 
   unsigned char calcChecksum(char *cmd, unsigned char len);
   bool sendCommand(char *cmd, unsigned char len);
@@ -35,7 +35,7 @@ class LoggerManager {
   bool connect(char *address);
   void disconnect();
   bool isConnected();
-  bool isSerialReady();
+  bool serialAvailable();
   //    bool isReplyReady();
   bool extractColumn(unsigned char column, char *buf, unsigned int len);
   unsigned char readSerial();
