@@ -10,217 +10,210 @@
 #define CHAR_LF '\n'
 
 ReceiveBuffer::ReceiveBuffer() {
-    // constructor: initialize member variables
-    currentPage = allocatePage(&rootPage);
-    clear();
+  // constructor: initialize member variables
+  currentPage = allocatePage(&rootPage);
+  clear();
 }
 
 ReceiveBuffer::~ReceiveBuffer() {
-    // destuctor: release dynamically allocated buffer
-    freePages(rootPage);
+  // destuctor: release dynamically allocated buffer
+  freePages(rootPage);
 }
 
 void ReceiveBuffer::freePages(bufferpage_t *pg) {
-    // release all pages from the given to the last
-    // if NULL is given, do nothing
-    bufferpage_t *cp = pg;
-    while (cp != NULL) {
-        bufferpage_t *np = cp->next;
-        free(cp);
-        cp = np;
-    }
+  // release all pages from the given to the last
+  // if NULL is given, do nothing
+  bufferpage_t *cp = pg;
+  while (cp != NULL) {
+    bufferpage_t *np = cp->next;
+    free(cp);
+    cp = np;
+  }
 }
 
 bufferpage_t *ReceiveBuffer::allocatePage(bufferpage_t **pg) {
-    // create a new page and fill it with zero
-    bufferpage_t *np = (bufferpage_t *)malloc(sizeof(bufferpage_t));
-    memset(np, 0, sizeof(bufferpage_t));
+  // create a new page and fill it with zero
+  bufferpage_t *np = (bufferpage_t *)malloc(sizeof(bufferpage_t));
+  memset(np, 0, sizeof(bufferpage_t));
 
-    // assign the page to the given argment (if it is NOT NULL)
-    if (pg != NULL) {
-        *pg = np;
-    }
+  // assign the page to the given argment (if it is NOT NULL)
+  if (pg != NULL) {
+    *pg = np;
+  }
 
-    // return pointer of the new page
-    return np;
+  // return pointer of the new page
+  return np;
 }
 
 void ReceiveBuffer::clear() {
-    // release second and subsequent pages, zero-fill the first page
-    freePages(rootPage->next);
-    memset(rootPage, 0, sizeof(bufferpage_t));
+  // release second and subsequent pages, zero-fill the first page
+  freePages(rootPage->next);
+  memset(rootPage, 0, sizeof(bufferpage_t));
 
-    // clear member variables
-    currentPage = rootPage;
+  // clear member variables
+  currentPage = rootPage;
+  ptr = 0;
+  dataLength = 0;
+  columnCount = 0;
+  expectedChecksum = 0;
+  receivedChecksum = 0;
+}
+
+bool ReceiveBuffer::isTextChar(char ch) {
+  // return true if the given chars is usable in PMTK sentence
+  return ((ch >= ' ') && (ch <= '~'));
+}
+
+uint8_t ReceiveBuffer::hexCharToByte(char ch) {
+  switch (ch) {
+    case '0' ... '9':  // return 0-9 for '0'-'9'
+      return (ch - '0');
+    case 'a' ... 'f':  // return 10-16 for 'a'-'f'
+      return (ch - 'a' + 10);
+    case 'A' ... 'F':  // return 10-16 for 'A'-'F'
+      return (ch - 'A' + 10);
+  }
+
+  // return zero for others ([$*,\r\n] and others)
+  return NON_HEXCHAR_VAL;
+}
+
+void ReceiveBuffer::appendToBuffer(char ch) {
+  if (ptr < BP_BUFFER_SIZE) {
+    currentPage->buf[ptr] = ch;
+    ptr += 1;
+  }
+
+  if (ptr == BP_BUFFER_SIZE) {
+    currentPage = allocatePage(&(currentPage->next));
     ptr = 0;
-    dataLength = 0;
-    columnCount = 0;
-    calculatedChecksum = 0;
-    receivedChecksum = 0;
+  }
 }
 
-bool ReceiveBuffer::isChecksumCorrect() {
-    // return calculated checksum equals received
-    return (calculatedChecksum == receivedChecksum);
+void ReceiveBuffer::updateChecksum(char ch) {
+  if (columnCount < RB_CCNT_CHKSUM) {  // calculate checksum of sentence text
+    if ((ch != '$') && (ch != '*')) {  // exclude '$' and '*' from checksum
+      expectedChecksum ^= (byte)ch;
+    }
+  } else {  // store received checksum value
+    receivedChecksum = (receivedChecksum << 4) + hexCharToByte(ch);
+  }
 }
 
-bool ReceiveBuffer::isTextChar(const char ch) {
-    // return true if the given chars is usable in PMTK sentence
-    return ((ch >= ' ') && (ch <= '~'));
-}
+bool ReceiveBuffer::put(char ch) {
+  switch (ch) {
+    case '$':  // begining of a new sentense
+      clear();
+      break;
+    case ',':  // delimiter of columns in a sentense
+      columnCount += 1;
+      break;
+    case '*':  // begining of checksum field
+      columnCount = RB_CCNT_CHKSUM;
+      break;
+  }
 
-uint8_t ReceiveBuffer::hexCharToByte(const char ch) {
-    switch (ch) {
-        case '0' ... '9':  // return 0-9 for '0'-'9'
-            return (ch - '0');
-        case 'a' ... 'f':  // return 10-16 for 'a'-'f'
-            return (ch - 'a' + 10);
-        case 'A' ... 'F':  // return 10-16 for 'A'-'F'
-            return (ch - 'A' + 10);
-    }
+  if (isTextChar(ch)) {
+    // append given char (when buffer available), then
+    // calculate checksum of a receiving sentence or extract checksum value
+    appendToBuffer(ch);
+    updateChecksum(ch);
 
-    // return zero for others ([$*,\r\n] and others)
-    return NON_HEXCHAR_VAL;
-}
+    dataLength += 1;
+  }
 
-void ReceiveBuffer::appendToBuffer(const char ch) {
-    if (ptr < BP_BUFFER_SIZE) {
-        currentPage->buf[ptr] = ch;
-        ptr += 1;
-    }
-
-    if (ptr == BP_BUFFER_SIZE) {
-        currentPage = allocatePage(&(currentPage->next));
-        ptr = 0;
-    }
-}
-
-void ReceiveBuffer::updateChecksum(const char ch) {
-    if (columnCount < RB_CCNT_CHKSUM) {  // calculate checksum of sentence text
-        if ((ch != '$') && (ch != '*')) {  // exclude '$' and '*' from checksum
-            calculatedChecksum ^= (byte)ch;
-        }
-    } else {  // store received checksum value
-        receivedChecksum = (receivedChecksum << 4) + hexCharToByte(ch);
-    }
-}
-
-bool ReceiveBuffer::put(const char ch) {
-    switch (ch) {
-        case '$': // begining of a new sentense
-            clear();
-            break;
-        case ',': // delimiter of columns in a sentense
-            columnCount += 1;
-            break;
-        case '*': // begining of checksum field
-            columnCount = RB_CCNT_CHKSUM;
-            break;
-    }
-
-    if (isTextChar(ch)) {
-        // append given char (when buffer available), then
-        // calculate checksum of a receiving sentence or extract checksum value
-        appendToBuffer(ch);
-        updateChecksum(ch);
-
-        dataLength += 1;
-    }
-
-    return (ch == CHAR_LF);
+  return ((ch == CHAR_LF) && (expectedChecksum == receivedChecksum));
 }
 
 char ReceiveBuffer::get() {
-    char ch = currentPage->buf[ptr];
+  char ch = currentPage->buf[ptr];
 
-    if ((ch != 0) && (ptr < BP_BUFFER_SIZE)) {
-        ptr += 1;
+  if ((ch != 0) && (ptr < BP_BUFFER_SIZE)) {
+    ptr += 1;
 
-        if ((ptr == BP_BUFFER_SIZE) && (currentPage->next != NULL)) {
-            currentPage = currentPage->next;
-            ptr = 0;
-        }
+    if ((ptr == BP_BUFFER_SIZE) && (currentPage->next != NULL)) {
+      currentPage = currentPage->next;
+      ptr = 0;
     }
+  }
 
-    return ch;
+  return ch;
 }
 
-bool ReceiveBuffer::readColumnAsInt(const uint8_t clm, int32_t *num) {
-    if (seekToColumn(clm) == false) return false;
+bool ReceiveBuffer::readColumnAsInt(uint8_t clm, int32_t *num) {
+  if (seekToColumn(clm) == false) return false;
 
-    uint8_t b = 0;
-    int32_t n = 0; 
+  uint8_t b = 0;
+  int32_t n = 0;
 
-    while (readHexByteHalf(&b)) {
-        n = (n<<4) + b;
-    }
-    *num = n;
+  while (readHexByteHalf(&b)) {
+    n = (n << 4) + b;
+  }
+  *num = n;
 
-    return true;
+  return true;
 }
 
 bool ReceiveBuffer::readHexByteFull(byte *by) {
-    byte upper = hexCharToByte(get());
-    byte lower = hexCharToByte(get());
+  byte upper = hexCharToByte(get());
+  byte lower = hexCharToByte(get());
 
-    if ((upper == NON_HEXCHAR_VAL) || (lower == NON_HEXCHAR_VAL)) {
-        return false;
-    }
+  if ((upper == NON_HEXCHAR_VAL) || (lower == NON_HEXCHAR_VAL)) {
+    return false;
+  }
 
-    *by = (upper << 4) + lower;
+  *by = (upper << 4) + lower;
 
-    return true;
+  return true;
 }
 
 bool ReceiveBuffer::readHexByteHalf(byte *by) {
-    byte lower = hexCharToByte(get());
+  byte lower = hexCharToByte(get());
 
-    if (lower == NON_HEXCHAR_VAL) {
-        return false;
-    }
+  if (lower == NON_HEXCHAR_VAL) {
+    return false;
+  }
 
-    *by = lower;
+  *by = lower;
 
-    return true;
+  return true;
 }
 
 bool ReceiveBuffer::match(const char *str) {
-    return (strstr(rootPage->buf, str) != NULL);
+  return (strstr(rootPage->buf, str) != NULL);
 }
 
-bool ReceiveBuffer::seekToColumn(const uint8_t clm) {
-    bufferpage_t *pg = rootPage;
-    uint8_t pt = 0;
-    uint8_t cc = 0;
+bool ReceiveBuffer::seekToColumn(uint8_t clm) {
+  bufferpage_t *pg = rootPage;
+  uint16_t pt = 0;
+  uint16_t cc = 0;
 
-    while ((cc < clm) && (pg != NULL)) {
-        for (pt = 0; pt < BP_BUFFER_SIZE; pt++) {
-            if ((cc == clm) || (pg->buf[pt] == 0)) {
-                break;
-            }
+  while ((cc < clm) && (pg != NULL)) {
+    for (pt = 0; pt < BP_BUFFER_SIZE; pt++) {
+      if ((cc == clm) || (pg->buf[pt] == 0)) {
+        break;
+      }
 
-            switch (pg->buf[pt]) {
-                case ',':
-                    cc += 1;
-                    break;
-                case '*':
-                    cc = RB_CCNT_CHKSUM;
-                    break;
-            }
-        }
-
-        if (cc < clm) {
-            pg = pg->next;
-        }
+      switch (pg->buf[pt]) {
+        case ',':
+          cc += 1;
+          break;
+        case '*':
+          cc = RB_CCNT_CHKSUM;
+          break;
+      }
     }
 
-    if (cc == clm) {
-        currentPage = pg;
-        ptr = pt;
-        columnCount = cc;
+    if (cc < clm) {
+      pg = pg->next;
     }
+  }
 
-    // printf("**debug** RB.seek: seekTo=%d, result=%d, cPage=%p, ptr=%d\n", clm, (cc == clm), cPage, pt);
+  if (cc == clm) {
+    currentPage = pg;
+    ptr = pt;
+    columnCount = cc;
+  }
 
-    return (cc == clm);
+  return (cc == clm);
 }

@@ -1,11 +1,9 @@
-#include <BTScan.h>
 #include <BluetoothSerial.h>
 #include <M5Stack.h>
 #include <SD.h>
 
-// #include <stack>
-
-#include "ReceiveBuffer.hpp"
+#include "LoggerManager.hpp"
+#include "Resources.h"
 
 #define SD_ACCESS_SPEED 15000000
 #define COLOR16(r, g, b) (int16_t)((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
@@ -24,7 +22,7 @@ typedef struct _navimenu {
 
 typedef struct _menuitem {
   const char *caption;
-  int8_t *iconData;
+  const uint8_t *iconData;
   bool disabled;
   void (*onSelected)();
 } menuitem_t;
@@ -49,86 +47,7 @@ typedef struct _appstatus {
   loggerinfo_t loggerDiscovered;
 } appstatus_t;
 
-// ******** resource data ********
-
-const uint8_t ICON_APP[] = {
-    16,             // Width
-    12,             // Height
-    0,          0,  // 16bit color
-    0b00000110, 0b00110000, 0b00001111, 0b01111000, 0b00001111, 0b01111000,
-    0b00110110, 0b00110110, 0b01111001, 0b11001111, 0b01111011, 0b11101111,
-    0b00110111, 0b11110110, 0b00001111, 0b11111000, 0b00011111, 0b11111100,
-    0b00011111, 0b11111100, 0b00011111, 0b11111100, 0b00000111, 0b11110000};
-const uint8_t ICON_BT_BG[] = {
-    16,         19,         0,          0,  // Width, Height, Color
-    0b00001111, 0b11110000, 0b00111111, 0b11111100, 0b01111111, 0b11111110,
-    0b01111111, 0b11111110, 0b01111111, 0b11111110, 0b11111111, 0b11111111,
-    0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111,
-    0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111,
-    0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b01111111, 0b11111110,
-    0b01111111, 0b11111110, 0b01111111, 0b11111110, 0b00111111, 0b11111100,
-    0b00001111, 0b11110000};
-const uint8_t ICON_BT_FG[] = {
-    16,         19,         0,          0,  // Width, Height, Color
-    0b00000001, 0b10000000, 0b00000001, 0b11000000, 0b00000001, 0b11100000,
-    0b00000001, 0b10110000, 0b00100001, 0b10011000, 0b00110001, 0b10001100,
-    0b00011001, 0b10011000, 0b00001101, 0b10110000, 0b00000111, 0b11100000,
-    0b00000011, 0b11000000, 0b00000111, 0b11100000, 0b00001101, 0b10110000,
-    0b00011001, 0b10011000, 0b00110001, 0b10001100, 0b00100001, 0b10011000,
-    0b00000001, 0b10110000, 0b00000001, 0b11100000, 0b00000001, 0b11000000,
-    0b00000001, 0b10000000};
-const uint8_t ICON_DOWNLOAD[] = {
-    48,         43,         0,          0,  // Width, Height, Color
-    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000011, 0b11000000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b00000000,
-    0b00000000, 0b00000011, 0b11111111, 0b11111111, 0b11000000, 0b00000000,
-    0b00111100, 0b00000001, 0b11111111, 0b11111111, 0b10000000, 0b00111100,
-    0b01111110, 0b00000000, 0b11111111, 0b11111111, 0b00000000, 0b01111110,
-    0b01111110, 0b00000000, 0b01111111, 0b11111110, 0b00000000, 0b01111110,
-    0b01111110, 0b00000000, 0b00111111, 0b11111100, 0b00000000, 0b01111110,
-    0b01111110, 0b00000000, 0b00011111, 0b11111000, 0b00000000, 0b01111110,
-    0b01111110, 0b00000000, 0b00001111, 0b11110000, 0b00000000, 0b01111110,
-    0b01111110, 0b00000000, 0b00000111, 0b11100000, 0b00000000, 0b01111110,
-    0b01111110, 0b00000000, 0b00000011, 0b11000000, 0b00000000, 0b01111110,
-    0b01111110, 0b00000000, 0b00000001, 0b10000000, 0b00000000, 0b01111110,
-    0b01111110, 0b00000000, 0b00000000, 0b00000000, 0b00000000, 0b01111110,
-    0b01111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111110,
-    0b01111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111110,
-    0b01111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111110,
-    0b01111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111110,
-    0b01111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111110,
-    0b00111111, 0b11111111, 0b11111111, 0b11111111, 0b11111111, 0b11111100};
-const uint8_t ICON_FIXRTC[] = {
-    0b00000001, 0b00000001, 0b00000000, 0b00000000};
-
 // ******** function prototypes ********
-uint8_t calcNmeaChecksum(char *, uint16_t);
-bool sendNmeaCommand(char *, uint16_t);
-void sendDownloadCommand(int, int);
 void onBluetoothDiscoverCallback(esp_spp_cb_event_t, esp_spp_cb_param_t *);
 void onDownloadMenuSelected();
 void onFixRTCMenuSelected();
@@ -176,55 +95,13 @@ typedef struct phandler {
   void (*run)();
 } phandler_t;
 
-BluetoothSerial gpsSerial;
+LoggerManager logger = LoggerManager();
 TFT_eSprite sprite = TFT_eSprite(&M5.Lcd);
 appstatus_t app;
 
-/**
- * NMEAコマンドのチェックサム計算を行う
- * (printfのフォーマット%Xで送る値を生成)
- */
-uint8_t calcNmeaChecksum(char *cmd, uint16_t len) {
-  uint8_t chk = 0;
-  for (uint16_t i = 0; (i < len) && (cmd[i] != 0); i++) {
-    chk ^= (byte)(cmd[i]);
-  }
-  return chk;
-}
-
-/**
- * NMEAコマンドにチェックサムをつけてSerialBTに書き出す
- */
-bool sendNmeaCommand(char *cmd, uint16_t len) {
-  // GPSロガーに接続できていない場合は何もしない
-  if (gpsSerial.connected() == false) return false;
-
-  uint16_t len2 = len + 8;
-  char buf[len2];
-
-  // NMEAコマンドにチェックサムをつけてSPPで送信
-  byte chk = calcNmeaChecksum(cmd, len);
-  memset(buf, 0, len2);
-  sprintf(buf, "$%s*%X\r\n", cmd, chk);
-  for (short i = 0; (i < len2) && (buf[i] != 0); i++) {
-    gpsSerial.write(buf[i]);
-  }
-
-  return true;
-}
-
-/**
- * PMTK182,7コマンドを送る (ログのダウンロードコマンド)
- */
-void sendDownloadCommand(int startPos, int reqSize) {
-  char cmdstr[40];
-  sprintf(cmdstr, "PMTK182,7,%06X,%06X", startPos, reqSize);
-  sendNmeaCommand(cmdstr, sizeof(cmdstr));
-}
-
 void onBluetoothDiscoverCallback(esp_spp_cb_event_t event,
                                  esp_spp_cb_param_t *param) {
-  if (event == ESP_SPP_OPEN_EVT) { // SPPで接続した
+  if (event == ESP_SPP_OPEN_EVT) {  // SPPで接続した
     app.loggerDiscovered.found = true;
     memcpy(&(app.loggerDiscovered.address), &(param->open.rem_bda),
            sizeof(app.loggerDiscovered.address));
@@ -282,270 +159,86 @@ void drawDialog(const char *title, const char *msg) {
 }
 
 /**
- * 
- * 
-	public static final int FLASH_SIZE_8MBIT  = 0x00100000; // (8bit*1024^2)/8 byte;
-	public static final int FLASH_SIZE_16MBIT = 0x00200000; // (16bit*1024^2)/8 byte;
-	public static final int FLASH_SIZE_32MBIT = 0x00400000; // (32bit*1024^2)/8 byte;
+ *
+ *
+        public static final int FLASH_SIZE_8MBIT  = 0x00100000; //
+ (8bit*1024^2)/8 byte; public static final int FLASH_SIZE_16MBIT = 0x00200000;
+ // (16bit*1024^2)/8 byte; public static final int FLASH_SIZE_32MBIT =
+ 0x00400000; // (32bit*1024^2)/8 byte;
 
-	public static final String PMTK_COMMAND_SUCCESS = "3";
-	public static final String PMTK_COMMAND_FAILED  = "2";
+        public static final String PMTK_COMMAND_SUCCESS = "3";
+        public static final String PMTK_COMMAND_FAILED  = "2";
 
     private static final String QUERY_LOG_BY_TIME_COMMAND  = "PMTK182,2,3,0";
-    private static final String QUERY_LOG_BY_TIME_RESPONSE = "^\\$(PMTK182,3,3,(\\w+))\\*(\\w+)$";
-    private static final String QUERY_LOG_BY_DIST_COMMAND  = "PMTK182,2,4,0";
-    private static final String QUERY_LOG_BY_DIST_RESPONSE = "^\\$(PMTK182,3,4,(\\w+))\\*(\\w+)$";
-    private static final String QUERY_LOG_BY_SPD_COMMAND   = "PMTK182,2,5,0";
-    private static final String QUERY_LOG_BY_SPD_RESPONSE  = "^\\$(PMTK182,3,5,(\\w+))\\*(\\w+)$";
-	private static final String QUERY_LOG_RCD_COMMAND     = "PMTK182,2,6";
-	private static final String QUERY_LOG_RCD_RESPONSE    = "^\\$(PMTK182,3,6,(\\d+))\\*(\\w+)$";
-    private static final String QUERY_LOG_STATUS_COMMAND  = "PMTK182,2,7";
-    private static final String QUERY_LOG_STATUS_RESPONSE = "^\\$(PMTK182,3,7,(\\w+))\\*(\\w+)$";
-	private static final String QUERY_RCD_ADDR_COMMAND    = "PMTK182,2,8";
-	private static final String QUERY_RCD_ADDR_RESPONSE   = "^\\$(PMTK182,3,8,(\\w+))\\*(\\w+)$";
-    private static final String QUERY_RCD_RCNT_COMMAND    = "PMTK182,2,10";
-    private static final String QUERY_RCD_RCNT_RESPONSE   = "^\\$(PMTK182,3,10,(\\w+))\\*(\\w+)$";
-    private static final String QUERY_RELEASE_COMMAND     = "PMTK605";
-    private static final String QUERT_RELEASE_RESPONSE    = "^\\$(PMTK705,[\\w\\.\\-]+,(\\d+).*)\\*(\\w+)$";
-	private static final String CLEAR_MEMORY_COMMAND   = "PMTK182,6,1";
-	private static final String CLEAR_MEMORY_RESPONSE  = "^\\$(PMTK001,182,6,(3))\\*(\\w+)$"; 
-	private static final String FACTORY_RESET_COMMAND  = "PMTK104";
-	private static final String RESTART_RESPONSE       = "^\\$(PMTK010,(001))\\*(\\w+)$";
+    private static final String QUERY_LOG_BY_TIME_RESPONSE =
+ "^\\$(PMTK182,3,3,(\\w+))\\*(\\w+)$"; private static final String
+ QUERY_LOG_BY_DIST_COMMAND  = "PMTK182,2,4,0"; private static final String
+ QUERY_LOG_BY_DIST_RESPONSE = "^\\$(PMTK182,3,4,(\\w+))\\*(\\w+)$"; private
+ static final String QUERY_LOG_BY_SPD_COMMAND   = "PMTK182,2,5,0"; private
+ static final String QUERY_LOG_BY_SPD_RESPONSE  =
+ "^\\$(PMTK182,3,5,(\\w+))\\*(\\w+)$"; private static final String
+ QUERY_LOG_RCD_COMMAND     = "PMTK182,2,6"; private static final String
+ QUERY_LOG_RCD_RESPONSE    = "^\\$(PMTK182,3,6,(\\d+))\\*(\\w+)$"; private
+ static final String QUERY_LOG_STATUS_COMMAND  = "PMTK182,2,7"; private static
+ final String QUERY_LOG_STATUS_RESPONSE = "^\\$(PMTK182,3,7,(\\w+))\\*(\\w+)$";
+        private static final String QUERY_RCD_ADDR_COMMAND    = "PMTK182,2,8";
+        private static final String QUERY_RCD_ADDR_RESPONSE   =
+ "^\\$(PMTK182,3,8,(\\w+))\\*(\\w+)$"; private static final String
+ QUERY_RCD_RCNT_COMMAND    = "PMTK182,2,10"; private static final String
+ QUERY_RCD_RCNT_RESPONSE   = "^\\$(PMTK182,3,10,(\\w+))\\*(\\w+)$"; private
+ static final String QUERY_RELEASE_COMMAND     = "PMTK605"; private static final
+ String QUERT_RELEASE_RESPONSE    =
+ "^\\$(PMTK705,[\\w\\.\\-]+,(\\d+).*)\\*(\\w+)$"; private static final String
+ CLEAR_MEMORY_COMMAND   = "PMTK182,6,1"; private static final String
+ CLEAR_MEMORY_RESPONSE  = "^\\$(PMTK001,182,6,(3))\\*(\\w+)$"; private static
+ final String FACTORY_RESET_COMMAND  = "PMTK104"; private static final String
+ RESTART_RESPONSE       = "^\\$(PMTK010,(001))\\*(\\w+)$";
  */
-
 
 /**
  *
  */
 void onDownloadMenuSelected() {
-  const char PATH_BIN[] = "/tmp.bin";
-/*  {
-    navimenu_t *nm = (navimenu_t *)malloc(sizeof(navimenu_t));
-    memset(nm, 0, sizeof(navimenu_t));
+  /*  {
+      navimenu_t *nm = (navimenu_t *)malloc(sizeof(navimenu_t));
+      memset(nm, 0, sizeof(navimenu_t));
 
-    nm->onButtonPress = onDialogNaviButtonPress;
-    nm->items[0].caption = "OK";
-    nm->items[1].disabled = true;
-    nm->items[2].disabled = "Cancel";
+      nm->onButtonPress = onDialogNaviButtonPress;
+      nm->items[0].caption = "OK";
+      nm->items[1].disabled = true;
+      nm->items[2].disabled = "Cancel";
 
-    app.prevNavi = app.navi;
-    app.navi = nm;
+      app.prevNavi = app.navi;
+      app.navi = nm;
 
-    drawNaviBar();
-  } */
+      drawNaviBar();
+    } */
 
-  // SPPの開始・初期化
-  gpsSerial.begin(APP_NAME, true); // SPPをマスターとして開始
-  gpsSerial.register_callback(onBluetoothDiscoverCallback); // コールバックを登録
-  gpsSerial.setTimeout(1000); // タイムアウトを1秒に設定
-  gpsSerial.setPin("0000");  // Pinコードをセット。SPPの場合はこれが必要
-  uint8_t gpsAddress[6] = {0x00, 0x1B, 0xC1, 0x07, 0xB3, 0xD5}; 
+  uint8_t loggerAddress[] = {0x00, 0x1B, 0xC1, 0x07, 0xB3, 0xD5};
+  if (!logger.connect(loggerAddress)) {
+    Serial.printf("DEBUG: failed to connect to the GPS logger.\n");
 
-  Serial.printf("DEBUG: connecting to GPS logger...\n");
-
-  bool gpsConn = gpsSerial.connect(gpsAddress);
-//  bool gpsConn = gpsSerial.connect("747PRO GPS");
-  File binFile = SD.open("/_gpsdl.mtkbin", "w", true); // ダウンロード用のファイルを作成
-  
-  if ((!gpsConn) || (!binFile)) { // 接続失敗またはファイルが開けない場合
-    // SPPを閉じて終了
-    Serial.printf("DEBUG: failed to connect to GPS logger or open the output file.\n");
-    gpsSerial.end();
     return;
   }
 
-  Serial.printf("DEBUG: the download process is started.\n");
+  File binFile = SD.open("/_gpsdl.mtkbin", "w");
+  if (!binFile) {
+    Serial.printf("DEBUG: failed to create a file for download.\n");
 
-  ReceiveBuffer *recvBuf = new ReceiveBuffer();
-  unsigned long timePeriod = millis() + 3000;
-
-  // get the last address of the log data to be downloaded
-  int32_t endAddr = 0;
-  sendNmeaCommand("PMTK182,2,6", 13); // query log recording mode
-  while (gpsSerial.connected() && (endAddr == 0)) {
-    while (gpsSerial.available()) {
-      // read the data from the GPS logger and put it into the buffer
-      // until NMEA sentence (line) is completed
-      if (recvBuf->put(gpsSerial.read()) == false) continue;
-
-      // ignore the line if the checksum is incorrect
-      if (recvBuf->isChecksumCorrect() == false) continue;
-
-      // abort queries if the timeout reached
-      if (millis() > timePeriod) { // timeout reached
-        endAddr = -1; // set the last address to -1 (this means timeout occurred)
-        break;
-      }
-
-      // check if the received line is the expected responses
-      if (recvBuf->match("$PMTK182,3,6,")) { // response to the query log recording mode 
-        int32_t logMode = 0;
-        recvBuf->readColumnAsInt(3, &logMode);
-
-        Serial.printf("DEBUG: got the log mode. [logMode=%d]\n", logMode);
-
-        // determine the log recording mode (overwrap or fullstop)
-        if (logMode == 2) { // fullstop mode
-          sendNmeaCommand("PMTK182,2,8", 13); // query the record address
-        } else { // overwrite mode
-          sendNmeaCommand("PMTK605", 8); // query the firmware release
-        }
-        continue; // continue to read the next line
-
-      } else if (recvBuf->match("$PMTK182,3,8,")) { // response to the query record address
-        recvBuf->readColumnAsInt(3, &endAddr); // read the address from the 4th column
-
-        Serial.printf("DEBUG: got the address of the last record. [endAddr=0x%06X]\n", endAddr);
-
-        continue; // continue to read the next line
-      } else if (recvBuf->match("$PMTK705,")) { // response to the query firmware release
-        int32_t modelId = 0;
-        recvBuf->readColumnAsInt(2, &modelId); // read the firmware ID from the 3rd column
-
-        Serial.printf("DEBUG: got the model ID of GPS logger. [modelId: 0x%04X]\n", modelId);
-        
-        // set the download size based on the model ID
-		    switch (modelId) {
-		    case 0x1388: // 757/ZI v1 
-		    case 0x5202: // 757/ZI v2
-		    	endAddr = 0x100000; // set the address to 2Mbit
-		    	break;
-		    case 0x0002: // Qstarz 815
-		    case 0x0021: // Holux M-241
-		    case 0x0023: // Holux M-241
-		    case 0x0043: // Holux M-241 (FW 1.13)
-		    case 0x0051: // i-Blue 737, Qstarz 810, Polaris iBT-GPS, Holux M1000
-		    case 0x001b: // i-Blue 747
-		    case 0x001d: // BT-Q1000 / BGL-32
-		    case 0x0131: // EB-85A
-			    endAddr = 0x200000; // set the address to 2Mbit
-			    break;
-		    case 0x0000: // Holux M-1200E
-		    case 0x0004: // 747 A+ GPS Trip Recorder
-		    case 0x0005: // Qstarz BT-Q1000P
-		    case 0x0006: // 747 A+ GPS Trip Recorder
-		    case 0x0008: // Pentagram PathFinder P 3106
-		    case 0x000F: // 747 A+ GPS Trip Recorder
-		    case 0x8300: // Qstarz BT-1200
-        default:     // assume 4Mbit for unknown models
-		    	endAddr = 0x400000; // set the address to 4Mbit
-          break;
-        }
-
-        Serial.printf("DEBUG: set to the download size to the flash size. [endAddr=0x%06X]\n", endAddr);
-
-      } // if (recvBuf->match("$PMTK182,3,6,")) else if ... else if (recvBuf->match("$PMTK705,") == true)
-    } // while (gpsSerial.available())
-  } // while (endAddr == 0)
-
-  // check if the download size is obtained
-  if (endAddr < 0) { // the download size is not obtained
-    Serial.printf("DEBUG: failed to get the information of the GPS logger, abort.\n");
-    delete(recvBuf); // delete the buffer object
-    gpsSerial.disconnect(); // disconnect the SPP
-    gpsSerial.end(); // end the SPP
-    binFile.close(); // close the output file
+    logger.disconnect();
     return;
   }
 
-  bool nextRequest = true;
-  int32_t requestSize = 0x4000;
-  int32_t receivedSize = 0;
-  int32_t nextAddr = 0x000000;
-  int8_t retryCount = 0;
+  int32_t logSize = 0;
+  if (logger.getLogEndAddress(&logSize) &&
+      logger.downloadFlashData(&binFile, logSize, NULL)) {
+    Serial.printf("DEBUG: download completed.\n");
+  } else {
+    Serial.printf("DEBUG: download failed.\n");
+  }
 
-  // download the log data from the GPS logger
-  while (gpsSerial.connected()) { // loop until the SPP is connected
-    // check if any termination condition is met
-    if (nextAddr >= endAddr) { // reached to the end of the data
-      Serial.printf("DEBUG: the download process is finished. [nextAddr=0x%06X, endAddr=0x%06X]\n", nextAddr, endAddr);
-      break;
-    } if (retryCount > 5) { // cause of too many retries
-      Serial.printf("DEBUG: too many retries has occurred, abort. [retries=%d]\n", retryCount);
-      break;
-    }
-
-    // check if the flag to send the next request is set
-    if (nextRequest) { // need to send the next download request
-
-      // send the download command to the GPS logger
-      sendDownloadCommand(nextAddr, requestSize);
-
-      nextRequest = false; // clear the flag to send the next request
-      receivedSize = 0; // clear the received size to 0
-      timePeriod = millis() + ((requestSize / 0x0800) * 1000); // set the timeout period
-
-      Serial.printf("DEBUG: sent the next request. [startAddr=0x%06X, reqSize=0x%04X, retries=%d]\n", 
-                    nextAddr, requestSize, retryCount);
-    }
-    
-    // set the flag to retry if the timeout reached
-    if (millis() > timePeriod) { // timeout reached
-      // set the flag to send the next request and increase the retry count
-      nextRequest = true;
-      retryCount += 1;
-
-      Serial.printf("DEBUG: timeout reached, abort. [retries=%d]\n", retryCount);
-
-      continue; // continue to send the next request
-    }
-
-    // receive data (NMEA sentenses) from the GPS logger and parse it
-    while (gpsSerial.available()) { // repeat until the SPP is available
-      // read the data from the GPS logger and put it into the buffer
-      // until NMEA sentence (line) is completed
-      if (recvBuf->put(gpsSerial.read()) == false) continue;
-
-      // ignore the line if the checksum is incorrect
-      if (recvBuf->isChecksumCorrect() == false) continue;
-
-      // check if the received line is the expected responses
-      if (recvBuf->match("$PMTK182,8,")) { // received log data line
-        // read the starting address from the 3rd column of the line
-        int32_t startAddr = 0;
-        recvBuf->readColumnAsInt(2, &startAddr);
-
-        // if the starting address is different from expected, ignore this line
-        if (startAddr != nextAddr) continue;
-
-        // print the starting address to the serial console for debug
-        Serial.printf("DEBUG: received the data line. [startAddr=0x%06X]\n", startAddr);
-
-        uint8_t b = 0; // variable to store the next byte
-        uint16_t ffCount = 0; // counter for how many 0xFFs are continuous
-        recvBuf->seekToColumn(3); // move to the 4th column (data column)
-        while (recvBuf->readHexByteFull(&b)) { // read the next byte 
-          binFile.write(b); // write the byte to the file
-          ffCount = (b != 0xFF) ? 0 : ffCount+1; // count the continuous 0xFFs
-        }
-
-        // update the next address and the received size
-        nextAddr += 0x0800;
-        receivedSize += 0x0800;
-
-        // update the download size if the continuous 0xFFs are more than 0x200
-        if ((ffCount >= 0x0200) && (nextAddr < endAddr)) {
-          endAddr = nextAddr; // set the download size to the current address
-          Serial.printf("DEBUG: reached to the end of the data. [endAddr=0x%06X]\n", endAddr);
-        }
-
-        continue; // continue to read the next line
-      } else if (recvBuf->match("$PMTK001,182,7,")) { // received operation result line
-        nextRequest = true; // set the flag to send the next request
-        if (receivedSize < requestSize) retryCount += 1; // received size is less than requested size, increase retry count
-
-        break; // break the loop to send the next request
-      } // if (recvBuf->match("$PMTK182,8,") == true) else if (recvBuf->match("$PMTK001,182,7,"))
-    } // while (gpsSerial.available())
-  } // while (dataFinished == false)
-  
-  // close the file and the SPP connection
-  delete(recvBuf); // delete the buffer object
-  gpsSerial.disconnect(); // disconnect the SPP
-  gpsSerial.end(); // end the SPP
-  binFile.close(); // close the output file
-
-  Serial.print("DEBUG: done.\n");
+  binFile.close();
+  logger.disconnect();
 }
 
 /**
@@ -626,10 +319,10 @@ void drawBluetoothIcon(TFT_eSprite *spr, int16_t x0, int16_t y0) {
   uint16_t colorBG = BLUE;
   uint16_t colorFG = WHITE;
 
-//  if (gpsSerial.connected() == false) {
-//    colorBG = DARKGREY;
-//    colorFG = WHITE;
-//  }
+  //  if (gpsSerial.connected() == false) {
+  //    colorBG = DARKGREY;
+  //    colorFG = WHITE;
+  //  }
 
   // アイコンの背景・前景を指定位置に描画
   draw1bitBitmap(spr, ICON_BT_BG, x0, y0, colorBG);
@@ -780,9 +473,10 @@ void drawMainMenu() {
                            COLOR_MENU_BACK);
     }
 
-    draw1bitBitmap(&sprite, ICON_DOWNLOAD, (POS_X + (MENUBTN_W / 2) - (48 / 2)),
-                   (POS_Y + 12), COLOR16(0, 32, 32));
-
+    draw1bitBitmap(&sprite, app.menu->items[i].iconData,
+                   (POS_X + (MENUBTN_W / 2) - (48 / 2)), (POS_Y + 12),
+                   COLOR16(0, 32, 32));
+    Serial.printf("%s\n", app.menu->items[i].caption);
     {  // ボタンのキャプションを描画
       sprite.setTextSize(1);
       sprite.setTextColor(COLOR_MENU_TEXT);
@@ -908,17 +602,13 @@ void setup() {
 
   // M5Stackの初期化
   M5.begin();
-  M5.Power.begin();
-
-  // 画面の初期化
   M5.Lcd.setBrightness(LCD_BRIGHTNESS);
   M5.Lcd.clearDisplay(BLACK);
+  M5.Power.begin();
+  SD.begin(GPIO_NUM_4, SPI, SD_ACCESS_SPEED);
 
   // スプライトの初期化
   sprite.setColorDepth(8);
-
-  // SDカードの開始
-  SD.begin(GPIO_NUM_4, SPI, SD_ACCESS_SPEED);
 
   // ボタンの参照配列を作る
   app.buttons[0] = &M5.BtnA;
@@ -937,23 +627,28 @@ void setup() {
   app.menu = (mainmenu_t *)malloc(sizeof(mainmenu_t));
   memset(app.menu, 0, sizeof(mainmenu_t));
   app.menu->items[0].caption = "Download Log";
+  app.menu->items[0].iconData = ICON_DOWNLOAD;
   app.menu->items[0].onSelected = &(onDownloadMenuSelected);
   app.menu->items[1].caption = "Fix RTC";
+  app.menu->items[1].iconData = ICON_FIXRTC;
   app.menu->items[1].onSelected = &(onFixRTCMenuSelected);
   app.menu->items[2].caption = "Set Preset Cfg";
+  app.menu->items[2].iconData = ICON_PRESET;
   app.menu->items[2].onSelected = &(onSetPresetConfigMenuSelected);
   app.menu->items[3].caption = "Show Location";
+  app.menu->items[3].iconData = ICON_DOWNLOAD;
   app.menu->items[3].onSelected = &(onShowLocationMenuSelected);
   app.menu->items[4].caption = "Erase Log";
+  app.menu->items[4].iconData = ICON_DOWNLOAD;
   app.menu->items[4].onSelected = &(onEraseLogMenuSelected);
   app.menu->items[5].caption = "App Settings";
+  app.menu->items[5].iconData = ICON_DOWNLOAD;
   app.menu->items[5].onSelected = &(onAppSettingsMenuSelected);
 
   // タイトルバーを描画
   drawTitleBar();
   drawNaviBar();
   drawMainMenu();
-
 }
 
 void loop() {
