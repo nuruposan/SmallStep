@@ -14,14 +14,16 @@ typedef enum _sizeinfo {
 
 class LoggerManager {
  private:
-  bool connectedFlag;
   char address[6];
+  bool sppStarted;
   BluetoothSerial *gpsSerial;
   ReceiveBuffer *buffer;
 
   uint8_t calcNmeaChecksum(const char *cmd, uint8_t len);
   bool sendNmeaCommand(const char *cmd, uint16_t len);
+  bool sendDownloadCommand(int startPos, int reqSize);
   static int32_t modelIdToFlashSize(uint16_t modelId);
+  bool getLogEndAddress(int32_t *size);
 
  public:
   LoggerManager();
@@ -30,10 +32,9 @@ class LoggerManager {
   bool connect(uint8_t *address);
   bool connected();
   void disconnect();
-  bool sendDownloadCommand(int startPos, int reqSize);
-  bool getLogEndAddress(int32_t *size);
-  bool downloadFlashData(File *binFile, int32_t endAddr, void (*progress)(int));
-  // int32_t clearFlash();
+  bool downloadLogData(File *output, void (*callback)(int));
+  bool fixRTCdatetime();
+  int32_t clearFlashMemory();
   // int32_t setLogMode(bool overrite);
   // int32_t setLogByDistance(int16_t distance);
   // int32_t setLogBySpeed(int16_t speed);

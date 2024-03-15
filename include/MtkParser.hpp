@@ -1,12 +1,10 @@
 #pragma once
 
+#include <SD.h>
 #include <stdio.h>
-
-typedef struct _fileinfo {
-  char name[80];
-  FILE *fp;
-  fpos_t size;
-} fileinfo_t;
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
 typedef enum _trackmode {
   TRK_PUT_AS_IS = 0,
@@ -14,25 +12,9 @@ typedef enum _trackmode {
   TRK_SINGLE = 2
 } trackmode_t;
 
-typedef enum _speedmode {
-  SPD_PUT_AS_IS = 0,    // record speed as is
-  SPD_CALC_ALWAYS = 1,  // always (re)calclate speed with position and time
-  SPD_DROP_FIELD = 2    // do not record speed
-} speedmode_t;
-
-typedef enum _timemode {
-  TIM_PUT_AS_IS = 0,  // record time as is
-  TIM_FIX_ROLLOVER =
-      1,  // correct time that is affected the rollover problem and record it
-  TIM_DROP_FIELD = 2  // do not record time
-} timemode_t;
-
 typedef struct _parseopt {
-  bool m241;
   trackmode_t track;
-  speedmode_t speed;
-  timemode_t time;
-  uint32_t offset;
+  float offset;
 } parseopt_t;
 
 typedef struct _gpsrecord {
@@ -45,15 +27,15 @@ typedef struct _gpsrecord {
   bool valid;
 } gpsrecord_t;
 
-typedef struct _proginfo {
+typedef struct _parseinfo {
   uint16_t sector;
   uint32_t format;
-  bool m241bin;
+  bool m241;
   gpsrecord_t firstRecord;
   gpsrecord_t lastRecord;
   bool newTrack;
   bool inTrack;
-} proginfo_t;
+} parseinfo_t;
 
 class MtkParser {
  private:
@@ -69,14 +51,12 @@ class MtkParser {
   static const char PTN_M241_SP[];
   static const char PTN_SCT_END[];
 
-  fileinfo_t binFile;
-  fileinfo_t gpxFile;
+  File *in;
+  File *out;
   parseopt_t options;
-  proginfo_t progress;
+  parseinfo_t progress;
 
-  // double calcDistance(gpsrecord_t *r1, gpsrecord_t *r2) {
-  static fpos_t getFileSize(FILE *fp);
-  bool isSpanningDate(uint32_t t1, uint32_t t2);
+  bool isDifferentDate(uint32_t t1, uint32_t t2);
   bool matchBinPattern(const char *ptn, uint8_t len);
   double readBinDouble();
   float readBinFloat24();
@@ -86,8 +66,8 @@ class MtkParser {
   int32_t readBinInt32();
   bool readBinMarkers();
   bool readBinRecord(gpsrecord_t *rcd);
-  static void printFormatRegister_d(uint32_t fmt);
-  static void printGpsRecord_d(gpsrecord_t *rcd);
+  static void printFormat_d(uint32_t fmt);
+  static void printRecord_d(gpsrecord_t *rcd);
   void putGpxString(const char *line);
   void putGpxXmlStart();
   void putGpxXmlEnd();
@@ -99,12 +79,8 @@ class MtkParser {
  public:
   MtkParser();
   ~MtkParser();
-  uint8_t openBinFile(const char *name);
-  uint8_t openGpxFile(const char *name);
-  // void setBinFileName(const char *name);
-  // void setGpxFileName(const char *name);
-  uint32_t setTimezoneOffset(uint32_t tzo);
-  void closeBinFile();
-  void closeGpxFile();
-  bool run(uint16_t token);
+  float setTimezone(float offset);
+  bool convert(File *input, File *output, void (*callback)(int32_t));
+  uint32_t getFirstRecordTime();
+  uint32_t getLastRecordTime();
 };
