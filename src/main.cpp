@@ -3,10 +3,14 @@
 #include <SD.h>
 
 #include "LoggerManager.hpp"
+#include "MtkParser.hpp"
 #include "Resources.h"
 
 #define SD_ACCESS_SPEED 15000000
 #define COLOR16(r, g, b) (int16_t)((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+
+#define POWER_OFF_TIME 180000  // unit: msec
+#define LOOP_INTERVAL 50       // uint: msec
 
 typedef enum { BID_BTN_A = 0, BID_BTN_B = 1, BID_BTN_C = 2 } btnid_t;
 
@@ -41,22 +45,24 @@ typedef struct _loggerinfo {
 typedef struct _appstatus {
   navimenu_t *navi;
   navimenu_t *prevNavi;
-  mainmenu_t *menu;
+  mainmenu_t menu;
   Button *buttons[3];
   loggerinfo_t loggerSelected;
   loggerinfo_t loggerDiscovered;
+  uint32_t idleTimer;
 } appstatus_t;
 
 // ******** function prototypes ********
 void onBluetoothDiscoverCallback(esp_spp_cb_event_t, esp_spp_cb_param_t *);
+void downloadProgress(int32_t progress);
 void onDownloadMenuSelected();
 void onFixRTCMenuSelected();
 void onSetPresetConfigMenuSelected();
 void onShowLocationMenuSelected();
 void onEraseLogMenuSelected();
 void onAppSettingsMenuSelected();
-void drawProgressBar(char *, uint8_t);
-void drawDialog(const char *, const char *);
+void drawProgressBar(uint8_t);
+void drawDialog(const char *);
 void draw1bitBitmap(TFT_eSprite *, const uint8_t *, int16_t, int16_t, int32_t);
 void drawApplicationIcon(TFT_eSprite *, int16_t, int16_t);
 void drawBluetoothIcon(TFT_eSprite *, int16_t, int16_t);
@@ -91,11 +97,8 @@ const int16_t COLOR_MENU_SEL_BACK = LIGHTGREY;
 const int16_t COLOR_NAVI_BACK = LIGHTGREY;
 const int16_t COLOR_NAVI_TEXT = BLACK;
 
-typedef struct phandler {
-  void (*run)();
-} phandler_t;
-
 LoggerManager logger = LoggerManager();
+MtkParser parser = MtkParser();
 TFT_eSprite sprite = TFT_eSprite(&M5.Lcd);
 appstatus_t app;
 
@@ -108,26 +111,26 @@ void onBluetoothDiscoverCallback(esp_spp_cb_event_t event,
   }
 }
 
-void drawProgressBar(char *caption, uint8_t progress) {
+void drawProgressBar(uint8_t progress) {
   // 進捗率の指定のレンジ補正
   if (progress > 100) progress = 100;
 
-  // スプライトを作成
-  sprite.createSprite(300, 40);
+  M5.Lcd.progressBar(10, 180, 300, 16, progress);
+  /*  // スプライトを作成
+  sprite.createSprite(300, 16);
 
   // プログレスバーの描画
-  sprite.setTextColor(LIGHTGREY);
-  sprite.drawString(caption, 8, 154, 4);
-  sprite.fillRect((progress / 100) * 300, 25, 300, 16, LIGHTGREY);
-  sprite.fillRect(0, 25, (progress / 100) * 300, 16, BLUE);
-  sprite.drawRect(0, 25, 300, 40, DARKGREY);
+  sprite.fillRect(((float)progress / 100) * 300, 0, 300, 16, LIGHTGREY);
+  sprite.fillRect(0, 0, ((float)progress / 100) * 300, 16, BLUE);
+  sprite.drawRect(0, 0, 300, 16, DARKGREY);
 
   // スプライトをLCDに転送
   sprite.pushSprite(10, 180);
   sprite.deleteSprite();
+  */
 }
 
-void drawDialog(const char *title, const char *msg) {
+void drawDialog(const char *title) {
   const int16_t MARGIN = 4;
   const int16_t DIALOG_X = MARGIN;
   const int16_t DIALOG_Y = 24 + MARGIN;
@@ -135,25 +138,21 @@ void drawDialog(const char *title, const char *msg) {
   const int16_t DIALOG_H = (M5.Lcd.height() - 48) - (MARGIN * 2);
   const int16_t TITLE_X = 2;
   const int16_t TITLE_Y = 2;
-  const int16_t MSG_X = 8;
-  const int16_t MSG_Y = 30;
 
-  // スプライトを作成
-  sprite.setColorDepth(8);
+  // initialize the sprite
   sprite.createSprite(DIALOG_W, DIALOG_H);
 
-  // ダイアログのウインドウっぽい枠を描画
+  // draw the dialog frame
   sprite.fillRect(0, 0, sprite.width(), sprite.height(), LIGHTGREY);
   sprite.fillRect(0, 0, sprite.width(), 26, COLOR16(0, 128, 255));
-  sprite.drawRect(0, 0, sprite.width(), sprite.height(), BLUE);
+  sprite.drawRect(0, 0, sprite.width(), sprite.height(), DARKGREY);
 
-  // タイトルをメッセージを描画
+  // print the title
   sprite.setTextSize(1);
   sprite.setTextColor(BLACK);
   sprite.drawString(title, TITLE_X, TITLE_Y, 4);
-  sprite.drawString(msg, MSG_X, MSG_Y, 4);
 
-  // 描画したスプライトをLCDに転送
+  // transfer the sprite to the LCD
   sprite.pushSprite(DIALOG_X, DIALOG_Y);
   sprite.deleteSprite();
 }
@@ -177,8 +176,6 @@ void drawDialog(const char *title, const char *msg) {
  static final String QUERY_LOG_BY_SPD_COMMAND   = "PMTK182,2,5,0"; private
  static final String QUERY_LOG_BY_SPD_RESPONSE  =
  "^\\$(PMTK182,3,5,(\\w+))\\*(\\w+)$"; private static final String
- QUERY_LOG_RCD_COMMAND     = "PMTK182,2,6"; private static final String
- QUERY_LOG_RCD_RESPONSE    = "^\\$(PMTK182,3,6,(\\d+))\\*(\\w+)$"; private
  static final String QUERY_LOG_STATUS_COMMAND  = "PMTK182,2,7"; private static
  final String QUERY_LOG_STATUS_RESPONSE = "^\\$(PMTK182,3,7,(\\w+))\\*(\\w+)$";
         private static final String QUERY_RCD_ADDR_COMMAND    = "PMTK182,2,8";
@@ -186,65 +183,144 @@ void drawDialog(const char *title, const char *msg) {
  "^\\$(PMTK182,3,8,(\\w+))\\*(\\w+)$"; private static final String
  QUERY_RCD_RCNT_COMMAND    = "PMTK182,2,10"; private static final String
  QUERY_RCD_RCNT_RESPONSE   = "^\\$(PMTK182,3,10,(\\w+))\\*(\\w+)$"; private
- static final String QUERY_RELEASE_COMMAND     = "PMTK605"; private static final
- String QUERT_RELEASE_RESPONSE    =
- "^\\$(PMTK705,[\\w\\.\\-]+,(\\d+).*)\\*(\\w+)$"; private static final String
  CLEAR_MEMORY_COMMAND   = "PMTK182,6,1"; private static final String
  CLEAR_MEMORY_RESPONSE  = "^\\$(PMTK001,182,6,(3))\\*(\\w+)$"; private static
  final String FACTORY_RESET_COMMAND  = "PMTK104"; private static final String
  RESTART_RESPONSE       = "^\\$(PMTK010,(001))\\*(\\w+)$";
  */
 
+void downloadProgress(int32_t progress) {
+  Serial.printf("download progress=%d%%\n", progress);
+
+  drawProgressBar(progress);
+}
+
 /**
  *
  */
 void onDownloadMenuSelected() {
-  /*  {
-      navimenu_t *nm = (navimenu_t *)malloc(sizeof(navimenu_t));
-      memset(nm, 0, sizeof(navimenu_t));
+  uint8_t loggerAddress[] = {0x00, 0x1B, 0xC1, 0x07, 0xB3, 0xD5};  // M-241
+  // uint8_t loggerAddress[] = {0x00, 0x1C, 0x88, 0x22, 0x1E, 0x57};  // 747pro
 
-      nm->onButtonPress = onDialogNaviButtonPress;
-      nm->items[0].caption = "OK";
-      nm->items[1].disabled = true;
-      nm->items[2].disabled = "Cancel";
+  drawDialog("Download Log");
 
-      app.prevNavi = app.navi;
-      app.navi = nm;
+  M5.Lcd.setTextFont(2);
+  M5.Lcd.setTextSize(1);
 
-      drawNaviBar();
-    } */
+  File binFileW = SD.open("/download.mtkbin", "w");
+  File gpxFile = SD.open("/download.gpx", "w");
+  if ((!binFileW) || (!gpxFile)) {
+    M5.Lcd.setTextColor(RED);
+    M5.Lcd.drawString("Could not open files on the SD card.", 10, 60);
+    M5.Lcd.drawString("- Make sure SD card is available.", 10, 60 + 18);
+    M5.Lcd.drawString("  It must be a <16GB, FAT32-formatted.", 10, 60 + 36);
 
-  uint8_t loggerAddress[] = {0x00, 0x1B, 0xC1, 0x07, 0xB3, 0xD5};
+    Serial.printf("DEBUG: failed to create a file for download.\n");
+
+    if (binFileW) binFileW.close();
+    if (gpxFile) gpxFile.close();
+    return;
+  }
+
+  M5.Lcd.setTextColor(BLACK);
+  M5.Lcd.drawString("Connecting to GPS logger...", 10, 60);
+
+  if (!logger.connect(loggerAddress)) {
+    M5.Lcd.setTextColor(RED);
+    M5.Lcd.drawString("Connecting to GPS logger... failed.", 10, 60);
+    M5.Lcd.drawString("- Make sure Bluetooth on logger is enabled", 10,
+                      60 + 18);
+    M5.Lcd.drawString("- Power cycling may fix this problem", 10, 60 + 36);
+
+    Serial.printf("DEBUG: failed to connect to the GPS logger.\n");
+
+    binFileW.close();
+    gpxFile.close();
+    return;
+  }
+
+  M5.Lcd.setTextColor(BLACK);
+  M5.Lcd.drawString("Connecting to GPS logger... done.", 10, 60);
+  M5.Lcd.drawString("Downloading log data...", 10, 60 + 18);
+
+  if (!logger.downloadLogData(&binFileW, &downloadProgress)) {
+    M5.Lcd.setTextColor(RED);
+    M5.Lcd.drawString("Downloading log data... failed.", 10, 60 + 18);
+    M5.Lcd.drawString("- Keep GPS logger close to this device", 10, 60 + 36);
+    M5.Lcd.drawString("- Power cycling may fix this problem", 10, 60 + 54);
+    M5.Lcd.drawString("- Data cannot receive and save in time", 10, 60 + 72);
+    M5.Lcd.drawString("  using bad SD card", 10, 60 + 90);
+
+    Serial.printf("DEBUG: download failed.\n");
+
+    binFileW.close();
+    logger.disconnect();
+    return;
+  }
+  logger.disconnect();
+  binFileW.close();
+  delay(500);
+
+  M5.Lcd.setTextColor(BLACK);
+  M5.Lcd.drawString("Downloading log data... done.", 10, 60 + 18);
+  M5.Lcd.drawString("Converting data to GPX file...", 10, 60 + 36);
+  M5.Lcd.fillRect(11, 181, 298, 14, LIGHTGREY);
+
+  File binFileR = SD.open("/download.mtkbin", "r");
+  Serial.printf("DEBUG: %d bytes\n", binFileR.size());
+
+  if ((!binFileR) || (binFileR.size() == 0)) {
+    M5.Lcd.setTextColor(RED);
+    M5.Lcd.drawString("Converting data to GPX file... failed.", 10, 60 + 36);
+    M5.Lcd.drawString("- Reformat SD card may fix problem", 10, 60 + 54);
+    M5.Lcd.drawString("  (Maybe Filesystem is corrupted?)", 10, 60 + 72);
+
+    if (!binFileR) binFileR.close();
+    gpxFile.close();
+    return;
+  }
+
+  parser.setTimezone(9.0);
+  parser.convert(&binFileR, &gpxFile, &downloadProgress);
+
+  binFileR.close();
+  gpxFile.close();
+  SD.end();
+
+  M5.Lcd.setTextColor(BLACK);
+  M5.Lcd.drawString("Converting data to GPX file... done.", 10, 60 + 36);
+
+  SD.begin(GPIO_NUM_4, SPI, SD_ACCESS_SPEED);
+  uint32_t frt = parser.getFirstRecordTime();
+  uint32_t lrt = parser.getLastRecordTime();
+  char binName[32], gpxName[32];
+  sprintf(binName, "/smallstep_%d-to-%d.mtkbin", frt, lrt);
+  sprintf(gpxName, "/smallstep_%d-to-%d.gpx", frt, lrt);
+
+  SD.rename("/download.mtkbin", binName);
+  SD.rename("/download.gpx", gpxName);
+}
+
+/**
+ *
+ */
+void onFixRTCMenuSelected() {
+  uint8_t loggerAddress[] = {0x00, 0x1B, 0xC1, 0x07, 0xB3, 0xD5};  // M-241
+  // uint8_t loggerAddress[] = {0x00, 0x1C, 0x88, 0x22, 0x1E, 0x57};  // 747pro
   if (!logger.connect(loggerAddress)) {
     Serial.printf("DEBUG: failed to connect to the GPS logger.\n");
 
     return;
   }
 
-  File binFile = SD.open("/_gpsdl.mtkbin", "w");
-  if (!binFile) {
-    Serial.printf("DEBUG: failed to create a file for download.\n");
-
-    logger.disconnect();
-    return;
-  }
-
-  int32_t logSize = 0;
-  if (logger.getLogEndAddress(&logSize) &&
-      logger.downloadFlashData(&binFile, logSize, NULL)) {
-    Serial.printf("DEBUG: download completed.\n");
+  if (logger.fixRTCdatetime()) {
+    Serial.printf("DEBUG: RTC datetime is fixed.\n");
   } else {
-    Serial.printf("DEBUG: download failed.\n");
+    Serial.printf("DEBUG: failed to fix RTC datetime.\n");
   }
 
-  binFile.close();
   logger.disconnect();
 }
-
-/**
- *
- */
-void onFixRTCMenuSelected() { Serial.printf("[DEBUG] onFixRTCMenuSelected\n"); }
 
 /**
  *
@@ -319,10 +395,9 @@ void drawBluetoothIcon(TFT_eSprite *spr, int16_t x0, int16_t y0) {
   uint16_t colorBG = BLUE;
   uint16_t colorFG = WHITE;
 
-  //  if (gpsSerial.connected() == false) {
-  //    colorBG = DARKGREY;
-  //    colorFG = WHITE;
-  //  }
+  if (!logger.connected()) {
+    colorBG = DARKGREY;
+  }
 
   // アイコンの背景・前景を指定位置に描画
   draw1bitBitmap(spr, ICON_BT_BG, x0, y0, colorBG);
@@ -463,7 +538,7 @@ void drawMainMenu() {
     int16_t POS_Y = MENUBTN1_Y + ((MENUBTN_H + MARGIN_Y) * (i / 3));
 
     // メインメニューのボタンの背景を描画
-    if (i == app.menu->selectedIndex) {  // 選択状態メニュー
+    if (i == app.menu.selectedIndex) {  // 選択状態メニュー
       sprite.fillRoundRect(POS_X, POS_Y, MENUBTN_W, MENUBTN_H, 4,
                            COLOR_MENU_SEL_BACK);
       sprite.drawRoundRect(POS_X, POS_Y, MENUBTN_W, MENUBTN_H, 4,
@@ -473,17 +548,15 @@ void drawMainMenu() {
                            COLOR_MENU_BACK);
     }
 
-    draw1bitBitmap(&sprite, app.menu->items[i].iconData,
+    draw1bitBitmap(&sprite, app.menu.items[i].iconData,
                    (POS_X + (MENUBTN_W / 2) - (48 / 2)), (POS_Y + 12),
                    COLOR16(0, 32, 32));
-    Serial.printf("%s\n", app.menu->items[i].caption);
-    {  // ボタンのキャプションを描画
-      sprite.setTextSize(1);
-      sprite.setTextColor(COLOR_MENU_TEXT);
-      sprite.drawCentreString(app.menu->items[i].caption,
-                              POS_X + (MENUBTN_W / 2), POS_Y + (MENUBTN_H - 12),
-                              1);
-    }
+
+    // ボタンのキャプションを描画
+    sprite.setTextSize(1);
+    sprite.setTextColor(COLOR_MENU_TEXT);
+    sprite.drawCentreString(app.menu.items[i].caption, POS_X + (MENUBTN_W / 2),
+                            POS_Y + (MENUBTN_H - 12), 1);
   }
 
   // 描画した内容を画面に反映し、スプライト領域を開放
@@ -540,17 +613,17 @@ void drawNaviBar() {
 }
 
 void onNaviPrevButtonClick() {
-  app.menu->selectedIndex = (app.menu->selectedIndex + 5) % 6;
+  app.menu.selectedIndex = (app.menu.selectedIndex + 5) % 6;
   drawMainMenu();
 }
 
 void onNaviNextButtonClick() {
-  app.menu->selectedIndex = (app.menu->selectedIndex + 1) % 6;
+  app.menu.selectedIndex = (app.menu.selectedIndex + 1) % 6;
   drawMainMenu();
 }
 
 void onNaviEnterButtonClick() {
-  menuitem_t *mi = &(app.menu->items[app.menu->selectedIndex]);
+  menuitem_t *mi = &(app.menu.items[app.menu.selectedIndex]);
   if (mi->onSelected != NULL) mi->onSelected();
 }
 
@@ -568,54 +641,26 @@ void onMainNaviButtonPress(btnid_t bid) {
   }
 }
 
-void onDialogOKButtonClick() {
-  // TODO
-  free(app.navi);
-  app.navi = app.prevNavi;
-  app.prevNavi = NULL;
-
-  drawMainMenu();
-  drawNaviBar();
-}
-
-void onDialogCancelButtonClick() {
-  // TODO
-  //
-}
-
-void onDialogNaviButtonPress(btnid_t bid) {
-  switch (bid) {
-    case BID_BTN_A:
-      onDialogOKButtonClick();
-      break;
-    case BID_BTN_B:
-      break;
-    case BID_BTN_C:
-      onDialogCancelButtonClick();
-      break;
-  }
-}
-
 void setup() {
-  // デバッグ用シリアルポートの初期化
+  // start the serial
   Serial.begin(115200);
 
-  // M5Stackの初期化
+  // initialize the M5Stack
   M5.begin();
   M5.Lcd.setBrightness(LCD_BRIGHTNESS);
   M5.Lcd.clearDisplay(BLACK);
   M5.Power.begin();
   SD.begin(GPIO_NUM_4, SPI, SD_ACCESS_SPEED);
 
-  // スプライトの初期化
+  // initialize the screen sprite
   sprite.setColorDepth(8);
 
-  // ボタンの参照配列を作る
+  // instance array of buttons
   app.buttons[0] = &M5.BtnA;
   app.buttons[1] = &M5.BtnB;
   app.buttons[2] = &M5.BtnC;
 
-  // メニュー
+  // navigation menu
   app.navi = (navimenu_t *)malloc(sizeof(navimenu_t));
   memset(app.navi, 0, sizeof(navimenu_t));
   app.navi->onButtonPress = &(onMainNaviButtonPress);
@@ -624,44 +669,61 @@ void setup() {
   app.navi->items[2].caption = "Select";
   app.prevNavi = NULL;
 
-  app.menu = (mainmenu_t *)malloc(sizeof(mainmenu_t));
-  memset(app.menu, 0, sizeof(mainmenu_t));
-  app.menu->items[0].caption = "Download Log";
-  app.menu->items[0].iconData = ICON_DOWNLOAD;
-  app.menu->items[0].onSelected = &(onDownloadMenuSelected);
-  app.menu->items[1].caption = "Fix RTC";
-  app.menu->items[1].iconData = ICON_FIXRTC;
-  app.menu->items[1].onSelected = &(onFixRTCMenuSelected);
-  app.menu->items[2].caption = "Set Preset Cfg";
-  app.menu->items[2].iconData = ICON_PRESET;
-  app.menu->items[2].onSelected = &(onSetPresetConfigMenuSelected);
-  app.menu->items[3].caption = "Show Location";
-  app.menu->items[3].iconData = ICON_DOWNLOAD;
-  app.menu->items[3].onSelected = &(onShowLocationMenuSelected);
-  app.menu->items[4].caption = "Erase Log";
-  app.menu->items[4].iconData = ICON_DOWNLOAD;
-  app.menu->items[4].onSelected = &(onEraseLogMenuSelected);
-  app.menu->items[5].caption = "App Settings";
-  app.menu->items[5].iconData = ICON_DOWNLOAD;
-  app.menu->items[5].onSelected = &(onAppSettingsMenuSelected);
+  // main menu icons
+  app.menu.items[0].caption = "Download Log";
+  app.menu.items[0].iconData = ICON_DOWNLOAD_LOG;
+  app.menu.items[0].onSelected = &(onDownloadMenuSelected);
+  app.menu.items[1].caption = "Fix RTC";
+  app.menu.items[1].iconData = ICON_FIX_RTC;
+  app.menu.items[1].onSelected = &(onFixRTCMenuSelected);
+  app.menu.items[2].caption = "Set Preset Cfg";
+  app.menu.items[2].iconData = ICON_SET_PRESET;
+  app.menu.items[2].onSelected = &(onSetPresetConfigMenuSelected);
+  app.menu.items[3].caption = "Erase Log";
+  app.menu.items[3].iconData = ICON_ERASE_LOG;
+  app.menu.items[3].onSelected = &(onEraseLogMenuSelected);
+  app.menu.items[4].caption = "Link to Logger";
+  app.menu.items[4].iconData = ICON_PAIR_LOGGER;
+  app.menu.items[4].onSelected = &(onShowLocationMenuSelected);
+  app.menu.items[5].caption = "App Settings";
+  app.menu.items[5].iconData = ICON_APP_SETTINGS;
+  app.menu.items[5].onSelected = &(onAppSettingsMenuSelected);
 
-  // タイトルバーを描画
+  // draw the initial screen
   drawTitleBar();
   drawNaviBar();
   drawMainMenu();
+
+  app.idleTimer = millis() + POWER_OFF_TIME;
 }
 
 void loop() {
-  M5.update();  // M5Stackのステータス更新
+  M5.update();  // update button status
 
-  // 物理ボタンの処理 (ナビボタンを押したものとして扱う)
+  // physical button event handling
   for (int16_t i = 0; i < 3; i++) {
-    Button *b = app.buttons[i];  // 判定するボタン
+    Button *b = app.buttons[i];  // get a button object to check
+
+    // call the event handler if the button is pressed
     if (b->wasPressed()) {
       app.navi->onButtonPress((btnid_t)(i));
-      break;  // 左・中・右の順に1回だけ処理。同時に複数の処理はしない
+      app.idleTimer = millis() + POWER_OFF_TIME;  // reset the idle timer
+
+      // 1回押したら次のボタンの処理はしない
+      break;
     }
   }
 
-  delay(50);
+  // if the idle timer is expired, shutdown the system
+  if (millis() > app.idleTimer) {
+    // debug message
+    Serial.printf(
+        "SmallStep.loop: powering off the system due to inactivity.\n");
+
+    // shutdown the system
+    SD.end();             // stop SD card access
+    M5.Power.powerOFF();  // power off
+  }
+
+  delay(LOOP_INTERVAL);
 }

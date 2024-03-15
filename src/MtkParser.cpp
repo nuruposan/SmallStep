@@ -1,10 +1,5 @@
 #include "MtkParser.hpp"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-
 typedef enum _fmtreg {
   REG_TIME = 0x000001,
   REG_VALID = 0x000002,
@@ -54,141 +49,70 @@ const char MtkParser::PTN_SCT_END[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
                                        0xFF, 0xFF, 0xFF, 0xFF};
 
 MtkParser::MtkParser() {
-  memset(&binFile, 0, sizeof(fileinfo_t));
-  memset(&gpxFile, 0, sizeof(fileinfo_t));
+  Serial.println("MtkParser.constructor\n");
+
   memset(&options, 0, sizeof(parseopt_t));
-  memset(&progress, 0, sizeof(proginfo_t));
+  memset(&progress, 0, sizeof(parseinfo_t));
 }
 
-MtkParser::~MtkParser() {
-  closeBinFile();
-  closeGpxFile();
-}
-
-uint8_t MtkParser::openBinFile(const char *name) {
-  if ((binFile.fp = fopen(name, "r")) == NULL) {
-    memset(&binFile, 0, sizeof(fileinfo_t));
-    return -1;
-  }
-
-  strcpy(binFile.name, name);
-  binFile.size = getFileSize(binFile.fp);
-
-  return 0;
-}
-
-uint8_t MtkParser::openGpxFile(const char *name) {
-  if ((gpxFile.fp = fopen(name, "w")) == NULL) {
-    memset(&gpxFile, 0, sizeof(fileinfo_t));
-    return -1;
-  }
-
-  strcpy(gpxFile.name, name);
-  gpxFile.size = getFileSize(gpxFile.fp);
-
-  putGpxXmlStart();
-
-  return 0;
-}
-
-void MtkParser::closeBinFile() {
-  if (binFile.fp != NULL) {
-    fclose(binFile.fp);
-    memset(&binFile, 0, sizeof(fileinfo_t));
-  }
-}
-
-void MtkParser::closeGpxFile() {
-  putGpxXmlEnd();
-
-  if (gpxFile.fp != NULL) {
-    fclose(gpxFile.fp);
-    memset(&gpxFile, 0, sizeof(fileinfo_t));
-  }
-}
-
-fpos_t MtkParser::getFileSize(FILE *fp) {
-  fpos_t pos, sz;
-
-  // get current position, seek to end (=file size), restore position
-  fgetpos(fp, &pos);
-  fseek(fp, 0, SEEK_END);
-  fgetpos(fp, &sz);
-  fseek(fp, pos, SEEK_SET);
-
-  return sz;
-}
+MtkParser::~MtkParser() { Serial.println("MtkParser.destructor\n"); }
 
 double MtkParser::readBinDouble() {
-  FILE *fp = binFile.fp;
   double val;
-  uint8_t ba[] = {(uint8_t)fgetc(fp), (uint8_t)fgetc(fp), (uint8_t)fgetc(fp),
-                  (uint8_t)fgetc(fp), (uint8_t)fgetc(fp), (uint8_t)fgetc(fp),
-                  (uint8_t)fgetc(fp), (uint8_t)fgetc(fp)};
+  uint8_t ba[] = {(uint8_t)in->read(), (uint8_t)in->read(), (uint8_t)in->read(),
+                  (uint8_t)in->read(), (uint8_t)in->read(), (uint8_t)in->read(),
+                  (uint8_t)in->read(), (uint8_t)in->read()};
   memcpy(&val, &ba, sizeof(double));
 
   return val;
 }
 
 float MtkParser::readBinFloat24() {
-  FILE *fp = binFile.fp;
-
   float val;
-  uint8_t ba[] = {0x00, (uint8_t)fgetc(fp), (uint8_t)fgetc(fp),
-                  (uint8_t)fgetc(fp)};
+  uint8_t ba[] = {0x00, (uint8_t)in->read(), (uint8_t)in->read(),
+                  (uint8_t)in->read()};
   memcpy(&val, &ba, sizeof(float));
 
   return val;
 }
 
 float MtkParser::readBinFloat() {
-  FILE *fp = binFile.fp;
-
   float val;
-  uint8_t ba[] = {(uint8_t)fgetc(fp), (uint8_t)fgetc(fp), (uint8_t)fgetc(fp),
-                  (uint8_t)fgetc(fp)};
+  uint8_t ba[] = {(uint8_t)in->read(), (uint8_t)in->read(), (uint8_t)in->read(),
+                  (uint8_t)in->read()};
   memcpy(&val, &ba, sizeof(float));
 
   return val;
 }
 
-int32_t MtkParser::readBinInt8() {
-  FILE *fp = binFile.fp;
-  return fgetc(fp);
-}
+int32_t MtkParser::readBinInt8() { return in->read(); }
 
 int32_t MtkParser::readBinInt16() {
-  FILE *fp = binFile.fp;
-
   int32_t val;
-  uint8_t ba[] = {(uint8_t)fgetc(fp), (uint8_t)fgetc(fp), 0x00, 0x00};
-  memcpy(&val, &ba, sizeof(float));
+  uint8_t ba[] = {(uint8_t)in->read(), (uint8_t)in->read(), 0x00, 0x00};
+  memcpy(&val, &ba, sizeof(int16_t));
 
   return val;
 }
 
 int32_t MtkParser::readBinInt32() {
-  FILE *fp = binFile.fp;
-
   int32_t val;
-  uint8_t ba[] = {(uint8_t)fgetc(fp), (uint8_t)fgetc(fp), (uint8_t)fgetc(fp),
-                  (uint8_t)fgetc(fp)};
-  memcpy(&val, &ba, sizeof(float));
+  uint8_t ba[] = {(uint8_t)in->read(), (uint8_t)in->read(), (uint8_t)in->read(),
+                  (uint8_t)in->read()};
+  memcpy(&val, &ba, sizeof(int32_t));
 
   return val;
 }
 
 void MtkParser::putGpxString(const char *line) {
   for (uint8_t i = 0; ((i < 100) && (line[i] != 0)); i++) {
-    fputc(line[i], gpxFile.fp);
+    out->write(line[i]);
   }
-
-  fgetpos(gpxFile.fp, &gpxFile.size);
 }
 
 void MtkParser::putGpxXmlStart() {
   putGpxString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-  putGpxString("<gpx version=\"1.1\" creator=\"SmallStep M5S v0.01\"");
+  putGpxString("<gpx version=\"1.1\" creator=\"SmallStep M5Stack v0.01\"");
   putGpxString(" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema\"");
   putGpxString(" xmlns=\"https://www.topografix.com/GPX/1/1/gpx.xsd\">\n");
 
@@ -211,6 +135,8 @@ void MtkParser::putGpxTrackStart() {
 
   progress.inTrack = true;
   progress.newTrack = false;
+
+  Serial.print("MtkParser.putGpxTrackStart: start a new track\n");
 }
 
 void MtkParser::putGpxTrackEnd() {
@@ -223,9 +149,10 @@ void MtkParser::putGpxTrackEnd() {
 }
 
 void MtkParser::putGpxTrackPoint(gpsrecord_t *rcd) {
+  int32_t prog = 0;
   char buf[40];
 
-  if ((progress.inTrack == false) || (progress.newTrack == true)) {
+  if (!progress.inTrack || progress.newTrack) {
     putGpxTrackStart();
   }
 
@@ -240,9 +167,10 @@ void MtkParser::putGpxTrackPoint(gpsrecord_t *rcd) {
   }
   putGpxString(">");
 
-  if ((rcd->format & REG_TIME) && (options.time != TIM_DROP_FIELD)) {
+  if (rcd->format & REG_TIME) {
     time_t tt = rcd->time;
     struct tm *t = localtime(&tt);
+
     sprintf(buf, "<time>%04d-%02d-%02dT%02d:%02d:%02dZ</time>",
             (t->tm_year + 1900), (t->tm_mon + 1), t->tm_mday, t->tm_hour,
             t->tm_min, t->tm_sec);
@@ -252,7 +180,7 @@ void MtkParser::putGpxTrackPoint(gpsrecord_t *rcd) {
     sprintf(buf, "<ele>%0.2f</ele>", rcd->elevation);
     putGpxString(buf);
   }
-  if ((rcd->format & REG_SPEED) && (options.speed != SPD_DROP_FIELD)) {
+  if (rcd->format & REG_SPEED) {
     sprintf(buf, "<speed>%0.2f</speed>", rcd->speed);
     putGpxString(buf);
   }
@@ -260,16 +188,15 @@ void MtkParser::putGpxTrackPoint(gpsrecord_t *rcd) {
   putGpxString("</trkpt>\n");
 }
 
-bool MtkParser::isSpanningDate(uint32_t t1, uint32_t t2) {
-  t1 += options.offset;
-  t2 += options.offset;
-  bool span = ((t1 / 86400) != (t2 / 86400));
+bool MtkParser::isDifferentDate(uint32_t t1, uint32_t t2) {
+  t1 += (options.offset * (3600 * 24));
+  t2 += (options.offset * (3600 * 24));
 
-  return span;
+  return ((t1 / 86400) != (t2 / 86400));
 }
 
-void MtkParser::printFormatRegister_d(uint32_t fmt) {
-  printf("**debug** Change format=0x%08X {", fmt);
+void MtkParser::printFormat_d(uint32_t fmt) {
+  printf("MtkParser.prinfFormat: format=0x%08X {", fmt);
   if (fmt & REG_TIME) printf("TIME");
   if (fmt & REG_VALID) printf(", VALID");
   if (fmt & REG_LAT) printf(", LAT");
@@ -294,19 +221,19 @@ void MtkParser::printFormatRegister_d(uint32_t fmt) {
 
 void MtkParser::setFormatRegister(uint32_t fmt) {
   progress.format = fmt;
-  printFormatRegister_d(fmt);
+  printFormat_d(fmt);
 }
 
-uint32_t MtkParser::setTimezoneOffset(uint32_t tzo) {
-  const uint32_t OFFSET_MAX = (3600 * +24);  // UTC+24
-  const uint32_t OFFSET_MIN = (3600 * -24);  // UTC-24
+float MtkParser::setTimezone(float offset) {
+  const uint32_t OFFSET_MAX = 12;   // UTC+24
+  const uint32_t OFFSET_MIN = -12;  // UTC-24
 
-  if (tzo >= OFFSET_MAX) {
+  if (offset >= OFFSET_MAX) {
     options.offset = OFFSET_MAX;
-  } else if (tzo <= OFFSET_MIN) {
+  } else if (offset <= OFFSET_MIN) {
     options.offset = OFFSET_MIN;
   } else {
-    options.offset = tzo;
+    options.offset = offset;
   }
 
   return options.offset;
@@ -316,72 +243,68 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   // clear given variable before use
   memset(rcd, 0, sizeof(gpsrecord_t));
 
-  fpos_t startPos;
+  size_t startPos = in->position();
   rcd->format = progress.format;
-  fgetpos(binFile.fp, &startPos);
 
   // read the UTC (TIME) field if it exists
   if (progress.format & REG_TIME) {  // the record has TIME field
     rcd->time = readBinInt32();
 
-    if ((options.time == TIM_FIX_ROLLOVER) &&
-        (rcd->time < ROLLOVER_OCCUR_TIME)) {
+    if (rcd->time < ROLLOVER_OCCUR_TIME) {
       rcd->time += ROLLOVER_CORRECT_VALUE;
     }
   }
 
   // read LAT/LON/ELE fields if they exists.
   // * M-241 uses different types for these field
-  if (progress.m241bin == true) {  // for M-241
+  if (progress.m241) {  // for M-241
     if (progress.format & REG_LAT) rcd->latitude = readBinFloat();
     if (progress.format & REG_LON) rcd->longitude = readBinFloat();
     if (progress.format & REG_ELE) rcd->elevation = readBinFloat24();
-  } else {  // for other models (isM241 == false)
+  } else {  // for other models
     if (progress.format & REG_LAT) rcd->latitude = readBinDouble();
     if (progress.format & REG_LON) rcd->longitude = readBinDouble();
     if (progress.format & REG_ELE) rcd->elevation = readBinFloat();
-  }  // if (progress.m241bin == true) else
+  }  // if (progress.m241) else
 
   // read the SPEED field if it exists
   if (progress.format & REG_SPEED) rcd->speed = readBinFloat() / 3.60;
 
   // ignore all of other fields if they exist
-  fseek(binFile.fp,
-        ((sizeof(float) * (bool)(progress.format & REG_TRACK)) +
-         (sizeof(uint16_t) * (bool)(progress.format & REG_DSTA)) +
-         (sizeof(float) * (bool)(progress.format & REG_DAGE)) +
-         (sizeof(uint16_t) * (bool)(progress.format & REG_PDOP)) +
-         (sizeof(uint16_t) * (bool)(progress.format & REG_HDOP)) +
-         (sizeof(uint16_t) * (bool)(progress.format & REG_VDOP)) +
-         (sizeof(uint16_t) * (bool)(progress.format & REG_NSAT))),
-        SEEK_CUR);
+  in->seek(((sizeof(float) * (bool)(progress.format & REG_TRACK)) +
+            (sizeof(uint16_t) * (bool)(progress.format & REG_DSTA)) +
+            (sizeof(float) * (bool)(progress.format & REG_DAGE)) +
+            (sizeof(uint16_t) * (bool)(progress.format & REG_PDOP)) +
+            (sizeof(uint16_t) * (bool)(progress.format & REG_HDOP)) +
+            (sizeof(uint16_t) * (bool)(progress.format & REG_VDOP)) +
+            (sizeof(uint16_t) * (bool)(progress.format & REG_NSAT))),
+           SeekCur);
   if (progress.format & REG_SID) {
     uint16_t siv =
         (uint16_t)(readBinInt32() & 0x0000FFFF);  // number of SATs in view
-    fseek(binFile.fp,
-          ((sizeof(int16_t) * (bool)(progress.format & REG_ALT)) +
-           (sizeof(uint16_t) * (bool)(progress.format & REG_AZI)) +
-           (sizeof(uint16_t) * (bool)(progress.format & REG_SNR))) *
-              siv,
-          SEEK_CUR);
+    in->seek(((sizeof(int16_t) * (bool)(progress.format & REG_ALT)) +
+              (sizeof(uint16_t) * (bool)(progress.format & REG_AZI)) +
+              (sizeof(uint16_t) * (bool)(progress.format & REG_SNR))) *
+                 siv,
+             SeekCur);
   }  // if (progress.format & REG_SID)
 
   // get current record size from FILE* position
-  fpos_t currentPos;
+  size_t currentPos = in->position();
   uint16_t recordSize;
-  fgetpos(binFile.fp, &currentPos);
+
   recordSize = (uint16_t)(currentPos - startPos);
 
   // calculate checksum value of the current record
   uint8_t checksum = 0;
-  fseek(binFile.fp, startPos, SEEK_SET);
+  in->seek(startPos, SeekSet);
   for (uint16_t i = 0; i < recordSize; i++) {
     checksum ^= (uint8_t)readBinInt8();
   }
 
   // read the checksum marker charactor ('*') and its value
   char chkmkr = '*';
-  if (progress.m241bin == false) {
+  if (progress.m241 == false) {
     chkmkr = (char)readBinInt8();
   }
 
@@ -391,18 +314,16 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   // if data read as record is not valid, seek the pointer to right
   if (rcd->valid == false) {  // checksum is not valid
     // seek pointer +1 byte on the current sector
-    fseek(binFile.fp, (startPos + 1), SEEK_SET);
+    in->seek((startPos + 1), SeekSet);
 
-    printf("**debug** No valid record found at 0x%06llX. Moving position +1\n",
-           startPos);
+    printf("parser: Non-valid record or pattern at 0x%06X. seek+1\n", startPos);
   }
 
   return rcd->valid;
 }
 
 bool MtkParser::matchBinPattern(const char *ptn, uint8_t len) {
-  fpos_t pos;
-  fgetpos(binFile.fp, &pos);
+  size_t pos = in->position();
 
   bool match = true;
   for (int i = 0; ((i < len) && (match)); i++) {
@@ -411,7 +332,7 @@ bool MtkParser::matchBinPattern(const char *ptn, uint8_t len) {
 
   // if pattern is not match, restore position
   if (match == false) {
-    fseek(binFile.fp, pos, SEEK_SET);
+    in->seek(pos, SeekSet);
   }
 
   return match;
@@ -419,16 +340,15 @@ bool MtkParser::matchBinPattern(const char *ptn, uint8_t len) {
 
 bool MtkParser::readBinMarkers() {
   bool foundMarker = false;
-  fpos_t startPos;
-  fgetpos(binFile.fp, &startPos);
+  size_t startPos = in->position();
 
   if (matchBinPattern(PTN_DSET_AA,
-                      sizeof(PTN_DSET_AA))) {  // found DSP (0xAA, 0xAA, ...)
+                      sizeof(PTN_DSET_AA))) {  // found DSP_A (0xAA, ...)
     int8_t dsId = readBinInt8();
     int32_t dsVal = readBinInt32();
 
     if (matchBinPattern(PTN_DSET_BB,
-                        sizeof(PTN_DSET_BB))) {  // found DSP (0xBB, 0xBB, ...)
+                        sizeof(PTN_DSET_BB))) {  // found DSP_B (0xBB, ...)
       switch (dsId) {
         case DSP_CHANGE_FORMAT:  // change format register
           progress.format = dsVal;
@@ -441,19 +361,20 @@ bool MtkParser::readBinMarkers() {
           break;
       }
 
-      printf("**debug** Found DSP (id=%d, value=0x%04X) at 0x%06llX\n", dsId,
-             dsVal, startPos);
+      printf(
+          "MtkParser.readMarker: DSP marker at 0x%06X (id=%d, val=0x%04X) \n",
+          startPos, dsId, dsVal);
       foundMarker = true;
     }
   } else if (matchBinPattern(PTN_M241,
-                             sizeof(PTN_M241))) {  // found Holux M-241 pattern
+                             sizeof(PTN_M241))) {  // found M-241 marker
     if (matchBinPattern(PTN_M241_SP,
-                        sizeof(PTN_M241_SP))) {  // found DSP (0x20, 0x20, ...)
+                        sizeof(PTN_M241_SP))) {  // found 0x20202020 (fw v1.13)
       // just ignore it. nothing to do
     }
 
-    printf("**debug** Found Holux M-241 marker at 0x%06llX\n", startPos);
-    progress.m241bin = true;
+    printf("MtkParser.readMarker: Holux M-241 marker at 0x%06X\n", startPos);
+    progress.m241 = true;
     foundMarker = true;
 
   } else if (matchBinPattern(
@@ -462,83 +383,85 @@ bool MtkParser::readBinMarkers() {
     // seek sector position to the next
     progress.sector += 1;
 
-    printf("**debug** Found Sector-End marker at 0x%06llX. Moving sector +1\n",
-           startPos);
+    printf("MtkParser.readMarker: End-of-Sector marker at 0x%06X\n", startPos);
     foundMarker = true;
   }
 
   return foundMarker;
 }
 
-void MtkParser::printGpsRecord_d(gpsrecord_t *rcd) {
-  printf("**debug** GpsRecord: FMT=%08X", rcd->format);
-  if (rcd->format & REG_TIME) printf(", TIME=%d", rcd->time);
-  if (rcd->format & REG_LAT) printf(", LAT=%.04f", rcd->latitude);
-  if (rcd->format & REG_LON) printf(", LON=%.04f", rcd->longitude);
-  if (rcd->format & REG_ELE) printf(", ELE=%.02f", rcd->elevation);
-  if (rcd->format & REG_SPEED) printf(", SPD=%.02f", rcd->speed);
+void MtkParser::printRecord_d(gpsrecord_t *rcd) {
+  printf("MtkParser.printRecord_d: format=%06X", rcd->format);
+  if (rcd->format & REG_TIME) printf(", time=%d", rcd->time);
+  if (rcd->format & REG_LAT) printf(", lat=%.04f", rcd->latitude);
+  if (rcd->format & REG_LON) printf(", lon=%.04f", rcd->longitude);
+  if (rcd->format & REG_ELE) printf(", ele=%.02f", rcd->elevation);
+  if (rcd->format & REG_SPEED) printf(", spd=%.02f", rcd->speed);
   printf("\n");
 }
 
-/*
-double MtkParser::calcDistance(gpsrecord_t *r1, gpsrecord_t *r2) {
-    const double EARTH_R = 6378137;  // unit: meter
-    double nsDist = EARTH_R * ((M_PI/180) * (r1->lat - r2->lat));
-    double ewDist = EARTH_R * cos((M_PI/180) * (r1->lat * (r1->lon - r2->lon)));
-    double elDist = r1->elevation - r2->elevation;
+bool MtkParser::convert(File *input, File *output, void (*callback)(int32_t)) {
+  in = input;
+  out = output;
 
-    double dist = sqrt(pow(nsDist, 2) + pow(ewDist, 2) + pow(elDist, 2));
-}
-*/
-
-bool MtkParser::run(uint16_t token) {
-  if ((binFile.fp == NULL) || (gpxFile.fp == NULL)) {
-    return true;
-  }
+  int32_t prog = 0;
 
   bool fileend = false;
 
-  fpos_t startPos, currentPos = 0;
-  fgetpos(binFile.fp, &startPos);
+  in->seek(0, SeekSet);
+  out->seek(0, SeekSet);
 
-  while (currentPos < (startPos + token)) {
+  fpos_t startPos = 0;
+  fpos_t currentPos = 0;
+
+  putGpxXmlStart();
+
+  while (true) {
     const fpos_t SECTOR_START = (0x010000 * progress.sector);
     const fpos_t DATA_START = (SECTOR_START + 0x000200);
     const fpos_t SECTOR_END = (SECTOR_START + 0x00FFFF);
 
-    fgetpos(binFile.fp, &currentPos);
+    currentPos = in->position();
 
-    if (DATA_START >= binFile.size) {
-      printf("**debug** Reached to end of BIN file\n");
+    if (DATA_START >= in->size()) {
+      printf("MtkParser.convert: reached to the end of the input file\n");
       fileend = true;
       break;
     }
 
     if (currentPos <= SECTOR_START) {
-      printf("**debug** Reading header of sector#%d at 0x%06llX\n",
-             progress.sector + 1, SECTOR_START);
+      printf(
+          "MtkParser.convert: read the header of the current sector#%d at "
+          "0x%06X\n",
+          progress.sector + 1, SECTOR_START);
 
-      fseek(binFile.fp, SECTOR_START, SEEK_SET);
+      in->seek(SECTOR_START, SeekSet);
       uint16_t records = (uint16_t)readBinInt16();
       setFormatRegister(readBinInt32());
     }
 
     if (currentPos < DATA_START) {
-      printf("**debug** Moving position to data part at 0x%06llX\n",
-             DATA_START);
-      fseek(binFile.fp, DATA_START, SEEK_SET);
+      printf(
+          "MtkParser.convert: move to the record block of the current sector "
+          "at 0x%06X\n",
+          DATA_START);
+      in->seek(DATA_START, SeekSet);
     }
 
-    if (readBinMarkers() == true) {
+    if (readBinMarkers()) {
       continue;
     }
 
     gpsrecord_t rcd;
-    if (readBinRecord(&rcd) == true) {
+    if (readBinRecord(&rcd)) {
+      if (rcd.time <= ROLLOVER_OCCUR_TIME) {
+        rcd.time += ROLLOVER_CORRECT_VALUE;
+      }
+
       progress.newTrack =
           (progress.newTrack ||
            ((options.track == TRK_ONE_DAY) &&
-            (isSpanningDate(progress.lastRecord.time, rcd.time))));
+            (isDifferentDate(progress.lastRecord.time, rcd.time))));
 
       putGpxTrackPoint(&rcd);
 
@@ -547,9 +470,24 @@ bool MtkParser::run(uint16_t token) {
       }
       progress.lastRecord = rcd;
     }
+
+    if (callback != NULL) {
+      int32_t _p = 100 * ((float)in->position() / (float)in->size());
+      if (_p > prog) {
+        callback(_p);
+        prog = _p;
+      }
+    }
   }
 
-  fflush(gpxFile.fp);
+  putGpxXmlEnd();
 
-  return (!fileend);
+  if (callback != NULL) callback(100);
+
+  out->flush();
+
+  return (fileend);
 }
+
+uint32_t MtkParser::getFirstRecordTime() { return progress.firstRecord.time; }
+uint32_t MtkParser::getLastRecordTime() { return progress.lastRecord.time; }

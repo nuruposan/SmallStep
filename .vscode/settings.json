@@ -1,4 +1,10 @@
 {
     "C_Cpp.errorSquiggles": "disabled",
-    "cmake.configureOnOpen": false
+    "cmake.configureOnOpen": false,
+    "files.associations": {
+        "atomic": "cpp",
+        "*.tcc": "cpp",
+        "fstream": "cpp",
+        "sstream": "cpp"
+    }
 }
