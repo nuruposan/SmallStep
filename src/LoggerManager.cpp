@@ -212,7 +212,7 @@ bool LoggerManager::getLogEndAddress(int32_t *address) {
   return (endAddr > 0);
 }
 
-bool LoggerManager::downloadLogData(File *output, void (*callback)(int)) {
+bool LoggerManager::downloadLogData(File32 *output, void (*callback)(int)) {
   bool nextRequest = true;
   int32_t requestSize = 0x4000;
   int32_t receivedSize = 0;
@@ -260,8 +260,8 @@ bool LoggerManager::downloadLogData(File *output, void (*callback)(int)) {
 
       // print the debug message to the serial console
       Serial.printf(
-          "DEBUG: sent the next request. [startAddr=0x%06X, reqSize=0x%04X, "
-          "retries=%d]\n",
+          "LoggerManager.download: "
+          "sent request [startAddr=0x%06X, reqSize=0x%04X, retries=%d]\n",
           nextAddr, requestSize, retryCount);
     }
 
@@ -272,8 +272,10 @@ bool LoggerManager::downloadLogData(File *output, void (*callback)(int)) {
       retryCount += 1;
 
       // print the debug message to the serial console
-      Serial.printf("DEBUG: timeout reached, abort. [retries=%d]\n",
-                    retryCount);
+      Serial.printf(
+          "LoggerManager.download: "
+          "timeout reached, abort. [retries=%d]\n",
+          retryCount);
 
       // continue to send the next request
       continue;
@@ -295,8 +297,10 @@ bool LoggerManager::downloadLogData(File *output, void (*callback)(int)) {
         if (startAddr != nextAddr) continue;
 
         // print the debug message to the serial console
-        Serial.printf("DEBUG: received the next sector. [startAddr=0x%06X]\n",
-                      startAddr);
+        Serial.printf(
+            "LoggerManager.download: "
+            "received data [startAddr=0x%06X]\n",
+            startAddr);
 
         uint8_t b = 0;            // variable to store the next byte
         uint16_t ffCount = 0;     // counter for how many 0xFFs are continuous
@@ -323,7 +327,8 @@ bool LoggerManager::downloadLogData(File *output, void (*callback)(int)) {
 
           // print the debug message to the serial console
           Serial.printf(
-              "DEBUG: reached to the end of the data. [endAddr=0x%06X]\n",
+              "LoggerManager.download:"
+              "reached to the end of the data. [endAddr=0x%06X]\n",
               endAddr);
         }
 
@@ -405,7 +410,6 @@ bool LoggerManager::fixRTCdatetime() {
   }
 
   buffer->clear();
-  Serial.printf("fixRTCdatetime: retryCount=%d\n", retryCount);
 
   return (retryCount == -1);
 }

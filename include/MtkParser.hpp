@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SD.h>
+#include <SdFat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,8 +51,8 @@ class MtkParser {
   static const char PTN_M241_SP[];
   static const char PTN_SCT_END[];
 
-  File *in;
-  File *out;
+  File32 *in;
+  File32 *out;
   parseopt_t options;
   parseinfo_t progress;
 
@@ -80,7 +80,7 @@ class MtkParser {
   MtkParser();
   ~MtkParser();
   float setTimezone(float offset);
-  bool convert(File *input, File *output, void (*callback)(int32_t));
+  bool convert(File32 *input, File32 *output, void (*callback)(int32_t));
   uint32_t getFirstRecordTime();
   uint32_t getLastRecordTime();
 };

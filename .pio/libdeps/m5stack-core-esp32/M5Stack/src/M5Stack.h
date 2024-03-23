@@ -108,72 +108,72 @@
 #include <Wire.h>
 
 #include "FS.h"
+#include "IMU.h"
 #include "M5Display.h"
 #include "SD.h"
 #include "gitTagVersion.h"
-#include "IMU.h"
 #include "utility/Button.h"
 #include "utility/CommUtil.h"
 #include "utility/Config.h"
-#include "utility/Power.h"
-#include "utility/Speaker.h"
 #include "utility/MPU6886.h"
+#include "utility/Power.h"
 #include "utility/SH200Q.h"
+#include "utility/Speaker.h"
 
 class M5Stack {
-   public:
-    M5Stack();
-    void begin(bool LCDEnable = true, bool SDEnable = true,
-               bool SerialEnable = true, bool I2CEnable = false);
-    void update();
+ public:
+  M5Stack();
+  void begin(bool LCDEnable = true, bool SDEnable = true,
+             bool SerialEnable = true, bool I2CEnable = false);
+  void update();
 
-    // LCD
-    M5Display Lcd = M5Display();
+  // LCD
+  M5Display Lcd = M5Display();
 
-    // Power
-    POWER Power;
+  // Power
+  POWER Power;
 
 // Button API
 #define DEBOUNCE_MS 10
-    Button BtnA = Button(BUTTON_A_PIN, true, DEBOUNCE_MS);
-    Button BtnB = Button(BUTTON_B_PIN, true, DEBOUNCE_MS);
-    Button BtnC = Button(BUTTON_C_PIN, true, DEBOUNCE_MS);
+  Button BtnA = Button(BUTTON_A_PIN, true, DEBOUNCE_MS);
+  Button BtnB = Button(BUTTON_B_PIN, true, DEBOUNCE_MS);
+  Button BtnC = Button(BUTTON_C_PIN, true, DEBOUNCE_MS);
 
-    // SPEAKER
-    SPEAKER Speaker;
+  // SPEAKER
+  SPEAKER Speaker;
 
-    // UART
-    // HardwareSerial Serial0 = HardwareSerial(0);
-    // HardwareSerial Serial2 = HardwareSerial(2);
+  // UART
+  // HardwareSerial Serial0 = HardwareSerial(0);
+  // HardwareSerial Serial2 = HardwareSerial(2);
 
-    // I2C
-    IMU Imu;
-    CommUtil I2C = CommUtil();
+  // I2C
+  IMU Imu;
+  CommUtil I2C = CommUtil();
 
-    MPU6886 Mpu6886;
-    SH200Q Sh200Q;
+  MPU6886 Mpu6886;
+  SH200Q Sh200Q;
 
-    /**
-     * Function has been move to Power class.(for compatibility)
-     * This name will be removed in a future release.
-     */
-    void setPowerBoostKeepOn(bool en) __attribute__((deprecated));
-    void setWakeupButton(uint8_t button) __attribute__((deprecated));
-    void powerOFF() __attribute__((deprecated));
+  /**
+   * Function has been move to Power class.(for compatibility)
+   * This name will be removed in a future release.
+   */
+  void setPowerBoostKeepOn(bool en) __attribute__((deprecated));
+  void setWakeupButton(uint8_t button) __attribute__((deprecated));
+  void powerOFF() __attribute__((deprecated));
 
-   private:
-    bool isInited;
+ private:
+  bool isInited;
 };
 
 extern M5Stack M5;
-#define m5      M5
-#define lcd     Lcd
-#define imu     Imu
-#define IMU     Imu
+#define m5 M5
+#define lcd Lcd
+#define imu Imu
+#define IMU Imu
 #define MPU6886 Mpu6886
 #define mpu6886 Mpu6886
-#define SH200Q  Sh200Q
-#define sh200q  Sh200Q
+#define SH200Q Sh200Q
+#define sh200q Sh200Q
 #else
 #error "This library only supports boards with ESP32 processor."
 #endif

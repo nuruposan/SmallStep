@@ -11,6 +11,7 @@
                 "/home/nurupo/Documents/PlatformIO/SmallStepM5S/include",
                 "/home/nurupo/Documents/PlatformIO/SmallStepM5S/src",
                 "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/BluetoothSerial/src",
+                "/home/nurupo/Documents/PlatformIO/SmallStepM5S/.pio/libdeps/m5stack-core-esp32/SdFat - Adafruit Fork/src",
                 "/home/nurupo/Documents/PlatformIO/SmallStepM5S/.pio/libdeps/m5stack-core-esp32/M5Stack/src",
                 "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/SPIFFS/src",
                 "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/Wire/src",
@@ -242,6 +243,7 @@
                     "/home/nurupo/Documents/PlatformIO/SmallStepM5S/include",
                     "/home/nurupo/Documents/PlatformIO/SmallStepM5S/src",
                     "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/BluetoothSerial/src",
+                    "/home/nurupo/Documents/PlatformIO/SmallStepM5S/.pio/libdeps/m5stack-core-esp32/SdFat - Adafruit Fork/src",
                     "/home/nurupo/Documents/PlatformIO/SmallStepM5S/.pio/libdeps/m5stack-core-esp32/M5Stack/src",
                     "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/SPIFFS/src",
                     "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/Wire/src",
@@ -469,7 +471,7 @@
                 ]
             },
             "defines": [
-                "PLATFORMIO=60113",
+                "PLATFORMIO=60114",
                 "ARDUINO_M5Stack_Core_ESP32",
                 "HAVE_CONFIG_H",
                 "MBEDTLS_CONFIG_FILE=\"mbedtls/esp_config.h\"",
@@ -485,7 +487,7 @@
                 "ARDUINO=10812",
                 "ARDUINO_VARIANT=\"m5stack_core_esp32\"",
                 "ARDUINO_BOARD=\"M5Stack Core ESP32\"",
-                "ARDUINO_PARTITION_default",
+                "ARDUINO_PARTITION_no_ota",
                 ""
             ],
             "cStandard": "gnu99",

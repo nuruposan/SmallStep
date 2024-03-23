@@ -1,7 +1,7 @@
 #pragma once
 
 #include <BluetoothSerial.h>
-#include <SD.h>
+#include <SdFat.h>
 
 #include "ReceiveBuffer.hpp"
 
@@ -32,7 +32,7 @@ class LoggerManager {
   bool connect(uint8_t *address);
   bool connected();
   void disconnect();
-  bool downloadLogData(File *output, void (*callback)(int));
+  bool downloadLogData(File32 *output, void (*callback)(int));
   bool fixRTCdatetime();
   int32_t clearFlashMemory();
   // int32_t setLogMode(bool overrite);
