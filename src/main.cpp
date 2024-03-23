@@ -1,15 +1,15 @@
 #include <BluetoothSerial.h>
 #include <M5Stack.h>
-#include <SD.h>
+#include <SdFat.h>
 
 #include "LoggerManager.hpp"
 #include "MtkParser.hpp"
 #include "Resources.h"
 
-#define SD_ACCESS_SPEED 15000000
+#define SD_ACCESS_SPEED 15000000  // 20MHz may cause SD card error
 #define COLOR16(r, g, b) (int16_t)((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
 
-#define POWER_OFF_TIME 180000  // unit: msec
+#define POWER_OFF_TIME 100000  // unit: msec
 #define LOOP_INTERVAL 50       // uint: msec
 
 typedef enum { BID_BTN_A = 0, BID_BTN_B = 1, BID_BTN_C = 2 } btnid_t;
@@ -97,9 +97,10 @@ const int16_t COLOR_MENU_SEL_BACK = LIGHTGREY;
 const int16_t COLOR_NAVI_BACK = LIGHTGREY;
 const int16_t COLOR_NAVI_TEXT = BLACK;
 
+TFT_eSprite sprite = TFT_eSprite(&M5.Lcd);
+SdFat SDcard;
 LoggerManager logger = LoggerManager();
 MtkParser parser = MtkParser();
-TFT_eSprite sprite = TFT_eSprite(&M5.Lcd);
 appstatus_t app;
 
 void onBluetoothDiscoverCallback(esp_spp_cb_event_t event,
@@ -116,18 +117,6 @@ void drawProgressBar(uint8_t progress) {
   if (progress > 100) progress = 100;
 
   M5.Lcd.progressBar(10, 180, 300, 16, progress);
-  /*  // スプライトを作成
-  sprite.createSprite(300, 16);
-
-  // プログレスバーの描画
-  sprite.fillRect(((float)progress / 100) * 300, 0, 300, 16, LIGHTGREY);
-  sprite.fillRect(0, 0, ((float)progress / 100) * 300, 16, BLUE);
-  sprite.drawRect(0, 0, 300, 16, DARKGREY);
-
-  // スプライトをLCDに転送
-  sprite.pushSprite(10, 180);
-  sprite.deleteSprite();
-  */
 }
 
 void drawDialog(const char *title) {
@@ -159,7 +148,6 @@ void drawDialog(const char *title) {
 
 /**
  *
- *
         public static final int FLASH_SIZE_8MBIT  = 0x00100000; //
  (8bit*1024^2)/8 byte; public static final int FLASH_SIZE_16MBIT = 0x00200000;
  // (16bit*1024^2)/8 byte; public static final int FLASH_SIZE_32MBIT =
@@ -189,11 +177,7 @@ void drawDialog(const char *title) {
  RESTART_RESPONSE       = "^\\$(PMTK010,(001))\\*(\\w+)$";
  */
 
-void downloadProgress(int32_t progress) {
-  Serial.printf("download progress=%d%%\n", progress);
-
-  drawProgressBar(progress);
-}
+void downloadProgress(int32_t progress) { drawProgressBar(progress); }
 
 /**
  *
@@ -207,9 +191,8 @@ void onDownloadMenuSelected() {
   M5.Lcd.setTextFont(2);
   M5.Lcd.setTextSize(1);
 
-  File binFileW = SD.open("/download.mtkbin", "w");
-  File gpxFile = SD.open("/download.gpx", "w");
-  if ((!binFileW) || (!gpxFile)) {
+  File32 binFileW = SDcard.open("/download.bin", (O_CREAT | O_WRITE | O_TRUNC));
+  if (!binFileW) {
     M5.Lcd.setTextColor(RED);
     M5.Lcd.drawString("Could not open files on the SD card.", 10, 60);
     M5.Lcd.drawString("- Make sure SD card is available.", 10, 60 + 18);
@@ -217,12 +200,10 @@ void onDownloadMenuSelected() {
 
     Serial.printf("DEBUG: failed to create a file for download.\n");
 
-    if (binFileW) binFileW.close();
-    if (gpxFile) gpxFile.close();
     return;
   }
 
-  M5.Lcd.setTextColor(BLACK);
+  M5.Lcd.setTextColor(BLUE);
   M5.Lcd.drawString("Connecting to GPS logger...", 10, 60);
 
   if (!logger.connect(loggerAddress)) {
@@ -235,12 +216,12 @@ void onDownloadMenuSelected() {
     Serial.printf("DEBUG: failed to connect to the GPS logger.\n");
 
     binFileW.close();
-    gpxFile.close();
     return;
   }
 
   M5.Lcd.setTextColor(BLACK);
   M5.Lcd.drawString("Connecting to GPS logger... done.", 10, 60);
+  M5.Lcd.setTextColor(BLUE);
   M5.Lcd.drawString("Downloading log data...", 10, 60 + 18);
 
   if (!logger.downloadLogData(&binFileW, &downloadProgress)) {
@@ -251,54 +232,62 @@ void onDownloadMenuSelected() {
     M5.Lcd.drawString("- Data cannot receive and save in time", 10, 60 + 72);
     M5.Lcd.drawString("  using bad SD card", 10, 60 + 90);
 
-    Serial.printf("DEBUG: download failed.\n");
-
     binFileW.close();
     logger.disconnect();
     return;
   }
   logger.disconnect();
   binFileW.close();
-  delay(500);
 
   M5.Lcd.setTextColor(BLACK);
   M5.Lcd.drawString("Downloading log data... done.", 10, 60 + 18);
+  M5.Lcd.setTextColor(BLUE);
   M5.Lcd.drawString("Converting data to GPX file...", 10, 60 + 36);
   M5.Lcd.fillRect(11, 181, 298, 14, LIGHTGREY);
 
-  File binFileR = SD.open("/download.mtkbin", "r");
+  File32 binFileR = SDcard.open("download.bin", (O_READ));
+  File32 gpxFileW = SDcard.open("download.gpx", (O_CREAT | O_WRITE | O_TRUNC));
   Serial.printf("DEBUG: %d bytes\n", binFileR.size());
 
-  if ((!binFileR) || (binFileR.size() == 0)) {
+  if ((!binFileR) || (binFileR.size() == 0) || (!gpxFileW)) {
     M5.Lcd.setTextColor(RED);
     M5.Lcd.drawString("Converting data to GPX file... failed.", 10, 60 + 36);
     M5.Lcd.drawString("- Reformat SD card may fix problem", 10, 60 + 54);
     M5.Lcd.drawString("  (Maybe Filesystem is corrupted?)", 10, 60 + 72);
 
     if (!binFileR) binFileR.close();
-    gpxFile.close();
+    if (!gpxFileW) gpxFileW.close();
     return;
   }
 
   parser.setTimezone(9.0);
-  parser.convert(&binFileR, &gpxFile, &downloadProgress);
+  parser.convert(&binFileR, &gpxFileW, &downloadProgress);
 
   binFileR.close();
-  gpxFile.close();
-  SD.end();
+  gpxFileW.close();
 
   M5.Lcd.setTextColor(BLACK);
   M5.Lcd.drawString("Converting data to GPX file... done.", 10, 60 + 36);
 
-  SD.begin(GPIO_NUM_4, SPI, SD_ACCESS_SPEED);
-  uint32_t frt = parser.getFirstRecordTime();
-  uint32_t lrt = parser.getLastRecordTime();
-  char binName[32], gpxName[32];
-  sprintf(binName, "/smallstep_%d-to-%d.mtkbin", frt, lrt);
-  sprintf(gpxName, "/smallstep_%d-to-%d.gpx", frt, lrt);
+  time_t tt1 = parser.getFirstRecordTime();
+  struct tm *tm1 = localtime(&tt1);
+  char tm1str[16], gpxName[40];
 
-  SD.rename("/download.mtkbin", binName);
-  SD.rename("/download.gpx", gpxName);
+  sprintf(tm1str, "%04d%02d%02d-%02d%02d%02d", (tm1->tm_year + 1900),
+          (tm1->tm_mon + 1), tm1->tm_mday, tm1->tm_hour, tm1->tm_min,
+          tm1->tm_sec);
+  sprintf(gpxName, "gpslog_%s.gpx",
+          tm1str);  // gpslog_YYYYMMDD_HHMMSS.gpx
+
+  for (uint16_t i = 2; SDcard.exists(gpxName) && (i < 65535); i++) {
+    sprintf(gpxName, "gpslog_%s_%02d.gpx", tm1str,
+            i);  // gpslog_YYYYMMDD_HHMMSS_XX.gpx
+  }
+  SDcard.rename("download.gpx", gpxName);
+
+  M5.Lcd.setTextColor(BLUE);
+  M5.Lcd.drawString("Complete! GPS log is saved at", 10, 60 + 54);
+  M5.Lcd.drawString(gpxName, 10, 60 + 72);
 }
 
 /**
@@ -306,7 +295,8 @@ void onDownloadMenuSelected() {
  */
 void onFixRTCMenuSelected() {
   uint8_t loggerAddress[] = {0x00, 0x1B, 0xC1, 0x07, 0xB3, 0xD5};  // M-241
-  // uint8_t loggerAddress[] = {0x00, 0x1C, 0x88, 0x22, 0x1E, 0x57};  // 747pro
+  // uint8_t loggerAddress[] = {0x00, 0x1C, 0x88, 0x22, 0x1E, 0x57};  //
+  // 747pro
   if (!logger.connect(loggerAddress)) {
     Serial.printf("DEBUG: failed to connect to the GPS logger.\n");
 
@@ -423,16 +413,11 @@ void drawSDcardIcon(TFT_eSprite *spr, int16_t x0, int16_t y0) {
                   COLOR_ICON_SD_PIN);
   }
 
-  File root = SD.open("/");
-  if (root) {  // SDカードが使用可能な場合。SDの文字をつける
-    // テスト用に開いたディレクトリを閉じる
-    root.close();
-
-    {  // 状態表示
-      spr->setTextSize(1);
-      spr->setTextColor(COLOR_ICON_TEXT);
-      spr->drawCentreString("SD", (x0 + 9), (y0 + 9), 1);
-    }
+  if (SDcard.ls("/")) {  // SDカードが使用可能な場合
+    // 状態表示
+    spr->setTextSize(1);
+    spr->setTextColor(COLOR_ICON_TEXT);
+    spr->drawCentreString("SD", (x0 + 9), (y0 + 9), 1);
   } else {  // SDカードが使用不能な場合。赤丸に斜線マーク
     spr->drawEllipse((x0 + 8), (y0 + 12), 5, 5, COLOR_ICON_ERROR);
     spr->drawLine((x0 + 11), (y0 + 9), (x0 + 5), (y0 + 15), COLOR_ICON_ERROR);
@@ -650,7 +635,12 @@ void setup() {
   M5.Lcd.setBrightness(LCD_BRIGHTNESS);
   M5.Lcd.clearDisplay(BLACK);
   M5.Power.begin();
-  SD.begin(GPIO_NUM_4, SPI, SD_ACCESS_SPEED);
+
+  // initialize the SD card
+
+  if (!SDcard.begin(GPIO_NUM_4, SD_ACCESS_SPEED)) {
+    Serial.printf("SmallStep.setup: failed to initialize the SD card.\n");
+  }
 
   // initialize the screen sprite
   sprite.setColorDepth(8);

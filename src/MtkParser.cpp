@@ -35,8 +35,10 @@ const uint32_t MtkParser::SIZE_HEADER =
     0x000200;  // 0x0000 to 0x0199 = 512 bytes
 const uint32_t MtkParser::SIZE_SECTOR = 0x010000;  // 0x010000 = 65536 bytes
 
-const uint32_t MtkParser::ROLLOVER_OCCUR_TIME = 1554595200;    // 2019-04-07
-const uint32_t MtkParser::ROLLOVER_CORRECT_VALUE = 619315200;  // 1024 weeks
+const uint32_t MtkParser::ROLLOVER_OCCUR_TIME =
+    1554595200;  // unixtime(2019-04-07)
+const uint32_t MtkParser::ROLLOVER_CORRECT_VALUE =
+    619315200;  // seconds of 1024 weeks
 
 const char MtkParser::PTN_DSET_AA[] = {0xAA, 0xAA, 0xAA, 0xAA,
                                        0xAA, 0xAA, 0xAA};
@@ -271,22 +273,21 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   if (progress.format & REG_SPEED) rcd->speed = readBinFloat() / 3.60;
 
   // ignore all of other fields if they exist
-  in->seek(((sizeof(float) * (bool)(progress.format & REG_TRACK)) +
+  in->seek(in->position() +
+           ((sizeof(float) * (bool)(progress.format & REG_TRACK)) +
             (sizeof(uint16_t) * (bool)(progress.format & REG_DSTA)) +
             (sizeof(float) * (bool)(progress.format & REG_DAGE)) +
             (sizeof(uint16_t) * (bool)(progress.format & REG_PDOP)) +
             (sizeof(uint16_t) * (bool)(progress.format & REG_HDOP)) +
             (sizeof(uint16_t) * (bool)(progress.format & REG_VDOP)) +
-            (sizeof(uint16_t) * (bool)(progress.format & REG_NSAT))),
-           SeekCur);
+            (sizeof(uint16_t) * (bool)(progress.format & REG_NSAT))));
   if (progress.format & REG_SID) {
     uint16_t siv =
         (uint16_t)(readBinInt32() & 0x0000FFFF);  // number of SATs in view
-    in->seek(((sizeof(int16_t) * (bool)(progress.format & REG_ALT)) +
+    in->seek(in->position() +
+             ((sizeof(int16_t) * (bool)(progress.format & REG_ALT)) +
               (sizeof(uint16_t) * (bool)(progress.format & REG_AZI)) +
-              (sizeof(uint16_t) * (bool)(progress.format & REG_SNR))) *
-                 siv,
-             SeekCur);
+              ((sizeof(uint16_t) * (bool)(progress.format & REG_SNR))) * siv));
   }  // if (progress.format & REG_SID)
 
   // get current record size from FILE* position
@@ -297,7 +298,7 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
 
   // calculate checksum value of the current record
   uint8_t checksum = 0;
-  in->seek(startPos, SeekSet);
+  in->seek(startPos);
   for (uint16_t i = 0; i < recordSize; i++) {
     checksum ^= (uint8_t)readBinInt8();
   }
@@ -314,7 +315,7 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   // if data read as record is not valid, seek the pointer to right
   if (rcd->valid == false) {  // checksum is not valid
     // seek pointer +1 byte on the current sector
-    in->seek((startPos + 1), SeekSet);
+    in->seek(startPos + 1);
 
     printf("parser: Non-valid record or pattern at 0x%06X. seek+1\n", startPos);
   }
@@ -323,18 +324,19 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
 }
 
 bool MtkParser::matchBinPattern(const char *ptn, uint8_t len) {
-  size_t pos = in->position();
+  // get the current position before matching the pattern
+  uint32_t pos = in->position();
 
+  // check if the pattern is matched from the current position
   bool match = true;
   for (int i = 0; ((i < len) && (match)); i++) {
     match = match && ((char)(readBinInt8()) == ptn[i]);
   }
 
-  // if pattern is not match, restore position
-  if (match == false) {
-    in->seek(pos, SeekSet);
-  }
+  // restore the position if the pattern is not matched
+  if (!match) in->seek(pos);
 
+  // return the result of the matching
   return match;
 }
 
@@ -362,7 +364,8 @@ bool MtkParser::readBinMarkers() {
       }
 
       printf(
-          "MtkParser.readMarker: DSP marker at 0x%06X (id=%d, val=0x%04X) \n",
+          "MtkParser.readMarker: "
+          "dynamic setting pattern at 0x%06X (id=%d, val=0x%04X) \n",
           startPos, dsId, dsVal);
       foundMarker = true;
     }
@@ -373,7 +376,10 @@ bool MtkParser::readBinMarkers() {
       // just ignore it. nothing to do
     }
 
-    printf("MtkParser.readMarker: Holux M-241 marker at 0x%06X\n", startPos);
+    printf(
+        "MtkParser.readMarker: "
+        "Holux M-241 pattern at 0x%06X\n",
+        startPos);
     progress.m241 = true;
     foundMarker = true;
 
@@ -383,7 +389,10 @@ bool MtkParser::readBinMarkers() {
     // seek sector position to the next
     progress.sector += 1;
 
-    printf("MtkParser.readMarker: End-of-Sector marker at 0x%06X\n", startPos);
+    Serial.printf(
+        "MtkParser.readMarker: "
+        "End-of-Sector pattern at 0x%06X\n",
+        startPos);
     foundMarker = true;
   }
 
@@ -391,25 +400,29 @@ bool MtkParser::readBinMarkers() {
 }
 
 void MtkParser::printRecord_d(gpsrecord_t *rcd) {
-  printf("MtkParser.printRecord_d: format=%06X", rcd->format);
-  if (rcd->format & REG_TIME) printf(", time=%d", rcd->time);
-  if (rcd->format & REG_LAT) printf(", lat=%.04f", rcd->latitude);
-  if (rcd->format & REG_LON) printf(", lon=%.04f", rcd->longitude);
-  if (rcd->format & REG_ELE) printf(", ele=%.02f", rcd->elevation);
-  if (rcd->format & REG_SPEED) printf(", spd=%.02f", rcd->speed);
-  printf("\n");
+  Serial.printf("MtkParser.printRecord_d: format=%06X", rcd->format);
+  if (rcd->format & REG_TIME) Serial.printf(", time=%d", rcd->time);
+  if (rcd->format & REG_LAT) Serial.printf(", lat=%.04f", rcd->latitude);
+  if (rcd->format & REG_LON) Serial.printf(", lon=%.04f", rcd->longitude);
+  if (rcd->format & REG_ELE) Serial.printf(", ele=%.02f", rcd->elevation);
+  if (rcd->format & REG_SPEED) Serial.printf(", spd=%.02f", rcd->speed);
+  Serial.printf("\n");
 }
 
-bool MtkParser::convert(File *input, File *output, void (*callback)(int32_t)) {
+bool MtkParser::convert(File32 *input, File32 *output,
+                        void (*callback)(int32_t)) {
+  // clear all of the progress variables
+  memset(&options, 0, sizeof(parseopt_t));
+  memset(&progress, 0, sizeof(parseinfo_t));
+
   in = input;
   out = output;
 
   int32_t prog = 0;
-
   bool fileend = false;
 
-  in->seek(0, SeekSet);
-  out->seek(0, SeekSet);
+  in->seek(0);
+  out->seek(0);
 
   fpos_t startPos = 0;
   fpos_t currentPos = 0;
@@ -435,7 +448,7 @@ bool MtkParser::convert(File *input, File *output, void (*callback)(int32_t)) {
           "0x%06X\n",
           progress.sector + 1, SECTOR_START);
 
-      in->seek(SECTOR_START, SeekSet);
+      in->seek(SECTOR_START);
       uint16_t records = (uint16_t)readBinInt16();
       setFormatRegister(readBinInt32());
     }
@@ -445,7 +458,7 @@ bool MtkParser::convert(File *input, File *output, void (*callback)(int32_t)) {
           "MtkParser.convert: move to the record block of the current sector "
           "at 0x%06X\n",
           DATA_START);
-      in->seek(DATA_START, SeekSet);
+      in->seek(DATA_START);
     }
 
     if (readBinMarkers()) {
