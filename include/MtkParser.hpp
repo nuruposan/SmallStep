@@ -7,14 +7,14 @@
 #include <time.h>
 
 typedef enum _trackmode {
-  TRK_PUT_AS_IS = 0,
-  TRK_ONE_DAY = 1,
-  TRK_SINGLE = 2
+  TRK_ONE_DAY = 0,  // divide trasks by local date (default)
+  TRK_AS_IS = 1,    // put tracks as recorded
+  TRK_SINGLE = 2    // put all trkpts into a single track
 } trackmode_t;
 
 typedef struct _parseopt {
-  trackmode_t track;
-  float offset;
+  trackmode_t trackMode;
+  float timeOffset;
 } parseopt_t;
 
 typedef struct _gpsrecord {
@@ -79,7 +79,7 @@ class MtkParser {
  public:
   MtkParser();
   ~MtkParser();
-  float setTimezone(float offset);
+  float setTimeOffset(float offset);
   bool convert(File32 *input, File32 *output, void (*callback)(int32_t));
   uint32_t getFirstRecordTime();
   uint32_t getLastRecordTime();

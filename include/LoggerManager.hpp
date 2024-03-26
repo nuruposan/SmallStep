@@ -12,6 +12,23 @@ typedef enum _sizeinfo {
   SIZE_32MBIT = 0x00400000
 } sizeinfo_t;
 
+typedef enum _recordmode {
+  MODE_FULLSTOP = 0,  // stop logging when flash is full
+  MODE_OVERWRITE = 1  // overwrite oldest record when flash is full
+} recordmode_t;
+
+typedef enum _logformat {
+  LOG_LAT = 0x00000001,    // latitude
+  LOG_LON = 0x00000010,    // longitude
+  LOG_TIME = 0x00000100,   // time (unixtime)
+  LOG_MSEC = 0x00001000,   // time (msec)
+  LOG_ELEV = 0x00010000,   // elevation
+  LOG_SPEED = 0x00100000,  // speed
+  LOG_HEAD = 0x01000000,   // heading
+  LOG_FIX = 0x10000000,    // record reason (button/distance/speed/time)
+  LOG_RCR = 0x100000000    // GPS status (no-fix/sps/dgps/estimated)
+} logformat_t;
+
 class LoggerManager {
  private:
   char address[6];
@@ -30,6 +47,7 @@ class LoggerManager {
   ~LoggerManager();
 
   bool connect(uint8_t *address);
+  bool discover(const char *name, esp_spp_cb_t callback);
   bool connected();
   void disconnect();
   bool downloadLogData(File32 *output, void (*callback)(int));
