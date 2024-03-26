@@ -191,8 +191,10 @@ void MtkParser::putGpxTrackPoint(gpsrecord_t *rcd) {
 }
 
 bool MtkParser::isDifferentDate(uint32_t t1, uint32_t t2) {
-  t1 += (options.offset * (3600 * 24));
-  t2 += (options.offset * (3600 * 24));
+  uint32_t offsetSec = (options.timeOffset * 3600);
+
+  t1 += offsetSec;
+  t2 += offsetSec;
 
   return ((t1 / 86400) != (t2 / 86400));
 }
@@ -226,19 +228,15 @@ void MtkParser::setFormatRegister(uint32_t fmt) {
   printFormat_d(fmt);
 }
 
-float MtkParser::setTimezone(float offset) {
-  const uint32_t OFFSET_MAX = 12;   // UTC+24
-  const uint32_t OFFSET_MIN = -12;  // UTC-24
+float MtkParser::setTimeOffset(float offset) {
+  const float OFFSET_MAX = 12.0;   // UTC+12
+  const float OFFSET_MIN = -12.0;  // UTC-12
 
-  if (offset >= OFFSET_MAX) {
-    options.offset = OFFSET_MAX;
-  } else if (offset <= OFFSET_MIN) {
-    options.offset = OFFSET_MIN;
-  } else {
-    options.offset = offset;
-  }
+  options.timeOffset = offset;
+  if (options.timeOffset > OFFSET_MAX) options.timeOffset = OFFSET_MAX;
+  if (options.timeOffset < OFFSET_MIN) options.timeOffset = OFFSET_MIN;
 
-  return options.offset;
+  return options.timeOffset;
 }
 
 bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
@@ -270,7 +268,8 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   }  // if (progress.m241) else
 
   // read the SPEED field if it exists
-  if (progress.format & REG_SPEED) rcd->speed = readBinFloat() / 3.60;
+  //  if (progress.format & REG_SPEED) rcd->speed = readBinFloat() / 3.60;
+  if (progress.format & REG_SPEED) rcd->speed = readBinFloat();
 
   // ignore all of other fields if they exist
   in->seek(in->position() +
@@ -317,7 +316,10 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
     // seek pointer +1 byte on the current sector
     in->seek(startPos + 1);
 
-    printf("parser: Non-valid record or pattern at 0x%06X. seek+1\n", startPos);
+    printf(
+        "MtkParser.convert: "
+        "parser: no marker and record found at 0x%06X\n",
+        startPos);
   }
 
   return rcd->valid;
@@ -357,13 +359,13 @@ bool MtkParser::readBinMarkers() {
           break;
 
         case DSP_LOG_STARTSTOP:  // log start/stop
-          if (options.track == TRK_PUT_AS_IS) {
+          if (options.trackMode == TRK_AS_IS) {
             progress.newTrack = true;
           }
           break;
       }
 
-      printf(
+      Serial.printf(
           "MtkParser.readMarker: "
           "dynamic setting pattern at 0x%06X (id=%d, val=0x%04X) \n",
           startPos, dsId, dsVal);
@@ -376,9 +378,9 @@ bool MtkParser::readBinMarkers() {
       // just ignore it. nothing to do
     }
 
-    printf(
+    Serial.printf(
         "MtkParser.readMarker: "
-        "Holux M-241 pattern at 0x%06X\n",
+        "Holux M-241 marker at 0x%06X\n",
         startPos);
     progress.m241 = true;
     foundMarker = true;
@@ -391,7 +393,7 @@ bool MtkParser::readBinMarkers() {
 
     Serial.printf(
         "MtkParser.readMarker: "
-        "End-of-Sector pattern at 0x%06X\n",
+        "End-of-Sector at 0x%06X, move to next\n",
         startPos);
     foundMarker = true;
   }
@@ -411,8 +413,7 @@ void MtkParser::printRecord_d(gpsrecord_t *rcd) {
 
 bool MtkParser::convert(File32 *input, File32 *output,
                         void (*callback)(int32_t)) {
-  // clear all of the progress variables
-  memset(&options, 0, sizeof(parseopt_t));
+  // clear all of the progress variables before use
   memset(&progress, 0, sizeof(parseinfo_t));
 
   in = input;
@@ -423,7 +424,6 @@ bool MtkParser::convert(File32 *input, File32 *output,
 
   in->seek(0);
   out->seek(0);
-
   fpos_t startPos = 0;
   fpos_t currentPos = 0;
 
@@ -437,14 +437,14 @@ bool MtkParser::convert(File32 *input, File32 *output,
     currentPos = in->position();
 
     if (DATA_START >= in->size()) {
-      printf("MtkParser.convert: reached to the end of the input file\n");
+      printf("MtkParser.convert: reached to end of input file\n");
       fileend = true;
       break;
     }
 
     if (currentPos <= SECTOR_START) {
       printf(
-          "MtkParser.convert: read the header of the current sector#%d at "
+          "MtkParser.convert: read header of current sector#%d at "
           "0x%06X\n",
           progress.sector + 1, SECTOR_START);
 
@@ -455,7 +455,7 @@ bool MtkParser::convert(File32 *input, File32 *output,
 
     if (currentPos < DATA_START) {
       printf(
-          "MtkParser.convert: move to the record block of the current sector "
+          "MtkParser.convert: move to data block of current sector "
           "at 0x%06X\n",
           DATA_START);
       in->seek(DATA_START);
@@ -473,7 +473,7 @@ bool MtkParser::convert(File32 *input, File32 *output,
 
       progress.newTrack =
           (progress.newTrack ||
-           ((options.track == TRK_ONE_DAY) &&
+           ((options.trackMode == TRK_ONE_DAY) &&
             (isDifferentDate(progress.lastRecord.time, rcd.time))));
 
       putGpxTrackPoint(&rcd);

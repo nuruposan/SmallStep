@@ -52,6 +52,11 @@ void LoggerManager::disconnect() {
     gpsSerial->disconnect();
     buffer->clear();
   }
+
+  if (sppStarted) {
+    gpsSerial->end();
+    sppStarted = false;
+  }
 }
 
 uint8_t LoggerManager::calcNmeaChecksum(const char *cmd, uint8_t len) {
@@ -119,7 +124,7 @@ bool LoggerManager::sendNmeaCommand(const char *cmd, uint16_t len) {
   for (uint16_t i = 0; (i < len2) && (buf[i] != 0); i++) {
     gpsSerial->write(buf[i]);
   }
-  // gpsSerial->flush(); // DO NOT call this!!
+  // gpsSerial->flush(); // DO NOT call this here. It cause a reception failure
 
   return true;
 }
@@ -305,10 +310,10 @@ bool LoggerManager::downloadLogData(File32 *output, void (*callback)(int)) {
         uint8_t b = 0;            // variable to store the next byte
         uint16_t ffCount = 0;     // counter for how many 0xFFs are continuous
         buffer->seekToColumn(3);  // move to the 4th column (data column)
-        while (buffer->readHexByteFull(&b)) {  // read the next byte
-          output->write(b);                    // write the byte to the file
-          ffCount =
-              (b != 0xFF) ? 0 : ffCount + 1;  // count the continuous 0xFFs
+        // read the data from the buffer and write it to the output file
+        while (buffer->readHexByteFull(&b)) {
+          output->write(b);
+          ffCount = (b != 0xFF) ? 0 : ffCount + 1;  // count continuous 0xFF
         }
 
         // update the next address and the received size
@@ -412,4 +417,27 @@ bool LoggerManager::fixRTCdatetime() {
   buffer->clear();
 
   return (retryCount == -1);
+}
+
+// void LoggerManager::bluetoothCallback(esp_spp_cb_event_t event,
+//                                       esp_spp_cb_param_t *param) {
+//   if (event == ESP_SPP_OPEN_EVT) {
+//     //    app.loggerDiscovered.found = true;
+//     //    memcpy(&(app.loggerDiscovered.address), &(param->open.rem_bda),
+//     //           sizeof(app.loggerDiscovered.address));
+//   }
+// }
+
+bool LoggerManager::discover(const char *name, esp_spp_cb_t callback) {
+  if (!sppStarted) {
+    sppStarted = gpsSerial->begin("SmallStep", true);
+  }
+
+  gpsSerial->register_callback(callback);
+  if (gpsSerial->connect(name)) {
+    gpsSerial->disconnect();
+    return true;
+  }
+
+  return false;
 }
