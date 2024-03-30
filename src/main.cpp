@@ -59,10 +59,11 @@ typedef struct appconfig {
   recordmode_t reccordMode;  // logger - log record mode
   trackmode_t trackMode;     // parser - how to divide/put tracks
   float timeOffset;  // parser - timezone offset in hours (-12.0 to 12.0)
-  uint8_t checksum;  // app - checksum of this structure
 } appconfig_t;
 
 // ******** function prototypes ********
+void saveAppConfig();
+void readAppConfig();
 void onBluetoothDiscoverCallback(esp_spp_cb_event_t, esp_spp_cb_param_t *);
 void downloadProgress(int32_t progress);
 void onDownloadMenuSelected();
@@ -426,6 +427,7 @@ void onPairToLoggerMenuSelected() {
 
     // copy the logger address to the configuration
     memcpy(appConfig.loggerAddress, addr, 6);
+    saveAppConfig();
 
     break;
   }
@@ -732,6 +734,44 @@ void onMainNaviButtonPress(btnid_t bid) {
   }
 }
 
+void saveAppConfig() {
+  uint8_t cfgdata[sizeof(appconfig_t)];
+  uint8_t chk = 0;
+  memcpy(cfgdata, &appConfig, sizeof(appconfig_t));
+
+  // write configuration data to EEPROM
+  for (int8_t i = 0; i < sizeof(appconfig_t); i++) {
+    EEPROM.write(i, cfgdata[i]);
+    chk ^= cfgdata[i];
+  }
+  EEPROM.write(sizeof(appconfig_t), chk);
+  EEPROM.commit();
+
+  Serial.printf("SmallStep.saveConfig: configuration data saved\n");
+
+  return;
+}
+
+void readAppConfig() {
+  uint8_t cfgdata[sizeof(appconfig_t)];
+  uint8_t chk = 0;
+  for (int8_t i = 0; i < sizeof(appconfig_t); i++) {
+    cfgdata[i] = EEPROM.read(i);
+    chk ^= cfgdata[i];
+  }
+  memcpy(&appConfig, cfgdata, sizeof(appconfig_t));
+
+  if (chk != EEPROM.read(sizeof(appconfig_t))) {
+    Serial.printf("SmallStep.readConfig: invalid configuration\n");
+    // memset(&appConfig, 0, sizeof(appconfig_t));
+    return;
+  }
+
+  Serial.printf("SmallStep.readConfig: configuration loaded\n");
+
+  return;
+}
+
 void setup() {
   // start the serial
   Serial.begin(115200);
@@ -742,8 +782,12 @@ void setup() {
   M5.Lcd.setBrightness(LCD_BRIGHTNESS);
   M5.Lcd.clearDisplay(BLACK);
 
+  // zero-clear global variables (status & config)
   memset(&appStatus, 0, sizeof(appStatus));
   memset(&appConfig, 0, sizeof(appConfig));
+
+  EEPROM.begin(sizeof(appconfig_t) + 1);
+  readAppConfig();
 
   // initialize the SD card
   if (!SDcard.begin(GPIO_NUM_4, SD_ACCESS_SPEED)) {
