@@ -31,14 +31,11 @@ typedef enum _dspid {
   DSP_LOG_STARTSTOP = 7
 } dspid_t;
 
-const uint32_t MtkParser::SIZE_HEADER =
-    0x000200;  // 0x0000 to 0x0199 = 512 bytes
 const uint32_t MtkParser::SIZE_SECTOR = 0x010000;  // 0x010000 = 65536 bytes
+const uint32_t MtkParser::SIZE_HEADER = 0x000200;  // 512 bytes
 
-const uint32_t MtkParser::ROLLOVER_OCCUR_TIME =
-    1554595200;  // unixtime(2019-04-07)
-const uint32_t MtkParser::ROLLOVER_CORRECT_VALUE =
-    619315200;  // seconds of 1024 weeks
+const uint32_t MtkParser::ROLLOVER_TIME = 1554595200;    // 2019-04-07
+const uint32_t MtkParser::ROLLOVER_CORRECT = 619315200;  // 1024 weeks
 
 const char MtkParser::PTN_DSET_AA[] = {0xAA, 0xAA, 0xAA, 0xAA,
                                        0xAA, 0xAA, 0xAA};
@@ -51,13 +48,13 @@ const char MtkParser::PTN_SCT_END[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
                                        0xFF, 0xFF, 0xFF, 0xFF};
 
 MtkParser::MtkParser() {
-  Serial.println("MtkParser.constructor\n");
-
   memset(&options, 0, sizeof(parseopt_t));
   memset(&progress, 0, sizeof(parseinfo_t));
 }
 
-MtkParser::~MtkParser() { Serial.println("MtkParser.destructor\n"); }
+MtkParser::~MtkParser() {
+  //
+}
 
 double MtkParser::readBinDouble() {
   double val;
@@ -119,7 +116,6 @@ void MtkParser::putGpxXmlStart() {
   putGpxString(" xmlns=\"https://www.topografix.com/GPX/1/1/gpx.xsd\">\n");
 
   progress.inTrack = false;
-  progress.newTrack = true;
 }
 
 void MtkParser::putGpxXmlEnd() {
@@ -130,15 +126,13 @@ void MtkParser::putGpxXmlEnd() {
 }
 
 void MtkParser::putGpxTrackStart() {
-  if (progress.inTrack) {
-    putGpxTrackEnd();
-  }
+  if (progress.inTrack) putGpxTrackEnd();
   putGpxString("<trk><trkseg>\n");
 
   progress.inTrack = true;
-  progress.newTrack = false;
+  progress.totalTracks += 1;
 
-  Serial.print("MtkParser.putGpxTrackStart: start a new track\n");
+  Serial.print("Parser.putGpxTrackStart: new track\n");
 }
 
 void MtkParser::putGpxTrackEnd() {
@@ -147,16 +141,13 @@ void MtkParser::putGpxTrackEnd() {
   }
 
   progress.inTrack = false;
-  progress.newTrack = true;
 }
 
 void MtkParser::putGpxTrackPoint(gpsrecord_t *rcd) {
   int32_t prog = 0;
   char buf[40];
 
-  if (!progress.inTrack || progress.newTrack) {
-    putGpxTrackStart();
-  }
+  if (!progress.inTrack) putGpxTrackStart();
 
   putGpxString("<trkpt");
   if (rcd->format & REG_LAT) {
@@ -199,33 +190,24 @@ bool MtkParser::isDifferentDate(uint32_t t1, uint32_t t2) {
   return ((t1 / 86400) != (t2 / 86400));
 }
 
-void MtkParser::printFormat_d(uint32_t fmt) {
-  printf("MtkParser.prinfFormat: format=0x%08X {", fmt);
-  if (fmt & REG_TIME) printf("TIME");
-  if (fmt & REG_VALID) printf(", VALID");
-  if (fmt & REG_LAT) printf(", LAT");
-  if (fmt & REG_LON) printf(", LON");
-  if (fmt & REG_ELE) printf(", ELE");
-  if (fmt & REG_SPEED) printf(", SPD");
-  if (fmt & REG_TRACK) printf(", TRK");
-  if (fmt & REG_DSTA) printf(", DSTA");
-  if (fmt & REG_DAGE) printf(", DAGE");
-  if (fmt & REG_PDOP) printf(", PDOP");
-  if (fmt & REG_HDOP) printf(", HDOP");
-  if (fmt & REG_VDOP) printf(", VDOP");
-  if (fmt & REG_NSAT) printf(", NSAT");
-  if (fmt & REG_SID) printf(", SID");
-  if (fmt & REG_ALT) printf(", ALT");
-  if (fmt & REG_AZI) printf(", AZI");
-  if (fmt & REG_SNR) printf(", SNR");
-  if (fmt & REG_RCR) printf(", RCR");
-  if (fmt & REG_MSEC) printf(", MSEC");
-  printf("}\n");
-}
+void MtkParser::setRecordFormat(uint32_t fmt) {
+  progress.recordFormat = fmt;
 
-void MtkParser::setFormatRegister(uint32_t fmt) {
-  progress.format = fmt;
-  printFormat_d(fmt);
+  progress.ignoreLength1 =
+      (sizeof(float) * (bool)(progress.recordFormat & REG_TRACK)) +
+      (sizeof(uint16_t) * (bool)(progress.recordFormat & REG_DSTA)) +
+      (sizeof(float) * (bool)(progress.recordFormat & REG_DAGE)) +
+      (sizeof(uint16_t) * (bool)(progress.recordFormat & REG_PDOP)) +
+      (sizeof(uint16_t) * (bool)(progress.recordFormat & REG_HDOP)) +
+      (sizeof(uint16_t) * (bool)(progress.recordFormat & REG_VDOP)) +
+      (sizeof(uint16_t) * (bool)(progress.recordFormat & REG_NSAT));
+  progress.ignoreLength2 =
+      (sizeof(int16_t) * (bool)(progress.recordFormat & REG_ALT)) +
+      (sizeof(uint16_t) * (bool)(progress.recordFormat & REG_AZI));
+
+  Serial.printf("Parser.setFormat: changed [fmtreg=0x%08X, ignLen={%d, %d}]\n",
+                progress.recordFormat, progress.ignoreLength1,
+                progress.ignoreLength2);
 }
 
 float MtkParser::setTimeOffset(float offset) {
@@ -240,94 +222,73 @@ float MtkParser::setTimeOffset(float offset) {
 }
 
 bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
+  // get the current position before reading a record
+  uint32_t startPos = in->position();
+
   // clear given variable before use
   memset(rcd, 0, sizeof(gpsrecord_t));
 
-  size_t startPos = in->position();
-  rcd->format = progress.format;
+  // store the current record format
+  rcd->format = progress.recordFormat;
 
-  // read the UTC (TIME) field if it exists
-  if (progress.format & REG_TIME) {  // the record has TIME field
+  // store the UTC (TIME) field
+  if (progress.recordFormat & REG_TIME) {
     rcd->time = readBinInt32();
 
-    if (rcd->time < ROLLOVER_OCCUR_TIME) {
-      rcd->time += ROLLOVER_CORRECT_VALUE;
+    // correct time if affected by the week number rollover
+    if (rcd->time < ROLLOVER_TIME) {
+      rcd->time += ROLLOVER_CORRECT;
     }
   }
 
-  // read LAT/LON/ELE fields if they exists.
-  // * M-241 uses different types for these field
-  if (progress.m241) {  // for M-241
-    if (progress.format & REG_LAT) rcd->latitude = readBinFloat();
-    if (progress.format & REG_LON) rcd->longitude = readBinFloat();
-    if (progress.format & REG_ELE) rcd->elevation = readBinFloat24();
-  } else {  // for other models
-    if (progress.format & REG_LAT) rcd->latitude = readBinDouble();
-    if (progress.format & REG_LON) rcd->longitude = readBinDouble();
-    if (progress.format & REG_ELE) rcd->elevation = readBinFloat();
+  // store LAT/LON/ELE fields
+  if (progress.m241Mode) {  // for Holux M-241
+    if (rcd->format & REG_LAT) rcd->latitude = readBinFloat();
+    if (rcd->format & REG_LON) rcd->longitude = readBinFloat();
+    if (rcd->format & REG_ELE) rcd->elevation = readBinFloat24();
+  } else {  // for other standard models
+    if (rcd->format & REG_LAT) rcd->latitude = readBinDouble();
+    if (rcd->format & REG_LON) rcd->longitude = readBinDouble();
+    if (rcd->format & REG_ELE) rcd->elevation = readBinFloat();
   }  // if (progress.m241) else
 
-  // read the SPEED field if it exists
-  //  if (progress.format & REG_SPEED) rcd->speed = readBinFloat() / 3.60;
-  if (progress.format & REG_SPEED) rcd->speed = readBinFloat();
+  // store the SPEED field
+  if (rcd->format & REG_SPEED) rcd->speed = readBinFloat() / 3.60;
 
-  // ignore all of other fields if they exist
-  in->seek(in->position() +
-           ((sizeof(float) * (bool)(progress.format & REG_TRACK)) +
-            (sizeof(uint16_t) * (bool)(progress.format & REG_DSTA)) +
-            (sizeof(float) * (bool)(progress.format & REG_DAGE)) +
-            (sizeof(uint16_t) * (bool)(progress.format & REG_PDOP)) +
-            (sizeof(uint16_t) * (bool)(progress.format & REG_HDOP)) +
-            (sizeof(uint16_t) * (bool)(progress.format & REG_VDOP)) +
-            (sizeof(uint16_t) * (bool)(progress.format & REG_NSAT))));
-  if (progress.format & REG_SID) {
+  // skip all of other fields (TRACK/DSTA/DAGE/PDOP/HDOP/VDOP/NSAT)
+  in->seek(in->position() + progress.ignoreLength1);
+  if (rcd->format & REG_SID) {
     uint16_t siv =
         (uint16_t)(readBinInt32() & 0x0000FFFF);  // number of SATs in view
-    in->seek(in->position() +
-             ((sizeof(int16_t) * (bool)(progress.format & REG_ALT)) +
-              (sizeof(uint16_t) * (bool)(progress.format & REG_AZI)) +
-              ((sizeof(uint16_t) * (bool)(progress.format & REG_SNR))) * siv));
+    in->seek(in->position() + progress.ignoreLength2 +
+             (siv * (sizeof(uint16_t) * (bool)(rcd->format & REG_SNR))));
   }  // if (progress.format & REG_SID)
 
-  // get current record size from FILE* position
-  size_t currentPos = in->position();
-  uint16_t recordSize;
-
-  recordSize = (uint16_t)(currentPos - startPos);
-
-  // calculate checksum value of the current record
+  // get current record size from FILE* position and calculate the checksum
+  rcd->size = (in->position() - startPos);
   uint8_t checksum = 0;
   in->seek(startPos);
-  for (uint16_t i = 0; i < recordSize; i++) {
+  for (uint16_t i = 0; i < rcd->size; i++) {
     checksum ^= (uint8_t)readBinInt8();
   }
 
-  // read the checksum marker charactor ('*') and its value
-  char chkmkr = '*';
-  if (progress.m241 == false) {
-    chkmkr = (char)readBinInt8();
-  }
+  // read the checksum delimiter '*' when the logger is not Holux M-241
+  // nore: Holux M-241 does not write '*' before checksum value
+  char chkmkr = (progress.m241Mode) ? '*' : (char)readBinInt8();
 
-  // verify the checksum and store it
+  // verify the checksum is correct or not
   rcd->valid = ((chkmkr == '*') && ((uint8_t)readBinInt8() == checksum));
 
-  // if data read as record is not valid, seek the pointer to right
-  if (rcd->valid == false) {  // checksum is not valid
-    // seek pointer +1 byte on the current sector
-    in->seek(startPos + 1);
+  // if there is no valid record here, restore the original position
+  if (!rcd->valid) in->seek(startPos);
 
-    printf(
-        "MtkParser.convert: "
-        "parser: no marker and record found at 0x%06X\n",
-        startPos);
-  }
-
+  // return the result of the record reading
   return rcd->valid;
 }
 
 bool MtkParser::matchBinPattern(const char *ptn, uint8_t len) {
   // get the current position before matching the pattern
-  uint32_t pos = in->position();
+  uint32_t startPos = in->position();
 
   // check if the pattern is matched from the current position
   bool match = true;
@@ -336,79 +297,56 @@ bool MtkParser::matchBinPattern(const char *ptn, uint8_t len) {
   }
 
   // restore the position if the pattern is not matched
-  if (!match) in->seek(pos);
+  if (!match) in->seek(startPos);
 
   // return the result of the matching
   return match;
 }
 
 bool MtkParser::readBinMarkers() {
-  bool foundMarker = false;
+  bool match = false;
   size_t startPos = in->position();
 
-  if (matchBinPattern(PTN_DSET_AA,
-                      sizeof(PTN_DSET_AA))) {  // found DSP_A (0xAA, ...)
-    int8_t dsId = readBinInt8();
-    int32_t dsVal = readBinInt32();
+  if (matchBinPattern(PTN_DSET_AA, sizeof(PTN_DSET_AA))) {  // DSP_A
+    // read type and value of the DSP
+    uint8_t dsType = readBinInt8();
+    uint32_t dsVal = readBinInt32();
 
-    if (matchBinPattern(PTN_DSET_BB,
-                        sizeof(PTN_DSET_BB))) {  // found DSP_B (0xBB, ...)
-      switch (dsId) {
+    if (matchBinPattern(PTN_DSET_BB, sizeof(PTN_DSET_BB))) {  // DSP_B
+      match = true;
+
+      // do action according to the DSP type
+      switch (dsType) {
         case DSP_CHANGE_FORMAT:  // change format register
-          progress.format = dsVal;
+          setRecordFormat(dsVal);
           break;
 
         case DSP_LOG_STARTSTOP:  // log start/stop
           if (options.trackMode == TRK_AS_IS) {
-            progress.newTrack = true;
+            putGpxTrackEnd();
           }
           break;
       }
 
-      Serial.printf(
-          "MtkParser.readMarker: "
-          "dynamic setting pattern at 0x%06X (id=%d, val=0x%04X) \n",
-          startPos, dsId, dsVal);
-      foundMarker = true;
+      Serial.printf("Parser.readMarker: DSP at 0x%05X [T=%d, V=0x%04X]\n",
+                    startPos, dsType, dsVal);
     }
-  } else if (matchBinPattern(PTN_M241,
-                             sizeof(PTN_M241))) {  // found M-241 marker
-    if (matchBinPattern(PTN_M241_SP,
-                        sizeof(PTN_M241_SP))) {  // found 0x20202020 (fw v1.13)
-      // just ignore it. nothing to do
-    }
+  } else if (matchBinPattern(PTN_M241, sizeof(PTN_M241))) {  // M-241
+    matchBinPattern(PTN_M241_SP, sizeof(PTN_M241_SP));       // M-241 fw1.13
 
-    Serial.printf(
-        "MtkParser.readMarker: "
-        "Holux M-241 marker at 0x%06X\n",
-        startPos);
-    progress.m241 = true;
-    foundMarker = true;
+    progress.m241Mode = true;
+    match = true;
 
-  } else if (matchBinPattern(
-                 PTN_SCT_END,
-                 sizeof(PTN_SCT_END))) {  // found a sector end marker
+    Serial.printf("Parser.readMarker: M-241 marker at 0x%05X\n", startPos);
+  } else if (matchBinPattern(PTN_SCT_END, sizeof(PTN_SCT_END))) {  // sector end
     // seek sector position to the next
-    progress.sector += 1;
+    progress.sectorId += 1;
+    match = true;
 
-    Serial.printf(
-        "MtkParser.readMarker: "
-        "End-of-Sector at 0x%06X, move to next\n",
-        startPos);
-    foundMarker = true;
+    Serial.printf("Parser.readMarker: sector end at 0x%05X\n", startPos);
   }
 
-  return foundMarker;
-}
-
-void MtkParser::printRecord_d(gpsrecord_t *rcd) {
-  Serial.printf("MtkParser.printRecord_d: format=%06X", rcd->format);
-  if (rcd->format & REG_TIME) Serial.printf(", time=%d", rcd->time);
-  if (rcd->format & REG_LAT) Serial.printf(", lat=%.04f", rcd->latitude);
-  if (rcd->format & REG_LON) Serial.printf(", lon=%.04f", rcd->longitude);
-  if (rcd->format & REG_ELE) Serial.printf(", ele=%.02f", rcd->elevation);
-  if (rcd->format & REG_SPEED) Serial.printf(", spd=%.02f", rcd->speed);
-  Serial.printf("\n");
+  return match;
 }
 
 bool MtkParser::convert(File32 *input, File32 *output,
@@ -419,76 +357,78 @@ bool MtkParser::convert(File32 *input, File32 *output,
   in = input;
   out = output;
 
-  int32_t prog = 0;
+  int32_t progRate = 0;
   bool fileend = false;
 
   in->seek(0);
   out->seek(0);
-  fpos_t startPos = 0;
-  fpos_t currentPos = 0;
 
   putGpxXmlStart();
 
+  uint32_t startPos = 0;
+  uint32_t currentPos = 0;
+  uint32_t sectorStart = -1;
+  uint32_t dataStart = 0;
+  uint32_t sectorEnd = 0;
+
   while (true) {
-    const fpos_t SECTOR_START = (0x010000 * progress.sector);
-    const fpos_t DATA_START = (SECTOR_START + 0x000200);
-    const fpos_t SECTOR_END = (SECTOR_START + 0x00FFFF);
+    if (sectorStart != (SIZE_SECTOR * progress.sectorId)) {
+      sectorStart = (SIZE_SECTOR * progress.sectorId);
+      dataStart = (sectorStart + SIZE_HEADER);
+      sectorEnd = (sectorStart + (SIZE_SECTOR - 1));
+    }
 
     currentPos = in->position();
 
-    if (DATA_START >= in->size()) {
-      printf("MtkParser.convert: reached to end of input file\n");
+    if (dataStart >= in->size()) {
+      printf("Parser.convert: finished [tracks=%d, trkpts=%d]\n",
+             progress.totalTracks, progress.totalRecords);
       fileend = true;
       break;
     }
 
-    if (currentPos <= SECTOR_START) {
-      printf(
-          "MtkParser.convert: read header of current sector#%d at "
-          "0x%06X\n",
-          progress.sector + 1, SECTOR_START);
-
-      in->seek(SECTOR_START);
-      uint16_t records = (uint16_t)readBinInt16();
-      setFormatRegister(readBinInt32());
+    if (currentPos <= sectorStart) {
+      in->seek(sectorStart);
+      printf("Parser.convert: sector#%d at 0x%05X, %d records\n",
+             progress.sectorId, sectorStart, (uint16_t)readBinInt16());
+      setRecordFormat(readBinInt32());
     }
 
-    if (currentPos < DATA_START) {
-      printf(
-          "MtkParser.convert: move to data block of current sector "
-          "at 0x%06X\n",
-          DATA_START);
-      in->seek(DATA_START);
+    if (currentPos < dataStart) {
+      printf("Parser.convert: move cursor to 0x%05X\n", dataStart);
+      in->seek(dataStart);
     }
 
-    if (readBinMarkers()) {
+    if (readBinMarkers()) continue;
+
+    gpsrecord_t rcd;
+    readBinRecord(&rcd);
+    if (!rcd.valid) {
+      Serial.printf("Parser.convert: no valid data at 0x%05X\n",
+                    in->position());
+      in->seek(in->position() + 1);
+
       continue;
     }
 
-    gpsrecord_t rcd;
-    if (readBinRecord(&rcd)) {
-      if (rcd.time <= ROLLOVER_OCCUR_TIME) {
-        rcd.time += ROLLOVER_CORRECT_VALUE;
-      }
+    if ((options.trackMode == TRK_ONE_DAY) &&
+        (isDifferentDate(progress.lastRecord.time, rcd.time))) {
+      putGpxTrackStart();
+    }
+    putGpxTrackPoint(&rcd);
 
-      progress.newTrack =
-          (progress.newTrack ||
-           ((options.trackMode == TRK_ONE_DAY) &&
-            (isDifferentDate(progress.lastRecord.time, rcd.time))));
-
-      putGpxTrackPoint(&rcd);
-
-      if (progress.firstRecord.time == 0) {
-        progress.firstRecord = rcd;
-      }
-      progress.lastRecord = rcd;
+    if (progress.firstRecord.time == 0) progress.firstRecord = rcd;
+    progress.lastRecord = rcd;
+    progress.totalRecords += 1;
+    if ((in->position() + rcd.size) >= sectorEnd) {
+      progress.sectorId += 1;
     }
 
     if (callback != NULL) {
-      int32_t _p = 100 * ((float)in->position() / (float)in->size());
-      if (_p > prog) {
-        callback(_p);
-        prog = _p;
+      int32_t _pr = 100 * ((float)in->position() / in->size());
+      if (_pr > progRate) {
+        callback(_pr);
+        progRate = _pr;
       }
     }
   }

@@ -22,19 +22,34 @@ LoggerManager::~LoggerManager() {
   delete gpsSerial;
 }
 
-bool LoggerManager::connect(uint8_t *address) {
+bool LoggerManager::connect(String name) {
   if (!sppStarted) {
     sppStarted = gpsSerial->begin("SmallStep", true);
-  }
-
-  // disconnect the GPS logger if it is already connected
-  if (gpsSerial->connected()) {
+  } else if (connected()) {
     disconnect();
   }
 
-  // print the debug message to the serial console
-  Serial.printf("DEBUG: connecting to GPS logger...\n");
+  // register the event callback function
+  if (eventCallback != NULL) {
+    gpsSerial->register_callback(eventCallback);
+  }
+  gpsSerial->setTimeout(1000);
+  gpsSerial->setPin("0000");
 
+  return gpsSerial->connect(name);
+}
+
+bool LoggerManager::connect(uint8_t *address) {
+  if (!sppStarted) {
+    sppStarted = gpsSerial->begin("SmallStep", true);
+  } else if (connected()) {
+    disconnect();
+  }
+
+  // register the event callback function
+  if (eventCallback != NULL) {
+    gpsSerial->register_callback(eventCallback);
+  }
   // start the SPP as master and set PIN code
   gpsSerial->setTimeout(1000);
   gpsSerial->setPin("0000");
@@ -57,15 +72,6 @@ void LoggerManager::disconnect() {
     gpsSerial->end();
     sppStarted = false;
   }
-}
-
-uint8_t LoggerManager::calcNmeaChecksum(const char *cmd, uint8_t len) {
-  byte chk = 0;
-  for (byte i = 0; i < len; i++) {
-    chk ^= (byte)(cmd[i]);
-  }
-
-  return chk;
 }
 
 int32_t LoggerManager::modelIdToFlashSize(uint16_t modelId) {
@@ -106,254 +112,178 @@ int32_t LoggerManager::modelIdToFlashSize(uint16_t modelId) {
   return flashSize;
 }
 
-bool LoggerManager::sendNmeaCommand(const char *cmd, uint16_t len) {
+uint8_t LoggerManager::calcNmeaChecksum(const char *cmd) {
+  uint8_t chk = 0;
+  for (uint8_t i = 0; cmd[i] > 0; i++) {
+    chk ^= (uint8_t)(cmd[i]);
+  }
+
+  return chk;
+}
+
+bool LoggerManager::sendNmeaCommand(const char *cmd) {
   // return false if the GPS logger is not connected
-  if (!gpsSerial->connected()) return false;
+  if (!connected()) return false;
 
-  uint16_t len2 = len + 8;
-  char buf[len2];
-
-  // build the NMEA command line with checksum
-  uint8_t chk = calcNmeaChecksum(cmd, len);
-  memset(buf, 0, len2);
-  sprintf(buf, "$%s*%X\r\n", cmd, chk);
+  char sendbuf[256];
+  sprintf(sendbuf, "$%s*%X\r\n", cmd, calcNmeaChecksum(cmd));
 
   // send the NMEA command to the GPS logger
-  // note: DO NOT call gpsSerial-> flush() after write()s because it takes a bit
-  // long time and cause a reception failure
-  for (uint16_t i = 0; (i < len2) && (buf[i] != 0); i++) {
-    gpsSerial->write(buf[i]);
+  for (uint16_t i = 0; sendbuf[i] != 0; i++) {
+    gpsSerial->write(sendbuf[i]);
   }
-  // gpsSerial->flush(); // DO NOT call this here. It cause a reception failure
+
+  // Note: DO NOT call gpsSerial->flush() after write().
+  // It is nessesary and will cause a reception failure.
 
   return true;
 }
 
 bool LoggerManager::sendDownloadCommand(int startPos, int reqSize) {
-  char cmdstr[40];
-  sprintf(cmdstr, "PMTK182,7,%06X,%06X", startPos, reqSize);
+  char cmdstr[32];
+  sprintf(cmdstr, "PMTK182,7,%06X,%04X", startPos, reqSize);
 
-  return sendNmeaCommand(cmdstr, sizeof(cmdstr));
+  return sendNmeaCommand(cmdstr);
 }
 
-bool LoggerManager::getLogEndAddress(int32_t *address) {
+bool LoggerManager::getLastRecordAddress(int32_t *address) {
   // return false if the GPS logger is not connected
-  if (!gpsSerial->connected()) return false;
+  if (!connected()) return false;
 
   // set the timeout period to 2 seconds
-  uint32_t timeLimit = millis() + 2000;
+  uint32_t timeLimit = millis() + 1000;
 
   // get the last address of the log data to be downloaded
   int32_t endAddr = 0;
-  sendNmeaCommand("PMTK182,2,6", 13);  // query log recording mode
-  while (gpsSerial->connected() && (endAddr == 0)) {
-    while (gpsSerial->available()) {
-      // read the data from the GPS logger and put it into the buffer
-      // until NMEA sentence (line) is completed
-      if (!buffer->put(gpsSerial->read())) continue;
+  sendNmeaCommand("PMTK182,2,6");  // query log recording mode
+  while (gpsSerial->connected()) {
+    // abort queries if the timeout reached
+    if (millis() > timeLimit) break;
 
-      // abort queries if the timeout reached
-      if (millis() > timeLimit) {  // timeout reached
-        endAddr = -1;  // set the last address to -1 (timeout occurred)
-        break;
+    // read charactor until get a NMEA sentence
+    if (!gpsSerial->available()) continue;
+    if (!buffer->put(gpsSerial->read())) continue;
+
+    if (buffer->match("$PMTK182,3,6,")) {  // log mode
+      int32_t logMode = 0;
+      buffer->readColumnAsInt(3, &logMode);
+
+      if (logMode == 2) {                // fullstop mode
+        sendNmeaCommand("PMTK182,2,8");  // send query last record address
+      } else {                           // overwrite mode
+        sendNmeaCommand("PMTK605");      // send query firmware release
       }
 
-      // check if the received line is the expected responses
-      if (buffer->match(
-              "$PMTK182,3,6,")) {  // response to the query log recording mode
-        int32_t logMode = 0;
-        buffer->readColumnAsInt(3, &logMode);
+      continue;
 
-        Serial.printf("DEBUG: got the log mode. [logMode=%d]\n", logMode);
+    } else if (buffer->match("$PMTK182,3,8,")) {  // last record address
+      buffer->readColumnAsInt(3, &endAddr);
+      break;
 
-        // determine the log recording mode (overwrap or fullstop)
-        if (logMode == 2) {                    // fullstop mode
-          sendNmeaCommand("PMTK182,2,8", 13);  // query the record address
-        } else {                               // overwrite mode
-          sendNmeaCommand("PMTK605", 8);       // query the firmware release
-        }
-        continue;  // continue to read the next line
-
-      } else if (buffer->match("$PMTK182,3,8,")) {  // response to the query
-                                                    // record address
-        buffer->readColumnAsInt(
-            3, &endAddr);  // read the address from the 4th column
-
-        // print the debug message to the serial console
-        Serial.printf(
-            "DEBUG: got the address of the last record. [endAddr=0x%06X]\n",
-            endAddr);
-
-        continue;  // continue to read the next line
-      } else if (buffer->match(
-                     "$PMTK705,")) {  // response to the query firmware release
-        int32_t modelId = 0;
-        buffer->readColumnAsInt(
-            2, &modelId);  // read the firmware ID from the 3rd column
-
-        // print the debug message to the serial console
-        Serial.printf(
-            "DEBUG: got the model ID of GPS logger. [modelId: 0x%04X]\n",
-            modelId);
-
-        // set the download size based on the model ID
-        endAddr = modelIdToFlashSize(modelId);
-
-        // print the debug message to the serial console
-        Serial.printf(
-            "DEBUG: got the address of the last record. [endAddr=0x%06X]\n",
-            endAddr);
-      }  // if (buffer->match("$PMTK182,3,6,")) else if ...ss
-    }    // while (gpsSerial.available())
-  }      // while (gpsSerial.connected() && (endAddr == 0))
+    } else if (buffer->match("$PMTK705,")) {  // firmware release
+      int32_t modelId = 0;
+      buffer->readColumnAsInt(2, &modelId);  // read modelID
+      endAddr = modelIdToFlashSize(modelId);
+      break;
+    }
+  }
+  // set return value
+  *address = endAddr;
 
   // clear the receive buffer
   buffer->clear();
-
-  // set return value
-  *address = endAddr;
 
   // return true if the last address is obtained
   return (endAddr > 0);
 }
 
 bool LoggerManager::downloadLogData(File32 *output, void (*callback)(int)) {
-  bool nextRequest = true;
-  int32_t requestSize = 0x4000;
-  int32_t receivedSize = 0;
+  bool nextReq = true;
+  int32_t reqSize = 0x2000;
+  int32_t recvSize = 0;
   int32_t endAddr = 0;
   int32_t nextAddr = 0x000000;
-  int8_t retryCount = 0;
+  int8_t retries = 0;
 
-  if (!getLogEndAddress(&endAddr)) {
+  if (!getLastRecordAddress(&endAddr)) {
     Serial.println("Failed to get the last address of the log data.");
     return false;
   }
 
-  uint32_t timeLimit = millis() + 1000;  // set the initial timeout period
+  uint32_t timeLimit = millis() + 1000;  // set initial timeout period
 
-  // download the log data from the GPS logger
-  while (gpsSerial->connected()) {  // loop until the SPP is connected
-    // check if any termination condition is met
-    if (nextAddr >= endAddr) {  // reached to the end of the data
-      // print the debug message to the serial console
-      Serial.printf(
-          "DEBUG: the download process is finished. [nextAddr=0x%06X, "
-          "endAddr=0x%06X]\n",
-          nextAddr, endAddr);
-
-      // break the loop to finish the download process
+  while (gpsSerial->connected()) {
+    // exit loop when download process is finished or timeout occurred
+    if (nextAddr >= endAddr) {
+      Serial.printf("LogMan.download: finished [size=0x%05X]\n", endAddr);
       break;
-    } else if (retryCount > 5) {  // cause of too many retries
-      // print the debug message to the serial console
-      Serial.printf(
-          "DEBUG: too many retries has occurred, abort. [retries=%d]\n",
-          (retryCount - 1));
+    }
 
-      // break the loop to abort the download process
-      break;
+    if (millis() > timeLimit) {
+      nextReq = true;
+      retries += 1;
+
+      if (retries > 3) {
+        Serial.println("LogMan.download: timeout occurred");
+        break;
+      }
     }
 
     // check if the flag to send the next request is set
-    if (nextRequest) {  // need to send the next download requestsf
+    if (nextReq) {  // need to send the next download requestsf
       // send the download command to the GPS logger
-      sendDownloadCommand(nextAddr, requestSize);
+      sendDownloadCommand(nextAddr, reqSize);
 
-      nextRequest = false;          // clear the flag to send the next request
-      receivedSize = 0;             // clear the received size to 0
-      timeLimit = millis() + 1000;  // update the timeout period
+      nextReq = false;  // clear the flag to send the next request
+      recvSize = 0;     // clear the received size to 0
+      timeLimit = millis() + ((reqSize / 0x800) * 800);  // update timeout
 
       // print the debug message to the serial console
       Serial.printf(
-          "LoggerManager.download: "
-          "sent request [startAddr=0x%06X, reqSize=0x%04X, retries=%d]\n",
-          nextAddr, requestSize, retryCount);
+          "LogMan.download: send request [start=0x%05X, size=0x%04X]\n",
+          nextAddr, reqSize);
     }
 
-    // set the flag to retry if the timeout reached
-    if (millis() > timeLimit) {  // timeout reached
-      // set the flag to send the next request and increase the retry count
-      nextRequest = true;
-      retryCount += 1;
+    // receive data (NMEA sentenses) and store them into buffer
+    if (!gpsSerial->available()) continue;
+    if (!buffer->put(gpsSerial->read())) continue;
+
+    // check if the received line is the expected responses
+    if (buffer->match("$PMTK182,8,")) {  // recv data block
+      // read the starting address from the 3rd column of the line
+      int32_t startAddr = 0;
+      buffer->readColumnAsInt(2, &startAddr);
+
+      // ignore this line if the starting address is not the expected value
+      if (startAddr != nextAddr) continue;
+
+      // call the callback function to notify the progress
+      if (callback != NULL) {  // call the progress function if available
+        callback(((float)nextAddr / endAddr) * 100);
+      }
 
       // print the debug message to the serial console
-      Serial.printf(
-          "LoggerManager.download: "
-          "timeout reached, abort. [retries=%d]\n",
-          retryCount);
+      Serial.printf("LogMan.download: recv data [start=0x%05X]\n", startAddr);
 
-      // continue to send the next request
+      uint8_t b = 0;         // variable to store the next byte
+      uint16_t ffCount = 0;  // counter for how many 0xFFs are continuous
+
+      // read the data from the buffer and write it to the output file
+      buffer->seekToColumn(3);  // move to the 4th column (data column)
+      while (buffer->readHexByteFull(&b)) {
+        output->write(b);
+        ffCount = (b != 0xFF) ? 0 : (ffCount + 1);  // count continuous 0xFF
+      }
+
+      // update the next address and the received size
+      nextAddr += 0x0800;
+      recvSize += 0x0800;
+      nextReq = (recvSize >= reqSize);
+      if (ffCount >= 0x200) endAddr = nextAddr;
+
       continue;
-    }
-
-    // receive data (NMEA sentenses) from the GPS logger and parse it
-    while (gpsSerial->available()) {  // repeat until the SPP is available
-      // read the data from the GPS logger and put it into the buffer
-      // until NMEA sentence (line) is completed
-      if (!buffer->put(gpsSerial->read())) continue;
-
-      // check if the received line is the expected responses
-      if (buffer->match("$PMTK182,8,")) {  // received the next sector
-        // read the starting address from the 3rd column of the line
-        int32_t startAddr = 0;
-        buffer->readColumnAsInt(2, &startAddr);
-
-        // ignore this line if the starting address is not the expected value
-        if (startAddr != nextAddr) continue;
-
-        // print the debug message to the serial console
-        Serial.printf(
-            "LoggerManager.download: "
-            "received data [startAddr=0x%06X]\n",
-            startAddr);
-
-        uint8_t b = 0;            // variable to store the next byte
-        uint16_t ffCount = 0;     // counter for how many 0xFFs are continuous
-        buffer->seekToColumn(3);  // move to the 4th column (data column)
-        // read the data from the buffer and write it to the output file
-        while (buffer->readHexByteFull(&b)) {
-          output->write(b);
-          ffCount = (b != 0xFF) ? 0 : ffCount + 1;  // count continuous 0xFF
-        }
-
-        // update the next address and the received size
-        nextAddr += 0x0800;
-        receivedSize += 0x0800;
-
-        // call the callback function to notify the progress
-        if (callback != NULL) {  // call the progress function if available
-          callback(((float)nextAddr / endAddr) * 100);
-        }
-
-        // set the download size to the current address if the continuous 0xFFs
-        // are more than 0x200
-        if ((ffCount >= 0x0200) && (nextAddr < endAddr)) {
-          endAddr = nextAddr;  // set the download size to the current address
-
-          // print the debug message to the serial console
-          Serial.printf(
-              "LoggerManager.download:"
-              "reached to the end of the data. [endAddr=0x%06X]\n",
-              endAddr);
-        }
-
-        // update the timeout period
-        timeLimit = millis() + 1000;
-
-        // continue to read the next line
-        continue;
-      } else if (buffer->match(
-                     "$PMTK001,182,7,")) {  // received operation result line
-        nextRequest = true;  // set the flag to send the next request
-        if (receivedSize < requestSize)
-          retryCount += 1;  // received size is less than requested size,
-                            // increase retry count
-
-        // break the loop to send the next request
-        break;
-      }  // if (buffer->match("$PMTK182,8,")) else if ...
-    }    // while (gpsSerial.available())
-  }      // while (gpsSerial.connected())
+    }  // if (buffer->match("$PMTK182,8,"))
+  }    // while (gpsSerial.connected())
 
   if (callback != NULL) callback(100);
 
@@ -370,63 +300,36 @@ bool LoggerManager::fixRTCdatetime() {
 
   bool sendCommand = true;
   uint32_t timeLimit = 0;  // set the initial timeout period
-  int8_t retryCount = 0;
+  int8_t retries = 0;
 
   while ((gpsSerial->connected())) {
-    if ((retryCount > 3) || (retryCount == -1)) {
-      break;
-    }
-
     if (sendCommand) {
-      sendNmeaCommand("PMTK335,2020,1,1,0,0,0", 23);
+      sendNmeaCommand("PMTK335,2020,1,1,0,0,0");
       sendCommand = false;
-      timeLimit = millis() + 1000;
+      timeLimit = millis() + 500;
     }
 
     if (millis() > timeLimit) {
       sendCommand = true;
-      retryCount += 1;
-      continue;  // continue to retry to send set rtc command
+      retries += 1;
+      if (retries >= 3) break;
     }
 
-    while (gpsSerial->available()) {
-      // read the data from the GPS logger and put it into the buffer
-      if (!buffer->put(gpsSerial->read())) continue;
+    if (!gpsSerial->available()) continue;
+    if (!buffer->put(gpsSerial->read())) continue;
 
-      // check if the received line is the expected responses
-      if (buffer->match("$PMTK001,335,")) {  // received operation result line
-        // read the result code from the 3rd column
-        int32_t resultCode = 0;
-        buffer->readColumnAsInt(2, &resultCode);
-
-        if (resultCode == 3) {  // success
-          // set retryCount to -1 to indicate success
-          retryCount = -1;
-        } else {  // failed
-          //  set sendCommand to true and increase retryCount
-          sendCommand = true;
-          retryCount += 1;
-          delay(100);  // wait for a while before retry
-        }
-
-        break;  // break to exit or retry
-      }
+    // check if the received line is the expected responses
+    if (buffer->match("$PMTK001,335,3")) {  // success
+      // exit loop and will return true
+      break;
     }
   }
 
+  // clear receive buffer
   buffer->clear();
 
-  return (retryCount == -1);
+  return (retries < 3);
 }
-
-// void LoggerManager::bluetoothCallback(esp_spp_cb_event_t event,
-//                                       esp_spp_cb_param_t *param) {
-//   if (event == ESP_SPP_OPEN_EVT) {
-//     //    app.loggerDiscovered.found = true;
-//     //    memcpy(&(app.loggerDiscovered.address), &(param->open.rem_bda),
-//     //           sizeof(app.loggerDiscovered.address));
-//   }
-// }
 
 bool LoggerManager::discover(const char *name, esp_spp_cb_t callback) {
   if (!sppStarted) {
@@ -440,4 +343,8 @@ bool LoggerManager::discover(const char *name, esp_spp_cb_t callback) {
   }
 
   return false;
+}
+
+void LoggerManager::setEventCallback(esp_spp_cb_t callback) {
+  eventCallback = callback;
 }
