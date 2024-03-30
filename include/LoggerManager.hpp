@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BluetoothSerial.h>
+#include <EEPROM.h>
 #include <SdFat.h>
 
 #include "ReceiveBuffer.hpp"
@@ -13,7 +14,7 @@ typedef enum _sizeinfo {
 } sizeinfo_t;
 
 typedef enum _recordmode {
-  MODE_FULLSTOP = 0,  // stop logging when flash is full
+  MODE_FULLSTOP = 2,  // stop logging when flash is full
   MODE_OVERWRITE = 1  // overwrite oldest record when flash is full
 } recordmode_t;
 
@@ -35,17 +36,19 @@ class LoggerManager {
   bool sppStarted;
   BluetoothSerial *gpsSerial;
   ReceiveBuffer *buffer;
+  esp_spp_cb_t eventCallback;
 
-  uint8_t calcNmeaChecksum(const char *cmd, uint8_t len);
-  bool sendNmeaCommand(const char *cmd, uint16_t len);
+  uint8_t calcNmeaChecksum(const char *cmd);
+  bool sendNmeaCommand(const char *cmd);
   bool sendDownloadCommand(int startPos, int reqSize);
   static int32_t modelIdToFlashSize(uint16_t modelId);
-  bool getLogEndAddress(int32_t *size);
+  bool getLastRecordAddress(int32_t *size);
 
  public:
   LoggerManager();
   ~LoggerManager();
 
+  bool connect(String name);
   bool connect(uint8_t *address);
   bool discover(const char *name, esp_spp_cb_t callback);
   bool connected();
@@ -57,4 +60,5 @@ class LoggerManager {
   // int32_t setLogByDistance(int16_t distance);
   // int32_t setLogBySpeed(int16_t speed);
   // int32_t setLogByTime(int16_t time);
+  void setEventCallback(esp_spp_cb_t callback);
 };

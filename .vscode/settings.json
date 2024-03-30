@@ -5,6 +5,7 @@
         "atomic": "cpp",
         "*.tcc": "cpp",
         "fstream": "cpp",
-        "sstream": "cpp"
+        "sstream": "cpp",
+        "iomanip": "cpp"
     }
 }

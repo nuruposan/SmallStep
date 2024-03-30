@@ -25,16 +25,21 @@ typedef struct _gpsrecord {
   float elevation;
   float speed;
   bool valid;
+  uint8_t size;
 } gpsrecord_t;
 
 typedef struct _parseinfo {
-  uint16_t sector;
-  uint32_t format;
-  bool m241;
+  uint16_t sectorId;
+  uint32_t recordFormat;
+  uint8_t ignoreLength1;
+  uint8_t ignoreLength2;
+  bool m241Mode;
+  //  bool newTrack;
+  bool inTrack;
   gpsrecord_t firstRecord;
   gpsrecord_t lastRecord;
-  bool newTrack;
-  bool inTrack;
+  uint32_t totalTracks;
+  uint32_t totalRecords;
 } parseinfo_t;
 
 class MtkParser {
@@ -42,8 +47,8 @@ class MtkParser {
   static const uint32_t SIZE_HEADER;
   static const uint32_t SIZE_SECTOR;
 
-  static const uint32_t ROLLOVER_OCCUR_TIME;
-  static const uint32_t ROLLOVER_CORRECT_VALUE;
+  static const uint32_t ROLLOVER_TIME;
+  static const uint32_t ROLLOVER_CORRECT;
 
   static const char PTN_DSET_AA[];
   static const char PTN_DSET_BB[];
@@ -66,15 +71,13 @@ class MtkParser {
   int32_t readBinInt32();
   bool readBinMarkers();
   bool readBinRecord(gpsrecord_t *rcd);
-  static void printFormat_d(uint32_t fmt);
-  static void printRecord_d(gpsrecord_t *rcd);
   void putGpxString(const char *line);
   void putGpxXmlStart();
   void putGpxXmlEnd();
   void putGpxTrackStart();
   void putGpxTrackEnd();
   void putGpxTrackPoint(gpsrecord_t *rcd);
-  void setFormatRegister(uint32_t fmt);
+  void setRecordFormat(uint32_t fmt);
 
  public:
   MtkParser();
