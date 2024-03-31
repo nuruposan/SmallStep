@@ -126,7 +126,8 @@ bool LoggerManager::sendNmeaCommand(const char *cmd) {
   if (!connected()) return false;
 
   char sendbuf[256];
-  sprintf(sendbuf, "$%s*%X\r\n", cmd, calcNmeaChecksum(cmd));
+  sprintf(sendbuf, "$%s*%02X\r\n", cmd, calcNmeaChecksum(cmd));
+  Serial.printf("LogMan.sendCmd: >> %s", sendbuf);
 
   // send the NMEA command to the GPS logger
   for (uint16_t i = 0; sendbuf[i] != 0; i++) {
@@ -198,6 +199,8 @@ bool LoggerManager::getLastRecordAddress(int32_t *address) {
 }
 
 bool LoggerManager::downloadLogData(File32 *output, void (*callback)(int)) {
+  const uint8_t MAX_RETRY = 5;
+
   bool nextReq = true;
   int32_t reqSize = 0x2000;
   int32_t recvSize = 0;
@@ -223,7 +226,7 @@ bool LoggerManager::downloadLogData(File32 *output, void (*callback)(int)) {
       nextReq = true;
       retries += 1;
 
-      if (retries > 3) {
+      if (retries > MAX_RETRY) {
         Serial.println("LogMan.download: timeout occurred");
         break;
       }
@@ -296,17 +299,17 @@ bool LoggerManager::downloadLogData(File32 *output, void (*callback)(int)) {
 }
 
 bool LoggerManager::fixRTCdatetime() {
-  if (!gpsSerial->connected()) return false;
+  if (!connected()) return false;
 
   bool sendCommand = true;
-  uint32_t timeLimit = 0;  // set the initial timeout period
+  uint32_t timeLimit = 0;
   int8_t retries = 0;
 
   while ((gpsSerial->connected())) {
     if (sendCommand) {
       sendNmeaCommand("PMTK335,2020,1,1,0,0,0");
       sendCommand = false;
-      timeLimit = millis() + 500;
+      timeLimit = millis() + 1000;
     }
 
     if (millis() > timeLimit) {
@@ -320,7 +323,8 @@ bool LoggerManager::fixRTCdatetime() {
 
     // check if the received line is the expected responses
     if (buffer->match("$PMTK001,335,3")) {  // success
-      // exit loop and will return true
+      // restart GPS logger to apply new RTC datetime
+      sendNmeaCommand("PMTK101");
       break;
     }
   }

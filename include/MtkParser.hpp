@@ -31,10 +31,11 @@ typedef struct _gpsrecord {
 typedef struct _parseinfo {
   uint16_t sectorId;
   uint32_t recordFormat;
-  uint8_t ignoreLength1;
-  uint8_t ignoreLength2;
+  uint8_t ignoreLen1;
+  uint8_t ignoreLen2;
+  uint8_t ignoreLen3;
+  uint8_t ignoreLen4;
   bool m241Mode;
-  //  bool newTrack;
   bool inTrack;
   gpsrecord_t firstRecord;
   gpsrecord_t lastRecord;

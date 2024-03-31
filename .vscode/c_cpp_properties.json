@@ -10,6 +10,7 @@
             "includePath": [
                 "/home/nurupo/Documents/PlatformIO/SmallStepM5S/include",
                 "/home/nurupo/Documents/PlatformIO/SmallStepM5S/src",
+                "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                 "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/BluetoothSerial/src",
                 "/home/nurupo/Documents/PlatformIO/SmallStepM5S/.pio/libdeps/m5stack-core-esp32/SdFat - Adafruit Fork/src",
                 "/home/nurupo/Documents/PlatformIO/SmallStepM5S/.pio/libdeps/m5stack-core-esp32/M5Stack/src",
@@ -215,7 +216,6 @@
                 "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/AsyncUDP/src",
                 "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src",
                 "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/DNSServer/src",
-                "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                 "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/ESP32/src",
                 "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/ESPmDNS/src",
                 "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/Ethernet/src",
@@ -242,6 +242,7 @@
                 "path": [
                     "/home/nurupo/Documents/PlatformIO/SmallStepM5S/include",
                     "/home/nurupo/Documents/PlatformIO/SmallStepM5S/src",
+                    "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                     "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/BluetoothSerial/src",
                     "/home/nurupo/Documents/PlatformIO/SmallStepM5S/.pio/libdeps/m5stack-core-esp32/SdFat - Adafruit Fork/src",
                     "/home/nurupo/Documents/PlatformIO/SmallStepM5S/.pio/libdeps/m5stack-core-esp32/M5Stack/src",
@@ -447,7 +448,6 @@
                     "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/AsyncUDP/src",
                     "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src",
                     "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/DNSServer/src",
-                    "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                     "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/ESP32/src",
                     "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/ESPmDNS/src",
                     "/home/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/Ethernet/src",
