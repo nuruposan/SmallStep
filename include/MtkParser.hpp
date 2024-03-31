@@ -6,16 +6,18 @@
 #include <string.h>
 #include <time.h>
 
+#include "MtkFileReader.hpp"
+
 typedef enum _trackmode {
   TRK_ONE_DAY = 0,  // divide trasks by local date (default)
   TRK_AS_IS = 1,    // put tracks as recorded
   TRK_SINGLE = 2    // put all trkpts into a single track
 } trackmode_t;
 
-typedef struct _parseopt {
+typedef struct _parseoption {
   trackmode_t trackMode;
   float timeOffset;
-} parseopt_t;
+} parseoption_t;
 
 typedef struct _gpsrecord {
   uint32_t format;
@@ -28,9 +30,9 @@ typedef struct _gpsrecord {
   uint8_t size;
 } gpsrecord_t;
 
-typedef struct _parseinfo {
+typedef struct _parsestatus {
   uint16_t sectorId;
-  uint32_t recordFormat;
+  uint32_t formatReg;
   uint8_t ignoreLen1;
   uint8_t ignoreLen2;
   uint8_t ignoreLen3;
@@ -41,7 +43,7 @@ typedef struct _parseinfo {
   gpsrecord_t lastRecord;
   uint32_t totalTracks;
   uint32_t totalRecords;
-} parseinfo_t;
+} parsestatus_t;
 
 class MtkParser {
  private:
@@ -57,19 +59,14 @@ class MtkParser {
   static const char PTN_M241_SP[];
   static const char PTN_SCT_END[];
 
-  File32 *in;
+  //  File32 *in;
+  MtkFileReader in;
   File32 *out;
-  parseopt_t options;
-  parseinfo_t progress;
+  parseoption_t options;
+  parsestatus_t status;
 
   bool isDifferentDate(uint32_t t1, uint32_t t2);
   bool matchBinPattern(const char *ptn, uint8_t len);
-  double readBinDouble();
-  float readBinFloat24();
-  float readBinFloat();
-  int32_t readBinInt8();
-  int32_t readBinInt16();
-  int32_t readBinInt32();
   bool readBinMarkers();
   bool readBinRecord(gpsrecord_t *rcd);
   void putGpxString(const char *line);

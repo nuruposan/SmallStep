@@ -29,6 +29,8 @@ bool LoggerManager::connect(String name) {
     disconnect();
   }
 
+  Serial.printf("LogMan.connect: connecting to %s\n", name);
+
   // register the event callback function
   if (eventCallback != NULL) {
     gpsSerial->register_callback(eventCallback);
@@ -39,12 +41,17 @@ bool LoggerManager::connect(String name) {
   return gpsSerial->connect(name);
 }
 
-bool LoggerManager::connect(uint8_t *address) {
+bool LoggerManager::connect(uint8_t *addr) {
   if (!sppStarted) {
     sppStarted = gpsSerial->begin("SmallStep", true);
   } else if (connected()) {
     disconnect();
   }
+
+  Serial.printf(
+      "LogMan.connect: "
+      "connecting to %02X%02X-%02X%02X-%02X%02X%\n",
+      addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
 
   // register the event callback function
   if (eventCallback != NULL) {
@@ -55,7 +62,7 @@ bool LoggerManager::connect(uint8_t *address) {
   gpsSerial->setPin("0000");
 
   // connect to the GPS logger and return the result
-  return gpsSerial->connect(address);
+  return gpsSerial->connect(addr);
 }
 
 bool LoggerManager::connected() {
@@ -127,7 +134,7 @@ bool LoggerManager::sendNmeaCommand(const char *cmd) {
 
   char sendbuf[256];
   sprintf(sendbuf, "$%s*%02X\r\n", cmd, calcNmeaChecksum(cmd));
-  Serial.printf("LogMan.sendCmd: >> %s", sendbuf);
+  // Serial.printf("LogMan.sendCmd: >> %s", sendbuf);
 
   // send the NMEA command to the GPS logger
   for (uint16_t i = 0; sendbuf[i] != 0; i++) {

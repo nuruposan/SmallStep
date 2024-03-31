@@ -116,6 +116,8 @@ appstatus_t appStatus;
 appconfig_t appConfig;
 
 void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
+  // Serial.printf("SmallStep.btEvent: event=%d\n", event);
+
   switch (event) {
     case ESP_SPP_OPEN_EVT:  // Bluetooth connection established
       // store the client address
@@ -415,8 +417,8 @@ void onPairToLoggerMenuSelected() {
     M5.Lcd.setCursor(10, (60 + (18 * (i + 2))));
     M5.Lcd.printf("Successfully paired with the discovered logger.");
     M5.Lcd.setCursor(10, (60 + (18 * (i + 3))));
-    M5.Lcd.printf("The logger address is %02X:%02X:%02X:%02X:%02X:%02X.",
-                  addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
+    M5.Lcd.printf("The logger address is %02X%02X-%02X%02X-%02X%02X.", addr[0],
+                  addr[1], addr[2], addr[3], addr[4], addr[5]);
 
     // copy the logger address to the configuration
     memcpy(appConfig.loggerAddress, addr, 6);
