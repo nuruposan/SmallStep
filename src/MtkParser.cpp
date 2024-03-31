@@ -1,25 +1,25 @@
 #include "MtkParser.hpp"
 
 typedef enum _fmtreg {
-  REG_TIME = 0x000001,
-  REG_VALID = 0x000002,
-  REG_LAT = 0x000004,
-  REG_LON = 0x000008,
-  REG_ELE = 0x000010,
-  REG_SPEED = 0x000020,
-  REG_TRACK = 0x000040,
-  REG_DSTA = 0x000080,
-  REG_DAGE = 0x000100,
-  REG_PDOP = 0x000200,
-  REG_HDOP = 0x000400,
-  REG_VDOP = 0x000800,
-  REG_NSAT = 0x001000,
-  REG_SID = 0x002000,
-  REG_ALT = 0x004000,
-  REG_AZI = 0x008000,
-  REG_SNR = 0x010000,
-  REG_RCR = 0x020000,
-  REG_MSEC = 0x040000
+  REG_TIME = 0x000001,   // uint32_
+  REG_VALID = 0x000002,  // uint16
+  REG_LAT = 0x000004,    // double / float(M-241)
+  REG_LON = 0x000008,    // double / float(M-241)
+  REG_ELE = 0x000010,    // float / float24(M-241)
+  REG_SPEED = 0x000020,  // float
+  REG_TRACK = 0x000040,  // float
+  REG_DSTA = 0x000080,   // uint16
+  REG_DAGE = 0x000100,   // float
+  REG_PDOP = 0x000200,   // uint16
+  REG_HDOP = 0x000400,   // uint16
+  REG_VDOP = 0x000800,   // uint16
+  REG_NSAT = 0x001000,   // uint16
+  REG_SID = 0x002000,    // uint32 (SIV)
+  REG_ALT = 0x004000,    // int16
+  REG_AZI = 0x008000,    // uint16
+  REG_SNR = 0x010000,    // uint16
+  REG_RCR = 0x020000,    // uint16
+  REG_MSEC = 0x040000    // uint16
 } formatreg_t;
 
 typedef enum _dspid {
@@ -193,21 +193,29 @@ bool MtkParser::isDifferentDate(uint32_t t1, uint32_t t2) {
 void MtkParser::setRecordFormat(uint32_t fmt) {
   progress.recordFormat = fmt;
 
-  progress.ignoreLength1 =
-      (sizeof(float) * (bool)(progress.recordFormat & REG_TRACK)) +
-      (sizeof(uint16_t) * (bool)(progress.recordFormat & REG_DSTA)) +
-      (sizeof(float) * (bool)(progress.recordFormat & REG_DAGE)) +
-      (sizeof(uint16_t) * (bool)(progress.recordFormat & REG_PDOP)) +
-      (sizeof(uint16_t) * (bool)(progress.recordFormat & REG_HDOP)) +
-      (sizeof(uint16_t) * (bool)(progress.recordFormat & REG_VDOP)) +
-      (sizeof(uint16_t) * (bool)(progress.recordFormat & REG_NSAT));
-  progress.ignoreLength2 =
-      (sizeof(int16_t) * (bool)(progress.recordFormat & REG_ALT)) +
-      (sizeof(uint16_t) * (bool)(progress.recordFormat & REG_AZI));
+  uint8_t readLen = sizeof(uint32_t) * (bool)(fmt & REG_TIME) +
+                    sizeof(double) * (bool)(fmt & REG_LAT) +
+                    sizeof(double) * (bool)(fmt & REG_LON) +
+                    sizeof(float) * (bool)(fmt & REG_ELE) +
+                    sizeof(float) * (bool)(fmt & REG_SPEED);
 
-  Serial.printf("Parser.setFormat: changed [fmtreg=0x%08X, ignLen={%d, %d}]\n",
-                progress.recordFormat, progress.ignoreLength1,
-                progress.ignoreLength2);
+  progress.ignoreLen1 = (sizeof(uint16_t) * (bool)(fmt & REG_VALID));
+  progress.ignoreLen2 = (sizeof(float) * (bool)(fmt & REG_TRACK)) +
+                        (sizeof(uint16_t) * (bool)(fmt & REG_DSTA)) +
+                        (sizeof(float) * (bool)(fmt & REG_DAGE)) +
+                        (sizeof(uint16_t) * (bool)(fmt & REG_PDOP)) +
+                        (sizeof(uint16_t) * (bool)(fmt & REG_HDOP)) +
+                        (sizeof(uint16_t) * (bool)(fmt & REG_VDOP)) +
+                        (sizeof(uint16_t) * (bool)(fmt & REG_NSAT));
+  progress.ignoreLen3 = (sizeof(int16_t) * (bool)(fmt & REG_ALT)) +
+                        (sizeof(uint16_t) * (bool)(fmt & REG_AZI));
+  progress.ignoreLen4 = (sizeof(uint16_t) * (bool)(fmt & REG_RCR)) +
+                        (sizeof(uint16_t) * (bool)(fmt & REG_MSEC));
+
+  Serial.printf(
+      "Parser.setFormat: changed [fmtreg=0x%08X, len={%d, %d, %d, %d}]\n",
+      progress.recordFormat, readLen, progress.ignoreLen1, progress.ignoreLen2,
+      progress.ignoreLen3);
 }
 
 float MtkParser::setTimeOffset(float offset) {
@@ -231,15 +239,15 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   // store the current record format
   rcd->format = progress.recordFormat;
 
-  // store the UTC (TIME) field
+  // read TIME field  (=UTC unixtime)
   if (progress.recordFormat & REG_TIME) {
+    // read value from data and correct GPS Week rollover
     rcd->time = readBinInt32();
-
-    // correct time if affected by the week number rollover
-    if (rcd->time < ROLLOVER_TIME) {
-      rcd->time += ROLLOVER_CORRECT;
-    }
+    if (rcd->time < ROLLOVER_TIME) rcd->time += ROLLOVER_CORRECT;
   }
+
+  // skip VALID field if it exists
+  in->seek(in->position() + progress.ignoreLen1);
 
   // store LAT/LON/ELE fields
   if (progress.m241Mode) {  // for Holux M-241
@@ -250,21 +258,22 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
     if (rcd->format & REG_LAT) rcd->latitude = readBinDouble();
     if (rcd->format & REG_LON) rcd->longitude = readBinDouble();
     if (rcd->format & REG_ELE) rcd->elevation = readBinFloat();
-  }  // if (progress.m241) else
+  }
 
-  // store the SPEED field
+  // read the SPEED field
   if (rcd->format & REG_SPEED) rcd->speed = readBinFloat() / 3.60;
 
-  // skip all of other fields (TRACK/DSTA/DAGE/PDOP/HDOP/VDOP/NSAT)
-  in->seek(in->position() + progress.ignoreLength1);
+  // skip all of other fields (TRACK/DSTA/DAGE/PDOP/HDOP/VDO/NSAT/ALT/AZI/SNR)
+  in->seek(in->position() + progress.ignoreLen2);
   if (rcd->format & REG_SID) {
     uint16_t siv =
         (uint16_t)(readBinInt32() & 0x0000FFFF);  // number of SATs in view
-    in->seek(in->position() + progress.ignoreLength2 +
+    in->seek(in->position() + progress.ignoreLen3 +
              (siv * (sizeof(uint16_t) * (bool)(rcd->format & REG_SNR))));
-  }  // if (progress.format & REG_SID)
+  }
+  in->seek(in->position() + progress.ignoreLen4);
 
-  // get current record size from FILE* position and calculate the checksum
+  // calc current record size from FILE* position and calculate the checksum
   rcd->size = (in->position() - startPos);
   uint8_t checksum = 0;
   in->seek(startPos);
@@ -338,7 +347,8 @@ bool MtkParser::readBinMarkers() {
     match = true;
 
     Serial.printf("Parser.readMarker: M-241 marker at 0x%05X\n", startPos);
-  } else if (matchBinPattern(PTN_SCT_END, sizeof(PTN_SCT_END))) {  // sector end
+  } else if (matchBinPattern(PTN_SCT_END,
+                             sizeof(PTN_SCT_END))) {  // sector end
     // seek sector position to the next
     progress.sectorId += 1;
     match = true;

@@ -47,8 +47,8 @@ typedef struct _appstatus {
 } appstatus_t;
 
 typedef struct appconfig {
+  uint8_t length;            // app - sizeof(appconfig_t)
   uint32_t release;          // app - release number
-  uint16_t length;           // app - sizeof(appconfig_t)
   uint32_t sdAccessSpeed;    // app - SD card access speed (Hz)
   uint8_t loggerAddress[6];  // app - address of paired logger
   uint8_t loggerModel;       // logger model ID of pairded logger
@@ -63,7 +63,7 @@ typedef struct appconfig {
 
 // ******** function prototypes ********
 void saveAppConfig();
-void readAppConfig();
+bool loadAppConfig();
 void onBluetoothDiscoverCallback(esp_spp_cb_event_t, esp_spp_cb_param_t *);
 void downloadProgress(int32_t progress);
 void onDownloadMenuSelected();
@@ -92,7 +92,7 @@ void onDialogNaviButtonPress(btnid_t);
 
 const char APP_NAME[] = "SmallStepM5S";
 const char APP_VERSION[] = "v0.01";
-const char LCD_BRIGHTNESS = 16;
+const char LCD_BRIGHTNESS = 10;
 
 const int16_t COLOR_SCREEN = BLACK;
 const int16_t COLOR_TITLE_BACK = LIGHTGREY;
@@ -219,11 +219,8 @@ void onDownloadMenuSelected() {
 
   if (!validAddress(appConfig.loggerAddress)) {
     M5.Lcd.setTextColor(RED);
-    M5.Lcd.drawString("The logger address is not set.", 10, 60);
-    M5.Lcd.drawString("Please pair with the logger first.", 10, (60 + 18));
-
-    Serial.printf("DEBUG: logger address is not set.\n");
-
+    M5.Lcd.drawString("Pairing has not been done yet.", 10, (60));
+    M5.Lcd.drawString("Please pair with your logger first.", 10, (60 + 18));
     return;
   }
 
@@ -231,13 +228,10 @@ void onDownloadMenuSelected() {
   File32 binFileW = SDcard.open(TEMP_BIN, (O_CREAT | O_WRITE | O_TRUNC));
   if (!binFileW) {
     M5.Lcd.setTextColor(RED);
-    M5.Lcd.drawString("Could not open files on the SD card.", 10, 60);
+    M5.Lcd.drawString("Could not open files on the SD card.", 10, (60));
     M5.Lcd.drawString("- Make sure SD card is available.", 10, (60 + 18));
     M5.Lcd.drawString("  It must be a <16GB, FAT32 formatted card.", 10,
                       (60 + 36));
-
-    Serial.printf("DEBUG: failed to create a file for download.\n");
-
     return;
   }
 
@@ -250,8 +244,6 @@ void onDownloadMenuSelected() {
     M5.Lcd.drawString("- Make sure Bluetooth on logger is enabled", 10,
                       (60 + 18));
     M5.Lcd.drawString("- Power cycling may fix this problem", 10, (60 + 36));
-
-    Serial.printf("DEBUG: failed to connect to the GPS logger.\n");
 
     binFileW.close();
     return;
@@ -320,7 +312,7 @@ void onDownloadMenuSelected() {
   SDcard.rename(TEMP_GPX, gpxName);
 
   M5.Lcd.setTextColor(BLUE);
-  M5.Lcd.drawString("The GPS log is saved to", 10, (60 + 54));
+  M5.Lcd.drawString("The downloaded GPS log is saved to", 10, (60 + 54));
   M5.Lcd.drawString(gpxName, 10, (60 + 72));
 }
 
@@ -372,7 +364,7 @@ void onFixRTCMenuSelected() {
   M5.Lcd.setTextColor(BLACK);
   M5.Lcd.drawString("Fixing RTC time... done.", 10, 60 + 18);
   M5.Lcd.setTextColor(BLUE);
-  M5.Lcd.drawString("Finished. The correct time will be recorded", 10, 60 + 36);
+  M5.Lcd.drawString("The correct time will be recorded", 10, 60 + 36);
   M5.Lcd.drawString("from the next record onward.", 10, 60 + 54);
 
   logger.disconnect();
@@ -391,36 +383,37 @@ void onSetPresetConfigMenuSelected() {
 void onPairToLoggerMenuSelected() {
   const String DEVICE_NAMES[] = {"747PRO GPS", "HOLUX_M-241"};
 
-  drawDialog("Link to Logger");
+  drawDialog("Pair with Logger");
 
   M5.Lcd.setTextColor(BLACK);
-  M5.Lcd.drawString("Discovering GPS logger", 10, 60);
+  M5.Lcd.drawString("Discovering GPS logger...", 10, 60);
 
   for (int i = 0; i < 2; i++) {
     M5.Lcd.setTextColor(BLUE);
     M5.Lcd.setCursor(10, (60 + (18 * (i + 1))));
-    M5.Lcd.printf("%s...", DEVICE_NAMES[i]);
+    M5.Lcd.printf("- %s", DEVICE_NAMES[i]);
 
     M5.Lcd.setCursor(10, (60 + (18 * (i + 1))));
     if (!logger.connect(DEVICE_NAMES[i])) {  // try to connect
       // failed to connect
       M5.Lcd.setTextColor(RED);
-      M5.Lcd.printf("%s... not found.", DEVICE_NAMES[i]);
+      M5.Lcd.printf("- %s :  not found.", DEVICE_NAMES[i]);
 
       // try to discover the next
       continue;
     }
 
+    delay(500);
     logger.disconnect();
 
     uint8_t addr[6];
     memcpy(addr, appStatus.sppClientAddr, 6);
 
     M5.Lcd.setTextColor(BLACK);
-    M5.Lcd.printf("%s... FOUND!", DEVICE_NAMES[i]);
+    M5.Lcd.printf("- %s : found.", DEVICE_NAMES[i]);
     M5.Lcd.setTextColor(BLUE);
     M5.Lcd.setCursor(10, (60 + (18 * (i + 2))));
-    M5.Lcd.printf("Successfully paired with this logger.");
+    M5.Lcd.printf("Successfully paired with the discovered logger.");
     M5.Lcd.setCursor(10, (60 + (18 * (i + 3))));
     M5.Lcd.printf("The logger address is %02X:%02X:%02X:%02X:%02X:%02X.",
                   addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
@@ -428,7 +421,6 @@ void onPairToLoggerMenuSelected() {
     // copy the logger address to the configuration
     memcpy(appConfig.loggerAddress, addr, 6);
     saveAppConfig();
-
     break;
   }
 }
@@ -752,7 +744,7 @@ void saveAppConfig() {
   return;
 }
 
-void readAppConfig() {
+bool loadAppConfig() {
   uint8_t cfgdata[sizeof(appconfig_t)];
   uint8_t chk = 0;
   for (int8_t i = 0; i < sizeof(appconfig_t); i++) {
@@ -761,15 +753,19 @@ void readAppConfig() {
   }
   memcpy(&appConfig, cfgdata, sizeof(appconfig_t));
 
-  if (chk != EEPROM.read(sizeof(appconfig_t))) {
-    Serial.printf("SmallStep.readConfig: invalid configuration\n");
-    // memset(&appConfig, 0, sizeof(appconfig_t));
-    return;
+  // if checksum is invalid, clear configuration
+  if ((appConfig.length != sizeof(appConfig)) ||
+      (EEPROM.read(sizeof(appconfig_t) != chk))) {
+    memset(&appConfig, 0, sizeof(appconfig_t));
+    appConfig.length = sizeof(appconfig_t);
+    saveAppConfig();
+
+    return false;
   }
 
-  Serial.printf("SmallStep.readConfig: configuration loaded\n");
+  Serial.printf("SmallStep.loadConfig: configuration restored\n");
 
-  return;
+  return true;
 }
 
 void setup() {
@@ -787,7 +783,7 @@ void setup() {
   memset(&appConfig, 0, sizeof(appConfig));
 
   EEPROM.begin(sizeof(appconfig_t) + 1);
-  readAppConfig();
+  loadAppConfig();
 
   // initialize the SD card
   if (!SDcard.begin(GPIO_NUM_4, SD_ACCESS_SPEED)) {
@@ -826,7 +822,7 @@ void setup() {
   appStatus.menu.items[3].caption = "Erase Log";
   appStatus.menu.items[3].iconData = ICON_ERASE_LOG;
   appStatus.menu.items[3].onSelected = &(onEraseLogMenuSelected);
-  appStatus.menu.items[4].caption = "Link to Logger";
+  appStatus.menu.items[4].caption = "Pair w/ Logger";
   appStatus.menu.items[4].iconData = ICON_PAIR_LOGGER;
   appStatus.menu.items[4].onSelected = &(onPairToLoggerMenuSelected);
   appStatus.menu.items[5].caption = "App Settings";
