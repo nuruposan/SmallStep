@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+
 #define BP_BUFFER_SIZE 512
 
 typedef struct bufferpage {

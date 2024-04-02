@@ -1,3 +1,5 @@
+#pragma once
+
 const uint8_t ICON_APP[] = {
     16,             // Width
     12,             // Height

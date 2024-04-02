@@ -1,9 +1,10 @@
+#pragma once
 
 #include <SdFat.h>
 
 class MtkFileReader {
  private:
-  static const uint16_t PAGE_SIZE = 512;  // > 512 (MtkParser.HEADER_SIZE)
+  static const uint16_t PAGE_SIZE = 512;  // >= 512 (MtkParser.HEADER_SIZE)
   static const uint16_t PAGE_CENTER = (PAGE_SIZE / 2);
   static const uint16_t BUF_SIZE = (PAGE_SIZE * 2);
 
@@ -13,21 +14,21 @@ class MtkFileReader {
   uint16_t ptr;
   uint32_t mpos;
 
-  int8_t read();
+
+  void read(void *dst, int8_t len);
 
  public:
-  MtkFileReader();
+  MtkFileReader(File32 *input);
   ~MtkFileReader();
-  uint32_t backToMarkPos();
+  uint32_t moveToMark();
   uint32_t filesize();
-  void init(File32 *f);
-  uint32_t markPos();
+  uint32_t setMark();
   uint32_t position();
   float readFloat();
   float readFloat24();
   double readDouble();
-  int32_t readInt8();
-  int32_t readInt16();
+  int8_t readInt8();
+  int16_t readInt16();
   int32_t readInt32();
   uint32_t seekCur(uint16_t mv);
 };

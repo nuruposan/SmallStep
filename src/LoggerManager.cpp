@@ -1,8 +1,6 @@
-#include "LoggerManager.hpp"
+#include "LoggerManager.h"
 
 LoggerManager::LoggerManager() {
-  Serial.printf("DEBUG: LoggerManager::LoggerManager()\n");
-
   memset(&address, 0, sizeof(address));
   gpsSerial = new BluetoothSerial();
   buffer = new ReceiveBuffer();
@@ -206,10 +204,10 @@ bool LoggerManager::getLastRecordAddress(int32_t *address) {
 }
 
 bool LoggerManager::downloadLogData(File32 *output, void (*callback)(int)) {
-  const uint8_t MAX_RETRY = 5;
+  const uint8_t MAX_RETRY = 3;
 
   bool nextReq = true;
-  int32_t reqSize = 0x2000;
+  int32_t reqSize = 0x4000;
   int32_t recvSize = 0;
   int32_t endAddr = 0;
   int32_t nextAddr = 0x000000;
