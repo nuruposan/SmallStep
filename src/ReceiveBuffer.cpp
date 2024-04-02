@@ -1,4 +1,4 @@
-#include "ReceiveBuffer.hpp"
+#include "ReceiveBuffer.h"
 
 #include <stdio.h>
 #include <stdlib.h>

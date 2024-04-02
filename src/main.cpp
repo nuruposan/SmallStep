@@ -2,8 +2,8 @@
 #include <M5Stack.h>
 #include <SdFat.h>
 
-#include "LoggerManager.hpp"
-#include "MtkParser.hpp"
+#include "LoggerManager.h"
+#include "MtkParser.h"
 #include "Resources.h"
 
 #define SD_ACCESS_SPEED 15000000  // 20MHz may cause SD card error

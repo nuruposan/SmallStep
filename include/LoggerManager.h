@@ -4,7 +4,7 @@
 #include <EEPROM.h>
 #include <SdFat.h>
 
-#include "ReceiveBuffer.hpp"
+#include "ReceiveBuffer.h"
 
 typedef enum _sizeinfo {
   SIZE_REPLY = 0x00000800,

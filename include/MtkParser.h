@@ -1,12 +1,19 @@
 #pragma once
 
 #include <SdFat.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
 
-#include "MtkFileReader.hpp"
+#include "CommonTypes.h"
+#include "GpxFileWriter.h"
+#include "MtkFileReader.h"
+
+typedef enum _dspid {
+  DSP_CHANGE_FORMAT = 2,
+  DSP_AUTOLOG_SECOND = 3,
+  DSP_AUTOLOG_METER = 4,
+  DSP_AUTOLOG_SPEED = 5,
+  DSP_CHANGE_METHOD = 6,
+  DSP_LOG_STARTSTOP = 7
+} dspid_t;
 
 typedef enum _trackmode {
   TRK_ONE_DAY = 0,  // divide trasks by local date (default)
@@ -19,49 +26,36 @@ typedef struct _parseoption {
   float timeOffset;
 } parseoption_t;
 
-typedef struct _gpsrecord {
-  uint32_t format;
-  uint32_t time;
-  double latitude;
-  double longitude;
-  float elevation;
-  float speed;
-  bool valid;
-  uint8_t size;
-} gpsrecord_t;
-
 typedef struct _parsestatus {
-  uint16_t sectorId;
+  uint16_t sectorPos;
   uint32_t formatReg;
   uint8_t ignoreLen1;
   uint8_t ignoreLen2;
   uint8_t ignoreLen3;
   uint8_t ignoreLen4;
   bool m241Mode;
-  bool inTrack;
   gpsrecord_t firstRecord;
   gpsrecord_t lastRecord;
-  uint32_t totalTracks;
-  uint32_t totalRecords;
 } parsestatus_t;
 
 class MtkParser {
  private:
-  static const uint32_t SIZE_HEADER;
-  static const uint32_t SIZE_SECTOR;
+  const uint32_t SIZE_SECTOR = 0x010000;  // 65536 bytes
+  const uint32_t SIZE_HEADER = 0x000200;  // 512 bytes
 
-  static const uint32_t ROLLOVER_TIME;
-  static const uint32_t ROLLOVER_CORRECT;
+  const uint32_t ROLLOVER_TIME = 1554595200;    // 2019-04-07
+  const uint32_t ROLLOVER_CORRECT = 619315200;  // 1024 weeks
 
-  static const char PTN_DSET_AA[];
-  static const char PTN_DSET_BB[];
-  static const char PTN_M241[];
-  static const char PTN_M241_SP[];
-  static const char PTN_SCT_END[];
+  const char PTN_DSET_AA[7] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
+  const char PTN_DSET_BB[4] = {0xBB, 0xBB, 0xBB, 0xBB};
+  const char PTN_M241[16] = {'H', 'O', 'L', 'U', 'X', 'G', 'R', '2',
+                             '4', '1', 'L', 'O', 'G', 'G', 'E', 'R'};
+  const char PTN_M241_SP[4] = {' ', ' ', ' ', ' '};
+  const char PTN_SCT_END[16] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-  //  File32 *in;
-  MtkFileReader in;
-  File32 *out;
+  MtkFileReader *in;
+  GpxFileWriter *out;
   parseoption_t options;
   parsestatus_t status;
 
@@ -69,12 +63,6 @@ class MtkParser {
   bool matchBinPattern(const char *ptn, uint8_t len);
   bool readBinMarkers();
   bool readBinRecord(gpsrecord_t *rcd);
-  void putGpxString(const char *line);
-  void putGpxXmlStart();
-  void putGpxXmlEnd();
-  void putGpxTrackStart();
-  void putGpxTrackEnd();
-  void putGpxTrackPoint(gpsrecord_t *rcd);
   void setRecordFormat(uint32_t fmt);
 
  public:
