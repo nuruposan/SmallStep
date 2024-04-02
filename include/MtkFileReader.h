@@ -14,7 +14,6 @@ class MtkFileReader {
   uint16_t ptr;
   uint32_t mpos;
 
-
   void read(void *dst, int8_t len);
 
  public:

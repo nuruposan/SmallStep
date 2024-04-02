@@ -14,29 +14,29 @@
 
 typedef enum { BID_BTN_A = 0, BID_BTN_B = 1, BID_BTN_C = 2 } btnid_t;
 
-typedef struct _naviitem {
+typedef struct {
   const char *caption;
   bool disabled;
 } naviitem_t;
 
-typedef struct _navimenu {
+typedef struct {
   naviitem_t items[3];
   void (*onButtonPress)(btnid_t);
 } navimenu_t;
 
-typedef struct _menuitem {
+typedef struct {
   const char *caption;
   const uint8_t *iconData;
   bool disabled;
   void (*onSelected)();
 } menuitem_t;
 
-typedef struct _mainmenu {
+typedef struct {
   menuitem_t items[6];
   int8_t selectedIndex;
 } mainmenu_t;
 
-typedef struct _appstatus {
+typedef struct {
   navimenu_t *navi;
   navimenu_t *prevNavi;
   mainmenu_t menu;
@@ -46,12 +46,10 @@ typedef struct _appstatus {
   uint8_t sppClientAddr[6];
 } appstatus_t;
 
-typedef struct appconfig {
-  uint8_t length;            // app - sizeof(appconfig_t)
-  uint32_t release;          // app - release number
-  uint32_t sdAccessSpeed;    // app - SD card access speed (Hz)
+typedef struct {
+  uint16_t length;           // sizeof(appconfig_t)
   uint8_t loggerAddress[6];  // app - address of paired logger
-  uint8_t loggerModel;       // logger model ID of pairded logger
+  char loggerModel[24];      // logger model ID of pairded logger
   logformat_t logFormat;     // logger - what to record
   uint16_t logByDistance;  // logger - auto log by distance (meter, 0: disable)
   uint16_t logByTime;      // logger - auto log by time (seconds, 0: disable)
@@ -119,15 +117,19 @@ void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   // Serial.printf("SmallStep.btEvent: event=%d\n", event);
 
   switch (event) {
-    case ESP_SPP_OPEN_EVT:  // Bluetooth connection established
-      // store the client address
-      memcpy(appStatus.sppClientAddr, param->open.rem_bda, 6);
-
+    case ESP_SPP_INIT_EVT:
       // store the connection status and update the title bar
       appStatus.sppConnected = true;
       drawTitleBar();
 
       break;
+    case ESP_SPP_OPEN_EVT:  // Bluetooth connection established
+      // store the client address
+      memcpy(appStatus.sppClientAddr, param->open.rem_bda, 6);
+
+      break;
+
+    case ESP_SPP_UNINIT_EVT:
     case ESP_SPP_CLOSE_EVT:  // Bluetooth connection closed
       // store the connection status and update the title bar
       appStatus.sppConnected = false;
@@ -729,14 +731,14 @@ void onMainNaviButtonPress(btnid_t bid) {
 }
 
 void saveAppConfig() {
-  uint8_t cfgdata[sizeof(appconfig_t)];
+  uint8_t *pcfg = (uint8_t *)(&appConfig);
   uint8_t chk = 0;
-  memcpy(cfgdata, &appConfig, sizeof(appconfig_t));
 
   // write configuration data to EEPROM
   for (int8_t i = 0; i < sizeof(appconfig_t); i++) {
-    EEPROM.write(i, cfgdata[i]);
-    chk ^= cfgdata[i];
+    EEPROM.write(i, *pcfg);
+    chk ^= *pcfg;
+    pcfg += 1;
   }
   EEPROM.write(sizeof(appconfig_t), chk);
   EEPROM.commit();
@@ -747,25 +749,27 @@ void saveAppConfig() {
 }
 
 bool loadAppConfig() {
-  uint8_t cfgdata[sizeof(appconfig_t)];
+  uint8_t *pcfg = (uint8_t *)&appConfig;
   uint8_t chk = 0;
+
   for (int8_t i = 0; i < sizeof(appconfig_t); i++) {
-    cfgdata[i] = EEPROM.read(i);
-    chk ^= cfgdata[i];
+    *pcfg = EEPROM.read(i);
+    chk ^= *pcfg;
+    pcfg += 1;
   }
-  memcpy(&appConfig, cfgdata, sizeof(appconfig_t));
 
   // if checksum is invalid, clear configuration
   if ((appConfig.length != sizeof(appConfig)) ||
       (EEPROM.read(sizeof(appconfig_t) != chk))) {
     memset(&appConfig, 0, sizeof(appconfig_t));
     appConfig.length = sizeof(appconfig_t);
-    saveAppConfig();
+
+    Serial.printf("SmallStep.loadConfig: default configuration loaded\n");
 
     return false;
   }
 
-  Serial.printf("SmallStep.loadConfig: configuration restored\n");
+  Serial.printf("SmallStep.loadConfig: configuration data loaded\n");
 
   return true;
 }

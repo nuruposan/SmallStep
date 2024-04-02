@@ -27,16 +27,28 @@ bool LoggerManager::connect(String name) {
     disconnect();
   }
 
-  Serial.printf("LogMan.connect: connecting to %s\n", name);
+  Serial.printf("LogMan.connect: connect to %s\n", name);
 
-  // register the event callback function
-  if (eventCallback != NULL) {
-    gpsSerial->register_callback(eventCallback);
-  }
-  gpsSerial->setTimeout(1000);
+  //  gpsSerial->setTimeout(1000);
   gpsSerial->setPin("0000");
 
-  return gpsSerial->connect(name);
+  if (eventCallback != NULL) {
+    gpsSerial->register_callback(eventCallback);
+
+    // notify INIT event to the callback function manually
+    // because INIT callback is not called in case of trying connect repeately
+    eventCallback(ESP_SPP_INIT_EVT, NULL);
+  }
+
+  bool conn = gpsSerial->connect(name);
+
+  if ((!conn) && (eventCallback != NULL)) {
+    // if connection failed, notify UNINIT manually
+    // because the event callback is not called in this case
+    eventCallback(ESP_SPP_UNINIT_EVT, NULL);
+  }
+
+  return conn;
 }
 
 bool LoggerManager::connect(uint8_t *addr) {
@@ -48,19 +60,32 @@ bool LoggerManager::connect(uint8_t *addr) {
 
   Serial.printf(
       "LogMan.connect: "
-      "connecting to %02X%02X-%02X%02X-%02X%02X%\n",
+      "connect to logger %02X%02X-%02X%02X-%02X%02X%\n",
       addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
+
+  // start the SPP as master and set PIN code
+  //  gpsSerial->setTimeout(1000);
+  gpsSerial->setPin("0000");
 
   // register the event callback function
   if (eventCallback != NULL) {
     gpsSerial->register_callback(eventCallback);
+
+    // notify INIT event to the callback function manually
+    // because INIT callback is not called in case of trying connect repeately
+    eventCallback(ESP_SPP_INIT_EVT, NULL);
   }
-  // start the SPP as master and set PIN code
-  gpsSerial->setTimeout(1000);
-  gpsSerial->setPin("0000");
+
+  bool conn = gpsSerial->connect(addr);
+
+  if ((!conn) && (eventCallback != NULL)) {
+    // if connection failed, notify UNINIT manually
+    // because the event callback is not called in this case
+    eventCallback(ESP_SPP_UNINIT_EVT, NULL);
+  }
 
   // connect to the GPS logger and return the result
-  return gpsSerial->connect(addr);
+  return conn;
 }
 
 bool LoggerManager::connected() {
