@@ -63,24 +63,25 @@ bool LoggerManager::connect(uint8_t *addr) {
       "connect to logger %02X%02X-%02X%02X-%02X%02X%\n",
       addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
 
-  // start the SPP as master and set PIN code
-  //  gpsSerial->setTimeout(1000);
-  gpsSerial->setPin("0000");
-
-  // register the event callback function
+  // register event callback function
   if (eventCallback != NULL) {
     gpsSerial->register_callback(eventCallback);
 
     // notify INIT event to the callback function manually
     // because INIT callback is not called in case of trying connect repeately
     eventCallback(ESP_SPP_INIT_EVT, NULL);
+    delay(1000);
   }
+
+  // start the SPP as master and set PIN code
+  gpsSerial->setTimeout(1000);
+  gpsSerial->setPin("0000");
 
   bool conn = gpsSerial->connect(addr);
 
+  // if connection failed, notify UNINIT event manually because the event
+  // callback is not called in this case
   if ((!conn) && (eventCallback != NULL)) {
-    // if connection failed, notify UNINIT manually
-    // because the event callback is not called in this case
     eventCallback(ESP_SPP_UNINIT_EVT, NULL);
   }
 

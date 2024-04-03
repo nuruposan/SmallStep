@@ -161,9 +161,7 @@ bool MtkParser::readBinMarkers() {
           setRecordFormat(dsVal);
           break;
         case DSP_LOG_STARTSTOP:  // log start/stop
-          if (options.trackMode == TRK_AS_IS) {
-            out->endTrack();
-          }
+          if (options.trackMode == TRK_AS_IS) out->endTrack();
           break;
       }
 
@@ -242,15 +240,14 @@ bool MtkParser::convert(File32 *input, File32 *output,
     }
 
     if ((options.trackMode == TRK_ONE_DAY) &&
-        (isDifferentDate(status.lastRecord.time, rcd.time))) {
-      out->startTrack();
+        (isDifferentDate(status.lastTrkpt.time, rcd.time))) {
+      out->endTrack();
     }
 
-    Serial.printf("%05X: ", pos);
     out->putTrkpt(rcd);
 
-    if (status.firstRecord.time == 0) status.firstRecord = rcd;
-    status.lastRecord = rcd;
+    if (status.firstTrkpt.time == 0) status.firstTrkpt = rcd;
+    status.lastTrkpt = rcd;
 
     if ((in->position() + rcd.size) >= sectorEnd) {
       status.sectorPos += 1;
@@ -270,11 +267,16 @@ bool MtkParser::convert(File32 *input, File32 *output,
   out->endXml();
   out->flush();
 
+  status.trackCount = out->getTrackCount();
+  status.trkptCount = out->getTrkptCount();
+
   delete in;
   delete out;
 
   return (fileend);
 }
 
-uint32_t MtkParser::getFirstRecordTime() { return status.firstRecord.time; }
-uint32_t MtkParser::getLastRecordTime() { return status.lastRecord.time; }
+gpsrecord_t MtkParser::getFirstTrkpt() { return status.firstTrkpt; }
+gpsrecord_t MtkParser::getLastTrkpt() { return status.lastTrkpt; }
+uint32_t MtkParser::getTrackCount() { return status.trackCount; }
+uint32_t MtkParser::getTrkptCount() { return status.trkptCount; }

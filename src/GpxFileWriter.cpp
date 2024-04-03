@@ -27,7 +27,6 @@ void GpxFileWriter::startXml() {
       "<gpx version=\"1.1\" creator=\"SmallStep M5Stack v0.01\""
       " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema\""
       " xmlns=\"https://www.topografix.com/GPX/1/1/gpx.xsd\">\n");
-
   inTrack = false;
 }
 
@@ -78,4 +77,9 @@ void GpxFileWriter::putTrkpt(gpsrecord_t rcd) {
   }
 
   out->write("</trkpt>\n");
+
+  points += 1;
 }
+
+int32_t GpxFileWriter::getTrackCount() { return tracks; }
+int32_t GpxFileWriter::getTrkptCount() { return points; }

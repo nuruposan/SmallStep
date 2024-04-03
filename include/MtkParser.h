@@ -6,7 +6,7 @@
 #include "GpxFileWriter.h"
 #include "MtkFileReader.h"
 
-typedef enum _dspid {
+typedef enum {
   DSP_CHANGE_FORMAT = 2,
   DSP_AUTOLOG_SECOND = 3,
   DSP_AUTOLOG_METER = 4,
@@ -15,18 +15,18 @@ typedef enum _dspid {
   DSP_LOG_STARTSTOP = 7
 } dspid_t;
 
-typedef enum _trackmode {
+typedef enum {
   TRK_ONE_DAY = 0,  // divide trasks by local date (default)
   TRK_AS_IS = 1,    // put tracks as recorded
   TRK_SINGLE = 2    // put all trkpts into a single track
 } trackmode_t;
 
-typedef struct _parseoption {
+typedef struct {
   trackmode_t trackMode;
   float timeOffset;
 } parseoption_t;
 
-typedef struct _parsestatus {
+typedef struct {
   uint16_t sectorPos;
   uint32_t formatReg;
   uint8_t ignoreLen1;
@@ -34,8 +34,10 @@ typedef struct _parsestatus {
   uint8_t ignoreLen3;
   uint8_t ignoreLen4;
   bool m241Mode;
-  gpsrecord_t firstRecord;
-  gpsrecord_t lastRecord;
+  gpsrecord_t firstTrkpt;
+  gpsrecord_t lastTrkpt;
+  uint32_t trackCount;
+  uint32_t trkptCount;
 } parsestatus_t;
 
 class MtkParser {
@@ -70,6 +72,8 @@ class MtkParser {
   ~MtkParser();
   float setTimeOffset(float offset);
   bool convert(File32 *input, File32 *output, void (*callback)(int32_t));
-  uint32_t getFirstRecordTime();
-  uint32_t getLastRecordTime();
+  gpsrecord_t getFirstTrkpt();
+  gpsrecord_t getLastTrkpt();
+  uint32_t getTrackCount();
+  uint32_t getTrkptCount();
 };

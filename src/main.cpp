@@ -88,8 +88,7 @@ void onDialogOKButtonClick();
 void onDialogCancelButtonClick();
 void onDialogNaviButtonPress(btnid_t);
 
-const char APP_NAME[] = "SmallStepM5S";
-const char APP_VERSION[] = "v0.01";
+const char APP_NAME[] = "SmallStep";
 const char LCD_BRIGHTNESS = 10;
 
 const int16_t COLOR_SCREEN = BLACK;
@@ -109,7 +108,6 @@ const int16_t COLOR_NAVI_TEXT = BLACK;
 TFT_eSprite sprite = TFT_eSprite(&M5.Lcd);
 SdFat SDcard;
 LoggerManager logger = LoggerManager();
-MtkParser parser = MtkParser();
 appstatus_t appStatus;
 appconfig_t appConfig;
 
@@ -146,6 +144,38 @@ void drawProgressBar(uint8_t progress) {
   M5.Lcd.progressBar(10, 180, 300, 16, progress);
 }
 
+void drawDialogMessage(int16_t color, int8_t row, String msg) {
+  const int16_t MSG_LEFT = 10;
+  const int16_t MSG_TOP = 60;
+  const int16_t ROW_HEIGHT = 18;
+
+  // set the text font and size (16px ASCII)
+  M5.Lcd.setTextFont(2);
+  M5.Lcd.setTextSize(1);
+
+  // print the message text
+  M5.Lcd.setTextColor(color);
+  M5.Lcd.setCursor(MSG_LEFT, (MSG_TOP + (ROW_HEIGHT * row)));
+  M5.Lcd.print(msg);
+}
+
+void drawDialogMessage(int16_t color, int8_t row, String msgs[], int8_t lines) {
+  const int16_t MSG_LEFT = 10;
+  const int16_t MSG_TOP = 60;
+  const int16_t ROW_HEIGHT = 18;
+
+  // set the text font and size (16px ASCII)
+  M5.Lcd.setTextFont(2);
+  M5.Lcd.setTextSize(1);
+
+  // print the message text
+  M5.Lcd.setTextColor(color);
+  for (int8_t i = 0; i < lines; i++) {
+    M5.Lcd.setCursor(MSG_LEFT, (MSG_TOP + (ROW_HEIGHT * (row + i))));
+    M5.Lcd.print(msgs[i]);
+  }
+}
+
 void drawDialog(const char *title) {
   const int16_t MARGIN = 4;
   const int16_t DIALOG_X = MARGIN;
@@ -171,10 +201,6 @@ void drawDialog(const char *title) {
   // transfer the sprite to the LCD
   sprite.pushSprite(DIALOG_X, DIALOG_Y);
   sprite.deleteSprite();
-
-  // set the default font and color for the message text
-  M5.Lcd.setTextFont(2);
-  M5.Lcd.setTextSize(1);
 }
 
 /**
@@ -197,6 +223,8 @@ void drawDialog(const char *title) {
  CLEAR_MEMORY_RESPONSE  = "^\\$(PMTK001,182,6,(3))\\*(\\w+)$"; private static
  final String FACTORY_RESET_COMMAND  = "PMTK104"; private static final String
  RESTART_RESPONSE       = "^\\$(PMTK010,(001))\\*(\\w+)$";
+
+ change format: PMTK182,1,2,80060E7F
  */
 
 void downloadProgress(int32_t progress) { drawProgressBar(progress); }
@@ -218,106 +246,108 @@ void onDownloadMenuSelected() {
   const char GPX_PREFIX[] = "gpslog_";
   const char DATETIME_FMT[] = "%04d%02d%02d-%02d%02d%02d";
 
-  // draw a dialog frame
+  // draw dialog frame
   drawDialog("Download Log");
 
-  if (!validAddress(appConfig.loggerAddress)) {
-    M5.Lcd.setTextColor(RED);
-    M5.Lcd.drawString("Pairing has not been done yet.", 10, (60));
-    M5.Lcd.drawString("Please pair with your logger first.", 10, (60 + 18));
-    return;
-  }
-
-  // open a file for download
+  // open a binary file for writing the downloaded data
   File32 binFileW = SDcard.open(TEMP_BIN, (O_CREAT | O_WRITE | O_TRUNC));
-  if (!binFileW) {
-    M5.Lcd.setTextColor(RED);
-    M5.Lcd.drawString("Could not open files on the SD card.", 10, (60));
-    M5.Lcd.drawString("- Make sure SD card is available.", 10, (60 + 18));
-    M5.Lcd.drawString("  It must be a <16GB, FAT32 formatted card.", 10,
-                      (60 + 36));
+
+  if (!validAddress(appConfig.loggerAddress)) {
+    String msgs[] = {"Pairing has not been done yet.",
+                     "- Pair with your logger first"};
+    drawDialogMessage(RED, 0, msgs, 2);
+    return;
+  } else if (!binFileW) {
+    String msgs[] = {"Could not open file on the SD card.",
+                     "- Make sure SD card is available.",
+                     "  It must be a <16GB, FAT32 formatted card."};
+    drawDialogMessage(RED, 0, msgs, 3);
     return;
   }
 
-  M5.Lcd.setTextColor(BLUE);
-  M5.Lcd.drawString("Connecting to GPS logger...", 10, 60);
+  // print the progress message
+  drawDialogMessage(BLUE, 0, "Connecting to GPS logger...");
 
+  // connect to the logger
   if (!logger.connect(appConfig.loggerAddress)) {
-    M5.Lcd.setTextColor(RED);
-    M5.Lcd.drawString("Connecting to GPS logger... failed.", 10, 60);
-    M5.Lcd.drawString("- Make sure Bluetooth on logger is enabled", 10,
-                      (60 + 18));
-    M5.Lcd.drawString("- Power cycling may fix this problem", 10, (60 + 36));
+    String msgs[] = {"Connecting to GPS logger... failed.",
+                     "- Make sure Bluetooth on your logger is enabled",
+                     "  and keep it close to this device",
+                     "- Power cycling may fix this problem"};
+    drawDialogMessage(RED, 0, msgs, 4);
 
     binFileW.close();
     return;
   }
 
-  M5.Lcd.setTextColor(BLACK);
-  M5.Lcd.drawString("Connecting to GPS logger... done.", 10, 60);
-  M5.Lcd.setTextColor(BLUE);
-  M5.Lcd.drawString("Downloading log data...", 10, (60 + 18));
+  // print the progress message
+  drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
+  drawDialogMessage(BLUE, 1, "Downloading log data...");
 
   if (!logger.downloadLogData(&binFileW, &downloadProgress)) {
-    M5.Lcd.setTextColor(RED);
-    M5.Lcd.drawString("Downloading log data... failed.", 10, (60 + 18));
-    M5.Lcd.drawString("- Keep GPS logger close to this device", 10, (60 + 36));
-    M5.Lcd.drawString("- Power cycling may fix this problem", 10, (60 + 54));
+    String msgs[] = {"Downloading log data... failed.",
+                     "- Keep GPS logger close to this device",
+                     "- Power cycling may fix this problem"};
+    drawDialogMessage(RED, 1, msgs, 3);
 
     logger.disconnect();
     binFileW.close();
     return;
   }
+
+  // disconnect from the logger and close the downloaded file
   logger.disconnect();
   binFileW.close();
 
-  M5.Lcd.setTextColor(BLACK);
-  M5.Lcd.drawString("Downloading log data... done.", 10, (60 + 18));
-  M5.Lcd.setTextColor(BLUE);
-  M5.Lcd.drawString("Converting data to GPX file...", 10, (60 + 36));
-  M5.Lcd.fillRect(11, 181, 299, 14, LIGHTGREY);
+  // print the progress message
+  drawDialogMessage(BLACK, 1, "Downloading log data... done.");
+  drawDialogMessage(BLUE, 2, "Converting data to GPX file...");
+  M5.Lcd.fillRect(10, 180, 300, 16, LIGHTGREY);
 
-  // open the downloaded binary file and create a new GPX file
+  // open the downloaded binary file for reading and
+  // create a new GPS file for writing
   File32 binFileR = SDcard.open(TEMP_BIN, (O_READ));
   File32 gpxFileW = SDcard.open(TEMP_GPX, (O_CREAT | O_WRITE | O_TRUNC));
 
-  //
-  if ((!binFileR) || (binFileR.size() == 0) || (!gpxFileW)) {
-    M5.Lcd.setTextColor(RED);
-    M5.Lcd.drawString("Converting data to GPX file... failed.", 10, (60 + 36));
-    M5.Lcd.drawString("- Reformat SD card may fix problem", 10, (60 + 54));
-    M5.Lcd.drawString("  (Maybe filesystem is corrupted?)", 10, (60 + 72));
-
-    if (!binFileR) binFileR.close();
-    if (!gpxFileW) gpxFileW.close();
-    return;
+  if ((!binFileR) || (!gpxFileW)) {  // BIN or GPX file open failed
+    // print the error message
+    String msgs[] = {"Converting data to GPX file... failed.",
+                     "Cannot open the downloaded BIN file or",
+                     "create a new GPX file."};
+    drawDialogMessage(RED, 2, msgs, 3);
   }
 
-  parser.setTimeOffset(9.0);
-  parser.convert(&binFileR, &gpxFileW, &downloadProgress);
+  // convert the binary file to GPX file and get the summary
+  MtkParser *parser = new MtkParser();
+  parser->setTimeOffset(9.0);
+  parser->convert(&binFileR, &gpxFileW, &downloadProgress);
+  uint32_t tracks = parser->getTrackCount();
+  uint32_t trkpts = parser->getTrkptCount();
+  time_t time1st = parser->getFirstTrkpt().time;
+  delete parser;
 
+  // close the binary and GPX files
   binFileR.close();
   gpxFileW.close();
 
-  M5.Lcd.setTextColor(BLACK);
-  M5.Lcd.drawString("Converting data to GPX file... done.", 10, (60 + 36));
-
-  time_t tt1 = parser.getFirstRecordTime();
-  struct tm *tm1 = localtime(&tt1);
-  char tm1str[16], gpxName[40];
-
-  // make a unique name for the output GPX file
-  sprintf(tm1str, DATETIME_FMT, (tm1->tm_year + 1900), (tm1->tm_mon + 1),
-          tm1->tm_mday, tm1->tm_hour, tm1->tm_min, tm1->tm_sec);
-  sprintf(gpxName, "%s%s.gpx", GPX_PREFIX, tm1str);
+  // rename the GPX file (download.gpx -> gpslog_YYYYMMDD-HHMMSS.gpx)
+  struct tm *ltime = localtime(&time1st);
+  char timestr[16], gpxName[48];
+  sprintf(timestr, DATETIME_FMT, (ltime->tm_year + 1900), (ltime->tm_mon + 1),
+          ltime->tm_mday, ltime->tm_hour, ltime->tm_min, ltime->tm_sec);
+  sprintf(gpxName, "%s%s.gpx", GPX_PREFIX, timestr);
   for (uint16_t i = 2; SDcard.exists(gpxName) && (i < 65535); i++) {
-    sprintf(gpxName, "%s%s_%02d.gpx", GPX_PREFIX, tm1str, i);
+    sprintf(gpxName, "%s%s_%02d.gpx", GPX_PREFIX, timestr, i);
   }
   SDcard.rename(TEMP_GPX, gpxName);
 
+  // print the result message
+  drawDialogMessage(BLACK, 2, "Converting data to GPX file... done.");
   M5.Lcd.setTextColor(BLUE);
-  M5.Lcd.drawString("The downloaded GPS log is saved to", 10, (60 + 54));
-  M5.Lcd.drawString(gpxName, 10, (60 + 72));
+  M5.Lcd.setCursor(10, (60 + 54));
+  M5.Lcd.printf("Output file : %s", gpxName);
+  M5.Lcd.setCursor(10, (60 + 72));
+  M5.Lcd.printf("Log summary : %d tracks, %d trkpts", tracks, trkpts);
 }
 
 /**
@@ -327,51 +357,42 @@ void onFixRTCMenuSelected() {
   drawDialog("Fix RTC time");
 
   if (!validAddress(appConfig.loggerAddress)) {
-    M5.Lcd.setTextColor(RED);
-    M5.Lcd.drawString("The logger address is not set.", 10, 60);
-    M5.Lcd.drawString("Please pair with the logger first.", 10, (60 + 18));
-
-    Serial.printf("DEBUG: logger address is not set.\n");
+    String msgs[] = {"The logger address is not set.",
+                     "Please pair with the logger first."};
+    drawDialogMessage(RED, 0, msgs, 2);
     return;
   }
 
-  M5.Lcd.setTextColor(BLUE);
-  M5.Lcd.drawString("Connecting to GPS logger...", 10, 60);
+  // print the progress message
+  drawDialogMessage(BLUE, 0, "Connecting to GPS logger...");
 
   // connect to the logger
   if (!logger.connect(appConfig.loggerAddress)) {
-    M5.Lcd.setTextColor(RED);
-    M5.Lcd.drawString("Connecting to GPS logger... failed.", 10, 60);
-    M5.Lcd.drawString("- Make sure Bluetooth on logger is enabled", 10,
-                      (60 + 18));
-    M5.Lcd.drawString("- Power cycling may fix this problem", 10, (60 + 36));
-
-    Serial.printf("DEBUG: failed to connect to the GPS logger.\n");
+    String msgs[] = {"Connecting to GPS logger... failed.",
+                     "- Make sure Bluetooth on logger is enabled",
+                     "- Power cycling may fix this problem"};
+    drawDialogMessage(RED, 0, msgs, 2);
     return;
   }
 
-  M5.Lcd.setTextColor(BLACK);
-  M5.Lcd.drawString("Connecting to GPS logger... done.", 10, 60);
-  M5.Lcd.setTextColor(BLUE);
-  M5.Lcd.drawString("Fixing RTC time...", 10, 60 + 18);
+  // print the progress message
+  drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
+  drawDialogMessage(BLUE, 1, "Fixing RTC datetime...");
 
   if (!logger.fixRTCdatetime()) {
-    M5.Lcd.setTextColor(RED);
-    M5.Lcd.drawString("Fixing RTC time... failed.", 10, 60 + 18);
-    M5.Lcd.drawString("- Keep GPS logger close to this device", 10, (60 + 36));
-    M5.Lcd.drawString("- Power cycling may fix this problem", 10, (60 + 54));
-
-    logger.disconnect();
-    return;
+    String msgs[] = {"Fixing RTC time... failed.",
+                     "- Keep GPS logger close to this device",
+                     "- Power cycling may fix this problem"};
+    drawDialogMessage(RED, 1, msgs, 3);
   }
 
-  M5.Lcd.setTextColor(BLACK);
-  M5.Lcd.drawString("Fixing RTC time... done.", 10, 60 + 18);
-  M5.Lcd.setTextColor(BLUE);
-  M5.Lcd.drawString("The correct time will be recorded", 10, 60 + 36);
-  M5.Lcd.drawString("from the next record onward.", 10, 60 + 54);
-
+  // disconnect from the logger
   logger.disconnect();
+
+  // print the result message
+  drawDialogMessage(BLACK, 1, "Fixing RTC datetime... done.");
+  String msgs[] = {"The GPS week number rollover problem", "is now fixed."};
+  drawDialogMessage(BLUE, 2, msgs, 2);
 }
 
 /**
@@ -386,65 +407,64 @@ void onSetPresetConfigMenuSelected() {
  */
 void onPairToLoggerMenuSelected() {
   const String DEVICE_NAMES[] = {"747PRO GPS", "HOLUX_M-241"};
+  const int8_t DEVICE_COUNT = 2;
 
   drawDialog("Pair with Logger");
 
-  M5.Lcd.setTextColor(BLACK);
-  M5.Lcd.drawString("Discovering GPS logger...", 10, 60);
+  drawDialogMessage(BLACK, 0, "Discovering GPS logger...");
 
-  for (int i = 0; i < 2; i++) {
+  for (int i = 0; i < DEVICE_COUNT; i++) {
+    // print the device name trying to connect
     M5.Lcd.setTextColor(BLUE);
     M5.Lcd.setCursor(10, (60 + (18 * (i + 1))));
     M5.Lcd.printf("- %s", DEVICE_NAMES[i]);
 
-    M5.Lcd.setCursor(10, (60 + (18 * (i + 1))));
-    if (!logger.connect(DEVICE_NAMES[i])) {  // try to connect
-      // failed to connect
-      M5.Lcd.setTextColor(RED);
-      M5.Lcd.printf("- %s :  not found.", DEVICE_NAMES[i]);
+    if (logger.connect(DEVICE_NAMES[i])) {  // successfully connected
+      logger.disconnect();                  // disconnect
 
-      // try to discover the next
+      // get the address of the connected device
+      uint8_t addr[6];
+      memcpy(addr, appStatus.sppClientAddr, 6);
+
+      // print the success message
+      M5.Lcd.setTextColor(BLACK);
+      M5.Lcd.setCursor(10, (60 + (18 * (i + 1))));
+      M5.Lcd.printf("- %s : found.", DEVICE_NAMES[i]);
+      drawDialogMessage(BLUE, (2 + i), "Successfully paired with the logger.");
+      M5.Lcd.setCursor(10, (60 + (18 * (i + 3))));
+      M5.Lcd.printf("Logger address : %02X%02X-%02X%02X-%02X%02X.", addr[0],
+                    addr[1], addr[2], addr[3], addr[4], addr[5]);
+
+      // copy the address and model name to the configuration
+      memcpy(appConfig.loggerAddress, addr, 6);
+      strcpy(appConfig.loggerModel, DEVICE_NAMES[i].c_str());
+      saveAppConfig();
+      return;
+    } else {  // failed to connect to the device
+      // print the failure message and try the next device
+      M5.Lcd.setTextColor(BLACK);
+      M5.Lcd.setCursor(10, (60 + (18 * (i + 1))));
+      M5.Lcd.printf("- %s : not found.", DEVICE_NAMES[i]);
       continue;
     }
-
-    delay(500);
-    logger.disconnect();
-
-    uint8_t addr[6];
-    memcpy(addr, appStatus.sppClientAddr, 6);
-
-    M5.Lcd.setTextColor(BLACK);
-    M5.Lcd.printf("- %s : found.", DEVICE_NAMES[i]);
-    M5.Lcd.setTextColor(BLUE);
-    M5.Lcd.setCursor(10, (60 + (18 * (i + 2))));
-    M5.Lcd.printf("Successfully paired with the discovered logger.");
-    M5.Lcd.setCursor(10, (60 + (18 * (i + 3))));
-    M5.Lcd.printf("The logger address is %02X%02X-%02X%02X-%02X%02X.", addr[0],
-                  addr[1], addr[2], addr[3], addr[4], addr[5]);
-
-    // copy the logger address to the configuration
-    memcpy(appConfig.loggerAddress, addr, 6);
-    saveAppConfig();
-    break;
   }
+
+  String msgs[] = {"Failed to pair with any supported logger.",
+                   "- Make sure the logger is powered on",
+                   "  and its Bluetooth is enabled",
+                   "- Power cycling may fix this problem"};
+  drawDialogMessage(RED, DEVICE_COUNT, msgs, 3);
 }
 
 /**
  *
  */
-void onEraseLogMenuSelected() {
-  uint8_t addr[] = {0x00, 0x1C, 0x88, 0x22, 0x1E, 0x57};  // 747pro
-  memcpy(appConfig.loggerAddress, addr, 6);
-}
+void onEraseLogMenuSelected() {}
 
 /**
  *
  */
-void onAppSettingsMenuSelected() {
-  Serial.printf("[DEBUG] onAppSettingsMenuSelected\n");
-  uint8_t addr[] = {0x00, 0x1B, 0xC1, 0x07, 0xB3, 0xD5};  // M-241
-  memcpy(appConfig.loggerAddress, addr, 6);
-}
+void onAppSettingsMenuSelected() {}
 
 void draw1bitBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x0,
                     int16_t y0, int32_t color) {
