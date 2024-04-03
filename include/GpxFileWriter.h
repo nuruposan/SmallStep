@@ -21,4 +21,6 @@ class GpxFileWriter {
   void endTrack();
   void endXml();
   void putTrkpt(gpsrecord_t rcd);
+  int32_t getTrackCount();
+  int32_t getTrkptCount();
 };
