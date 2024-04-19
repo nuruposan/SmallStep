@@ -18,7 +18,7 @@ class MtkFileReader {
 
  public:
   MtkFileReader(File32 *input);
-  ~MtkFileReader();
+
   uint32_t moveToMark();
   uint32_t filesize();
   uint32_t setMark();

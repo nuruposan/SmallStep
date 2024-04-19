@@ -29,6 +29,7 @@ class ReceiveBuffer {
  public:
   ReceiveBuffer();
   ~ReceiveBuffer();
+
   void clear();
   bool put(const char ch);
   char get();

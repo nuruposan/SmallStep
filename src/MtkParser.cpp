@@ -10,10 +10,6 @@ MtkParser::MtkParser() {
   memset(&status, 0, sizeof(parsestatus_t));
 }
 
-MtkParser::~MtkParser() {
-  //
-}
-
 bool MtkParser::isDifferentDate(uint32_t t1, uint32_t t2) {
   uint32_t offsetSec = (options.timeOffset * 3600);
 
@@ -35,7 +31,8 @@ void MtkParser::setRecordFormat(uint32_t fmt) {
                       (sizeof(uint16_t) * (bool)(fmt & REG_VDOP)) +
                       (sizeof(uint16_t) * (bool)(fmt & REG_NSAT));
   status.ignoreLen3 = (sizeof(int16_t) * (bool)(fmt & REG_ALT)) +
-                      (sizeof(uint16_t) * (bool)(fmt & REG_AZI));
+                      (sizeof(uint16_t) * (bool)(fmt & REG_AZI)) +
+                      (sizeof(uint16_t) * (bool)(fmt & REG_SNR));  // wrong
   status.ignoreLen4 = (sizeof(uint16_t) * (bool)(fmt & REG_RCR)) +
                       (sizeof(uint16_t) * (bool)(fmt & REG_MSEC));
 
@@ -205,6 +202,8 @@ bool MtkParser::convert(File32 *input, File32 *output,
   uint32_t sectorStart = -1;
   uint32_t dataStart = 0;
   uint32_t sectorEnd = 0;
+
+  if (callback != NULL) callback(0);
 
   while (true) {
     if (sectorStart != (SIZE_SECTOR * status.sectorPos)) {

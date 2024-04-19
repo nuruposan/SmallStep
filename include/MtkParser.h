@@ -6,7 +6,7 @@
 #include "GpxFileWriter.h"
 #include "MtkFileReader.h"
 
-typedef enum {
+typedef enum _btnid {
   DSP_CHANGE_FORMAT = 2,
   DSP_AUTOLOG_SECOND = 3,
   DSP_AUTOLOG_METER = 4,
@@ -15,18 +15,18 @@ typedef enum {
   DSP_LOG_STARTSTOP = 7
 } dspid_t;
 
-typedef enum {
+typedef enum _trkopt {
   TRK_ONE_DAY = 0,  // divide trasks by local date (default)
   TRK_AS_IS = 1,    // put tracks as recorded
   TRK_SINGLE = 2    // put all trkpts into a single track
 } trackmode_t;
 
-typedef struct {
+typedef struct _parseopt {
   trackmode_t trackMode;
   float timeOffset;
 } parseoption_t;
 
-typedef struct {
+typedef struct _parsest {
   uint16_t sectorPos;
   uint32_t formatReg;
   uint8_t ignoreLen1;
@@ -69,7 +69,6 @@ class MtkParser {
 
  public:
   MtkParser();
-  ~MtkParser();
   float setTimeOffset(float offset);
   bool convert(File32 *input, File32 *output, void (*callback)(int32_t));
   gpsrecord_t getFirstTrkpt();
