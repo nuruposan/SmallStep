@@ -11,10 +11,6 @@ MtkFileReader::MtkFileReader(File32 *input) {
   ptr = 0;
 }
 
-MtkFileReader::~MtkFileReader() {
-  // destructor
-}
-
 void MtkFileReader::read(void *p, int8_t len) {
   int8_t *dst = (int8_t *)p;
   int16_t pt = ptr;

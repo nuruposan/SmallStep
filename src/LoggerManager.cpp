@@ -35,16 +35,14 @@ bool LoggerManager::connect(String name) {
   if (eventCallback != NULL) {
     gpsSerial->register_callback(eventCallback);
 
-    // notify INIT event to the callback function manually
-    // because INIT callback is not called in case of trying connect repeately
     eventCallback(ESP_SPP_INIT_EVT, NULL);
   }
 
   bool conn = gpsSerial->connect(name);
 
+  // if connection failed, notify UNINIT manually
+  // because the event callback is not called in this case
   if ((!conn) && (eventCallback != NULL)) {
-    // if connection failed, notify UNINIT manually
-    // because the event callback is not called in this case
     eventCallback(ESP_SPP_UNINIT_EVT, NULL);
   }
 
@@ -70,7 +68,6 @@ bool LoggerManager::connect(uint8_t *addr) {
     // notify INIT event to the callback function manually
     // because INIT callback is not called in case of trying connect repeately
     eventCallback(ESP_SPP_INIT_EVT, NULL);
-    delay(1000);
   }
 
   // start the SPP as master and set PIN code
@@ -79,8 +76,8 @@ bool LoggerManager::connect(uint8_t *addr) {
 
   bool conn = gpsSerial->connect(addr);
 
-  // if connection failed, notify UNINIT event manually because the event
-  // callback is not called in this case
+  // if connection failed, notify UNINIT manually
+  // because the event callback is not called in this case
   if ((!conn) && (eventCallback != NULL)) {
     eventCallback(ESP_SPP_UNINIT_EVT, NULL);
   }
@@ -229,7 +226,60 @@ bool LoggerManager::getLastRecordAddress(int32_t *address) {
   return (endAddr > 0);
 }
 
-bool LoggerManager::downloadLogData(File32 *output, void (*callback)(int)) {
+bool LoggerManager::clearFlash(void (*callback)(int32_t)) {
+  // return false if the GPS logger is not connected
+  if (!connected()) return false;
+
+  // CLEAR_MEMORY_COMMAND = "PMTK182,6,1";
+  // "^\\$(PMTK001,182,6,(3))\\*(\\w+)$";
+
+  if (callback != NULL) callback(0);
+
+  bool success = false;
+  int32_t progRate = 0;
+  uint32_t timeStartAt = millis();
+  uint32_t timeEstimated = 30000;            // 32 sec
+  uint32_t timeLimit = timeStartAt + 45000;  // 45 sec
+
+  sendNmeaCommand("PMTK182,6,1");
+  while (gpsSerial->connected()) {
+    delay(1);
+
+    uint32_t timeNow = millis();
+    if (timeNow > timeLimit) {
+      Serial.println("LogMan.clearFlash: timeout occurred");
+      break;
+    }
+
+    if (callback != NULL) {
+      uint32_t timeElapsed = timeNow - timeStartAt;
+      int32_t _pr = 100 * ((float)timeElapsed / timeEstimated);
+      if (_pr > progRate) {
+        callback(_pr);
+        progRate = _pr;
+      }
+    }
+
+    if (!gpsSerial->available()) continue;
+    if (!buffer->put(gpsSerial->read())) continue;
+
+    if (buffer->match("$PMTK001,182,6,3")) {  // success
+      // restart GPS logger
+      sendNmeaCommand("PMTK101");
+      success = true;
+      break;
+    } else if (buffer->match("$PMTK001,182,6,")) {  // failed
+      break;
+    }
+  }
+  buffer->clear();
+
+  if (callback != NULL) callback(100);
+
+  return success;
+}
+
+bool LoggerManager::downloadLog(File32 *output, void (*callback)(int32_t)) {
   const uint8_t MAX_RETRY = 3;
 
   bool nextReq = true;
@@ -239,12 +289,17 @@ bool LoggerManager::downloadLogData(File32 *output, void (*callback)(int)) {
   int32_t nextAddr = 0x000000;
   int8_t retries = 0;
 
+  // return false if the GPS logger is not connected
+  if (!connected()) return false;
+
   if (!getLastRecordAddress(&endAddr)) {
     Serial.println("Failed to get the last address of the log data.");
     return false;
   }
 
   uint32_t timeLimit = millis() + 1000;  // set initial timeout period
+
+  if (callback != NULL) callback(0);
 
   while (gpsSerial->connected()) {
     // exit loop when download process is finished or timeout occurred

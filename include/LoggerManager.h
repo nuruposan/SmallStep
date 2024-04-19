@@ -6,12 +6,19 @@
 
 #include "ReceiveBuffer.h"
 
+#define MY_ESP_SPP_START_EVT 98
+#define MY_ESP_SPP_STOP_EVT 99
+
 typedef enum _sizeinfo {
   SIZE_REPLY = 0x00000800,
   SIZE_8MBIT = 0x00100000,
   SIZE_16MBIT = 0x00200000,
   SIZE_32MBIT = 0x00400000
 } sizeinfo_t;
+
+typedef enum _returncode {
+  RC_SUCCESS = 3  // success
+} returncode_t;
 
 typedef enum _recordmode {
   MODE_FULLSTOP = 2,  // stop logging when flash is full
@@ -53,9 +60,9 @@ class LoggerManager {
   bool discover(const char *name, esp_spp_cb_t callback);
   bool connected();
   void disconnect();
-  bool downloadLogData(File32 *output, void (*callback)(int));
+  bool downloadLog(File32 *output, void (*callback)(int32_t));
   bool fixRTCdatetime();
-  int32_t clearFlashMemory();
+  bool clearFlash(void (*callback)(int32_t));
   // int32_t setLogMode(bool overrite);
   // int32_t setLogByDistance(int16_t distance);
   // int32_t setLogBySpeed(int16_t speed);

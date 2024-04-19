@@ -9,8 +9,6 @@ GpxFileWriter::GpxFileWriter(File32 *output) {
   points = 0;
 }
 
-GpxFileWriter::~GpxFileWriter() {}
-
 void GpxFileWriter::flush() { out->flush(); }
 
 void GpxFileWriter::startTrack() {

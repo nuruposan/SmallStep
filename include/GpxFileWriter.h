@@ -13,7 +13,6 @@ class GpxFileWriter {
 
  public:
   GpxFileWriter(File32 *output);
-  ~GpxFileWriter();
 
   void flush();
   void startTrack();
