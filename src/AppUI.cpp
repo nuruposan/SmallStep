@@ -3,6 +3,10 @@
 AppUI::AppUI() {
   sprite.setColorDepth(8);
 
+  appTitle = "MyApp";
+  memset(appHint[0], 0, sizeof(appHint[0]));
+  memset(appHint[1], 0, sizeof(appHint[1]));
+
   appIcon = ICON_APP;
   btBgIcon = ICON_BT_BG;
   btFgIcon = ICON_BT_FG;
@@ -11,8 +15,8 @@ AppUI::AppUI() {
   buttons[1] = &M5.BtnB;
   buttons[2] = &M5.BtnC;
 
-  int16_t screenWidth = 320;
-  int16_t screenHeight = 240;
+  int16_t screenWidth = 320;   // M5.Lcd.width returns 240??
+  int16_t screenHeight = 240;  // M5.Lcd.width returns 320??
 
   titleBarWidth = screenWidth;
   titleBarHeight = 24;
@@ -35,10 +39,6 @@ AppUI::AppUI() {
   dlgFrameTop = titleBarHeight + 4;
   dlgClientTop = dlgFrameTop + dlgTitleHeight + 4;
   dlgClientLeft = dlgFrameLeft + 4;
-}
-
-AppUI::~AppUI() {
-  // delete sprite;
 }
 
 void AppUI::putBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x,
@@ -69,25 +69,28 @@ void AppUI::putBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x,
 }
 
 void AppUI::drawDialogProgress(int32_t progRate) {
+  const int16_t BAR_X = 10;
+  const int16_t BAR_Y = 180;
+  const int16_t BAR_W = 300;
+  const int16_t BAR_H = 18;
+
   // limit the progress value to 0-100
   if (progRate < 0) progRate = 0;
   if (progRate > 100) progRate = 100;
 
-  M5.Lcd.drawRect(10, 180, 300, 16, NAVY);
+  M5.Lcd.drawRect(BAR_X, BAR_Y, BAR_W, BAR_H, NAVY);
   if (progRate == 0) {
-    M5.Lcd.fillRect(11, 181, 298, 14, LIGHTGREY);
+    M5.Lcd.fillRect((BAR_X + 1), (BAR_Y + 1), (BAR_W - 2), (BAR_H - 2),
+                    LIGHTGREY);
   } else {
-    M5.Lcd.fillRect(10, 180, 300 * (progRate / 100.0), 16, NAVY);
+    M5.Lcd.fillRect(BAR_X, BAR_Y, (BAR_W * (progRate / 100.0)), BAR_H, NAVY);
   }
 }
 
-void AppUI::drawDialogMessage(int16_t color, int8_t row, String msg) {
+void AppUI::printDialogMessage(int16_t color, int8_t line, String msg) {
   const int16_t MSG_LEFT = 10;
   const int16_t MSG_TOP = 60;
-  const int16_t ROW_HEIGHT = 18;
-
-  sprite.createSprite(dlgFrameWidth, dlgClientHeight);
-  sprite.fillScreen(LIGHTGREY);
+  const int16_t LINE_HEIGHT = 18;
 
   // set the text font and size (16px ASCII)
   M5.Lcd.setTextFont(2);
@@ -95,26 +98,8 @@ void AppUI::drawDialogMessage(int16_t color, int8_t row, String msg) {
 
   // print the message text
   M5.Lcd.setTextColor(color);
-  M5.Lcd.setCursor(MSG_LEFT, (MSG_TOP + (ROW_HEIGHT * row)));
+  M5.Lcd.setCursor(MSG_LEFT, (MSG_TOP + (LINE_HEIGHT * line)));
   M5.Lcd.print(msg);
-}
-
-void AppUI::drawDialogMessage(int16_t color, int8_t row, String msgs[],
-                              int8_t lines) {
-  const int16_t MSG_LEFT = 10;
-  const int16_t MSG_TOP = 60;
-  const int16_t ROW_HEIGHT = 18;
-
-  // set the text font and size (16px ASCII)
-  M5.Lcd.setTextFont(2);
-  M5.Lcd.setTextSize(1);
-
-  // print the message text
-  M5.Lcd.setTextColor(color);
-  for (int8_t i = 0; i < lines; i++) {
-    M5.Lcd.setCursor(MSG_LEFT, (MSG_TOP + (ROW_HEIGHT * (row + i))));
-    M5.Lcd.print(msgs[i]);
-  }
 }
 
 void AppUI::drawDialogFrame(const char *title) {
@@ -241,13 +226,13 @@ void AppUI::drawNavBar(navmenu_t *nav) {
   sprite.deleteSprite();
 }
 
-void AppUI::drawTitleBar(const char *title) {
+void AppUI::drawTitleBar(bool sdAvail, bool btActive) {
   const int16_t TITLE_X = 32;
   const int16_t TITLE_Y = 2;
   const int16_t APP_ICON_X = 2;
   const int16_t BAT_ICON_X = (titleBarWidth - 24);
   const int16_t SD_ICON_X = (BAT_ICON_X - 20);
-  const int16_t BT_ICON_X = (SD_ICON_X - 18);
+  const int16_t BT_ICON_X = (SD_ICON_X - 19);
   const int16_t ICON_Y = 2;
 
   // スプライト領域の初期化
@@ -257,13 +242,19 @@ void AppUI::drawTitleBar(const char *title) {
   // draw the title text
   sprite.setTextSize(1);
   sprite.setTextColor(BLACK);
-  sprite.drawString(title, TITLE_X, TITLE_Y, 4);
+  sprite.drawString(appTitle, TITLE_X, TITLE_Y, 4);
 
   // draw the icons
   putAppIcon(&sprite, APP_ICON_X, ICON_Y);
-  putBatteryIcon(&sprite, BAT_ICON_X, ICON_Y, 100);
-  putSDcardIcon(&sprite, SD_ICON_X, ICON_Y, true);
-  putBluetoothIcon(&sprite, BT_ICON_X, ICON_Y, true);
+  putBatteryIcon(&sprite, BAT_ICON_X, ICON_Y, M5.Power.getBatteryLevel());
+  putSDcardIcon(&sprite, SD_ICON_X, ICON_Y, sdAvail);
+  putBluetoothIcon(&sprite, BT_ICON_X, ICON_Y, btActive);
+
+  // draw the hint text
+  sprite.setTextSize(1);
+  sprite.setTextColor(BLACK);
+  sprite.drawString(appHint[0], 168, 4, 1);
+  sprite.drawString(appHint[1], 168, 14, 1);
 
   // transfer the sprite to the LCD
   sprite.pushSprite(titleBarLeft, titleBarTop);
@@ -305,17 +296,15 @@ void AppUI::putSDcardIcon(TFT_eSprite *spr, int16_t x, int16_t y,
     spr->fillRect((x + 4) + ((PIN_W + 1) * i), (y + 1), PIN_W, PIN_H, YELLOW);
   }
 
-  // draw "SD" or "!" mark
+  // draw "SD" or "**" mark
   if (mounted) {  // mounted
     // put "SD" text
     spr->setTextSize(1);
     spr->setTextColor(LIGHTGREY);
     spr->drawCentreString("SD", (x + 9), (y + 9), 1);
   } else {  // not mounted
-    // put "!" mark
-    spr->setTextSize(1);
-    spr->setTextColor(RED);
-    spr->drawCentreString("!", (x + 9), (y + 9), 1);
+    spr->drawEllipse((x + 8), (y + 12), 5, 5, RED);
+    spr->drawLine((x + 11), (y + 9), (x + 5), (y + 15), RED);
   }
 }
 
@@ -356,6 +345,7 @@ void AppUI::putBatteryIcon(TFT_eSprite *spr, int16_t x, int16_t y,
 }
 
 btnid_t AppUI::checkButtonInput(navmenu_t *nav) {
+  // update button status
   M5.update();
 
   for (int i = 0; i < 3; i++) {
@@ -365,6 +355,16 @@ btnid_t AppUI::checkButtonInput(navmenu_t *nav) {
   }
 
   return BID_NONE;
+}
+
+void AppUI::setTitle(const char *title) { appTitle = title; }
+
+void AppUI::setHints(const char *hint1, const char *hint2) {
+  memset(appHint[0], 0, sizeof(appHint[0]));
+  memset(appHint[1], 0, sizeof(appHint[1]));
+
+  if (hint1 != NULL) strncpy(appHint[0], hint1, 16);
+  if (hint2 != NULL) strncpy(appHint[1], hint2, 16);
 }
 
 btnid_t AppUI::waitForOk() {
@@ -389,9 +389,9 @@ btnid_t AppUI::waitForOkCancel() {
   navmenu_t nav;
   memset(&nav, 0, sizeof(navmenu_t));
   nav.items[0].caption = "";
-  nav.items[1].caption = "OK";
+  nav.items[1].caption = "Cancel";
   nav.items[1].enabled = true;
-  nav.items[2].caption = "Cancel";
+  nav.items[2].caption = "OK";
   nav.items[2].enabled = true;
   drawNavBar(&nav);
 
@@ -401,7 +401,7 @@ btnid_t AppUI::waitForOkCancel() {
     delay(50);
   }
 
-  if (btn == BID_BTN_B) {
+  if (btn == BID_BTN_C) {
     return BID_OK;
   }
 

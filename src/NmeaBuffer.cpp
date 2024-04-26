@@ -1,4 +1,4 @@
-#include "ReceiveBuffer.h"
+#include "NmeaBuffer.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,18 +9,18 @@
 #define CHAR_CR '\r'
 #define CHAR_LF '\n'
 
-ReceiveBuffer::ReceiveBuffer() {
+NmeaBuffer::NmeaBuffer() {
   // constructor: initialize member variables
   currentPage = allocatePage(&rootPage);
   clear();
 }
 
-ReceiveBuffer::~ReceiveBuffer() {
+NmeaBuffer::~NmeaBuffer() {
   // destuctor: release dynamically allocated buffer
   freePages(rootPage);
 }
 
-void ReceiveBuffer::freePages(bufferpage_t *pg) {
+void NmeaBuffer::freePages(bufferpage_t *pg) {
   // release all pages from the given to the last
   // if NULL is given, do nothing
   bufferpage_t *cp = pg;
@@ -31,7 +31,7 @@ void ReceiveBuffer::freePages(bufferpage_t *pg) {
   }
 }
 
-bufferpage_t *ReceiveBuffer::allocatePage(bufferpage_t **pg) {
+bufferpage_t *NmeaBuffer::allocatePage(bufferpage_t **pg) {
   // create a new page and fill it with zero
   bufferpage_t *np = (bufferpage_t *)malloc(sizeof(bufferpage_t));
   memset(np, 0, sizeof(bufferpage_t));
@@ -45,7 +45,7 @@ bufferpage_t *ReceiveBuffer::allocatePage(bufferpage_t **pg) {
   return np;
 }
 
-void ReceiveBuffer::clear() {
+void NmeaBuffer::clear() {
   // release second and subsequent pages, zero-fill the first page
   freePages(rootPage->next);
   memset(rootPage, 0, sizeof(bufferpage_t));
@@ -59,12 +59,12 @@ void ReceiveBuffer::clear() {
   receivedChecksum = 0;
 }
 
-bool ReceiveBuffer::isTextChar(char ch) {
+bool NmeaBuffer::isTextChar(char ch) {
   // return true if the given chars is usable in PMTK sentence
   return ((ch >= ' ') && (ch <= '~'));
 }
 
-uint8_t ReceiveBuffer::hexCharToByte(char ch) {
+uint8_t NmeaBuffer::hexCharToByte(char ch) {
   switch (ch) {
     case '0' ... '9':  // return 0-9 for '0'-'9'
       return (ch - '0');
@@ -78,7 +78,7 @@ uint8_t ReceiveBuffer::hexCharToByte(char ch) {
   return NON_HEXCHAR_VAL;
 }
 
-void ReceiveBuffer::appendToBuffer(char ch) {
+void NmeaBuffer::appendToBuffer(char ch) {
   if (ptr < BP_BUFFER_SIZE) {
     currentPage->buf[ptr] = ch;
     ptr += 1;
@@ -90,7 +90,7 @@ void ReceiveBuffer::appendToBuffer(char ch) {
   }
 }
 
-void ReceiveBuffer::updateChecksum(char ch) {
+void NmeaBuffer::updateChecksum(char ch) {
   if (columnCount < RB_CCNT_CHKSUM) {  // calculate checksum of sentence text
     if ((ch != '$') && (ch != '*')) {  // exclude '$' and '*' from checksum
       expectedChecksum ^= (byte)ch;
@@ -100,7 +100,7 @@ void ReceiveBuffer::updateChecksum(char ch) {
   }
 }
 
-bool ReceiveBuffer::put(char ch) {
+bool NmeaBuffer::put(char ch) {
   switch (ch) {
     case '$':  // begining of a new sentense
       clear();
@@ -125,7 +125,7 @@ bool ReceiveBuffer::put(char ch) {
   return ((ch == CHAR_LF) && (expectedChecksum == receivedChecksum));
 }
 
-char ReceiveBuffer::get() {
+char NmeaBuffer::get() {
   char ch = currentPage->buf[ptr];
 
   if ((ch != 0) && (ptr < BP_BUFFER_SIZE)) {
@@ -140,7 +140,7 @@ char ReceiveBuffer::get() {
   return ch;
 }
 
-bool ReceiveBuffer::readColumnAsInt(uint8_t clm, int32_t *num) {
+bool NmeaBuffer::readColumnAsInt(uint8_t clm, int32_t *num) {
   if (seekToColumn(clm) == false) return false;
 
   uint8_t b = 0;
@@ -154,7 +154,7 @@ bool ReceiveBuffer::readColumnAsInt(uint8_t clm, int32_t *num) {
   return true;
 }
 
-bool ReceiveBuffer::readHexByteFull(byte *by) {
+bool NmeaBuffer::readHexByteFull(byte *by) {
   byte upper = hexCharToByte(get());
   byte lower = hexCharToByte(get());
 
@@ -167,7 +167,7 @@ bool ReceiveBuffer::readHexByteFull(byte *by) {
   return true;
 }
 
-bool ReceiveBuffer::readHexByteHalf(byte *by) {
+bool NmeaBuffer::readHexByteHalf(byte *by) {
   byte lower = hexCharToByte(get());
 
   if (lower == NON_HEXCHAR_VAL) {
@@ -179,11 +179,11 @@ bool ReceiveBuffer::readHexByteHalf(byte *by) {
   return true;
 }
 
-bool ReceiveBuffer::match(const char *str) {
+bool NmeaBuffer::match(const char *str) {
   return (strstr(rootPage->buf, str) != NULL);
 }
 
-bool ReceiveBuffer::seekToColumn(uint8_t clm) {
+bool NmeaBuffer::seekToColumn(uint8_t clm) {
   bufferpage_t *pg = rootPage;
   uint16_t pt = 0;
   uint16_t cc = 0;

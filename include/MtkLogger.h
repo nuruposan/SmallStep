@@ -4,10 +4,7 @@
 #include <EEPROM.h>
 #include <SdFat.h>
 
-#include "ReceiveBuffer.h"
-
-#define MY_ESP_SPP_START_EVT 98
-#define MY_ESP_SPP_STOP_EVT 99
+#include "NmeaBuffer.h"
 
 typedef enum _sizeinfo {
   SIZE_REPLY = 0x00000800,
@@ -15,10 +12,6 @@ typedef enum _sizeinfo {
   SIZE_16MBIT = 0x00200000,
   SIZE_32MBIT = 0x00400000
 } sizeinfo_t;
-
-typedef enum _returncode {
-  RC_SUCCESS = 3  // success
-} returncode_t;
 
 typedef enum _recordmode {
   MODE_FULLSTOP = 2,  // stop logging when flash is full
@@ -37,12 +30,12 @@ typedef enum _logformat {
   LOG_RCR = 0x100000000    // GPS status (no-fix/sps/dgps/estimated)
 } logformat_t;
 
-class LoggerManager {
+class MtkLogger {
  private:
   char address[6];
   bool sppStarted;
   BluetoothSerial *gpsSerial;
-  ReceiveBuffer *buffer;
+  NmeaBuffer *buffer;
   esp_spp_cb_t eventCallback;
 
   uint8_t calcNmeaChecksum(const char *cmd);
@@ -52,20 +45,20 @@ class LoggerManager {
   bool getLastRecordAddress(int32_t *size);
 
  public:
-  LoggerManager();
-  ~LoggerManager();
+  MtkLogger();
+  ~MtkLogger();
 
   bool connect(String name);
   bool connect(uint8_t *address);
-  bool discover(const char *name, esp_spp_cb_t callback);
   bool connected();
   void disconnect();
-  bool downloadLog(File32 *output, void (*callback)(int32_t));
+  bool downloadLog(File32 *output, void (*rateCallback)(int));
   bool fixRTCdatetime();
-  bool clearFlash(void (*callback)(int32_t));
+  bool getFlashSize(int32_t *size);
+  bool clearFlash(void (*rateCallback)(int));
   // int32_t setLogMode(bool overrite);
   // int32_t setLogByDistance(int16_t distance);
   // int32_t setLogBySpeed(int16_t speed);
   // int32_t setLogByTime(int16_t time);
-  void setEventCallback(esp_spp_cb_t callback);
+  void setEventCallback(esp_spp_cb_t evtCallback);
 };

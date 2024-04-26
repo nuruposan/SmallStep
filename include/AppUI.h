@@ -70,16 +70,6 @@ const uint8_t ICON_BT_FG[] = {16,         19,          // Width, Height
 
 #define COLOR16(r, g, b) (int16_t)((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
 
-typedef struct {
-  int16_t x;
-  int16_t y;
-} drawpoint_t;
-
-typedef struct {
-  int16_t w;
-  int16_t h;
-} drawsize_t;
-
 typedef enum {
   BID_NONE = -1,
   BID_BTN_A = 0,
@@ -121,6 +111,8 @@ class AppUI {
   const uint8_t *appIcon;
   const uint8_t *btBgIcon;
   const uint8_t *btFgIcon;
+  const char *appTitle;
+  char appHint[2][16];
 
   int16_t titleBarHeight;
   int16_t titleBarWidth;
@@ -153,16 +145,16 @@ class AppUI {
 
  public:
   AppUI();
-  ~AppUI();
+
   void drawDialogFrame(const char *title);
   void drawDialogProgress(int32_t progress);
-  void drawDialogMessage(int16_t color, int8_t row, String msg);
-  void drawDialogMessage(int16_t color, int8_t row, String msgs[],
-                         int8_t lines);
+  void printDialogMessage(int16_t color, int8_t line, String msg);
   void drawMainMenu(mainmenu_t *menu);
   void drawNavBar(navmenu_t *menu);
-  void drawTitleBar(const char *title);
+  void drawTitleBar(bool sdAvail, bool btActive);
   btnid_t checkButtonInput(navmenu_t *menu);
+  void setTitle(const char *title);
+  void setHints(const char *into1, const char *info2);
   btnid_t waitForOk();
   btnid_t waitForOkCancel();
 };

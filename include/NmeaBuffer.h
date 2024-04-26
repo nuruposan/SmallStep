@@ -9,7 +9,7 @@ typedef struct bufferpage {
   bufferpage *next;
 } bufferpage_t;
 
-class ReceiveBuffer {
+class NmeaBuffer {
  private:
   bufferpage_t *rootPage;
   bufferpage_t *currentPage;
@@ -27,8 +27,8 @@ class ReceiveBuffer {
   void updateChecksum(char ch);
 
  public:
-  ReceiveBuffer();
-  ~ReceiveBuffer();
+  NmeaBuffer();
+  ~NmeaBuffer();
 
   void clear();
   bool put(const char ch);
