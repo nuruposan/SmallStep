@@ -133,7 +133,7 @@ void AppUI::drawDialogFrame(const char *title) {
  * Draw the main menu in the client area of the screen.
  * @param menu Main menu data
  */
-void AppUI::drawMainMenu(mainmenu_t *menu) {
+void AppUI::drawMainMenu(menudata_t *menu) {
   const int16_t MENUAREA_W = M5.Lcd.width();
   const int16_t MENUAREA_H = M5.Lcd.height() - (24 + 24);
   const int16_t MENUAREA_X = 0;
@@ -153,7 +153,7 @@ void AppUI::drawMainMenu(mainmenu_t *menu) {
     int16_t x = MENUBTN1_X + ((MENUBTN_W + MARGIN_X) * (i % 3));
     int16_t y = MENUBTN1_Y + ((MENUBTN_H + MARGIN_Y) * (i / 3));
 
-    if (i == menu->selectedIndex) {
+    if (i == menu->selIndex) {
       sprite.fillRoundRect(x, y, MENUBTN_W, MENUBTN_H, 4, LIGHTGREY);
       sprite.drawRoundRect(x, y, MENUBTN_W, MENUBTN_H, 4, BLUE);
       sprite.drawRoundRect(x + 1, y + 1, MENUBTN_W - 2, MENUBTN_H - 2, 4, BLUE);
@@ -347,7 +347,6 @@ void AppUI::putBatteryIcon(TFT_eSprite *spr, int16_t x, int16_t y,
 btnid_t AppUI::checkButtonInput(navmenu_t *nav) {
   // update button status
   M5.update();
-
   for (int i = 0; i < 3; i++) {
     if ((nav->items[i].enabled) && (buttons[i]->wasPressed())) {
       return (btnid_t)i;
@@ -369,11 +368,9 @@ void AppUI::setHints(const char *hint1, const char *hint2) {
 
 btnid_t AppUI::waitForOk() {
   navmenu_t nav;
-  memset(&nav, 0, sizeof(navmenu_t));
-  nav.items[0].caption = "";
-  nav.items[1].caption = "";
-  nav.items[2].caption = "OK";
-  nav.items[2].enabled = true;
+  nav.items[0] = {"", false};
+  nav.items[1] = {"", false};
+  nav.items[2] = {"OK", true};
   drawNavBar(&nav);
 
   btnid_t btn = BID_NONE;
@@ -387,12 +384,9 @@ btnid_t AppUI::waitForOk() {
 
 btnid_t AppUI::waitForOkCancel() {
   navmenu_t nav;
-  memset(&nav, 0, sizeof(navmenu_t));
-  nav.items[0].caption = "";
-  nav.items[1].caption = "Cancel";
-  nav.items[1].enabled = true;
-  nav.items[2].caption = "OK";
-  nav.items[2].enabled = true;
+  nav.items[0] = {"", false};
+  nav.items[1] = {"Cancel", true};
+  nav.items[2] = {"OK", true};
   drawNavBar(&nav);
 
   btnid_t btn = BID_NONE;
@@ -401,9 +395,49 @@ btnid_t AppUI::waitForOkCancel() {
     delay(50);
   }
 
-  if (btn == BID_BTN_C) {
-    return BID_OK;
+  btnid_t ret = (btn == BID_BTN_C) ? BID_OK : BID_CANCEL;
+
+  return ret;
+}
+
+void AppUI::drawConfigMenu(menudata_t *menu) {
+  const int16_t MENUAREA_W = M5.Lcd.width();
+  const int16_t MENUAREA_H = M5.Lcd.height() - (24 + 24);
+  const int16_t BTN_MGN_X = 8;
+  const int16_t BTN_MGN_Y = 8;
+  const int16_t BTN_W = MENUAREA_W - (BTN_MGN_X * 2);  // ボタンのサイズ指定
+  const int16_t BTN_H = 38;
+
+  // スプライト領域の初期化
+  sprite.createSprite(menuAreaWidth, menuAreaHeight);
+  sprite.fillScreen(BLACK);
+
+  sprite.setTextSize(1);
+  sprite.setTextColor(BLACK);
+  sprite.setTextSize(1);
+
+  for (int i = 0; i < 4; i++) {
+    uint8_t idx = i + menu->topIndex;
+    if (idx >= menu->itemCount) break;
+
+    menuitem_t mi = menu->items[idx];
+
+    int16_t x = BTN_MGN_X;
+    int16_t y = (BTN_MGN_Y * (i + 1)) + (BTN_H * i);
+    int16_t color = (idx == menu->selIndex) ? LIGHTGREY : DARKGREY;
+
+    sprite.fillRect(x, y, BTN_W, BTN_H, color);
+
+    sprite.setTextColor(BLACK);
+    sprite.drawString(mi.caption, (x + 4), (y + 4), 2);
+    sprite.drawString(mi.description, (x + 4), (y + 24), 1);
+    if (mi.valueDescr != NULL) {
+      sprite.setTextColor(BLUE);
+      sprite.drawRightString(mi.valueDescr, (x + (BTN_W - 4)), (y + 4), 2);
+    }
   }
 
-  return BID_CANCEL;
+  // transfer the sprite to the LCD
+  sprite.pushSprite(menuAreaLeft, menuAreaTop);
+  sprite.deleteSprite();
 }
