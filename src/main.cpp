@@ -36,7 +36,7 @@ typedef struct _appconfig {
 bool isZeroedBytes(void *, uint16_t);
 bool checkLoggerPaired();
 void saveAppConfig();
-bool loadAppConfig();
+bool loadAppConfig(bool loadDefault);
 void bluetoothCallback(esp_spp_cb_event_t, esp_spp_cb_param_t *);
 void progressCallback(int32_t);
 bool runDownloadLog();
@@ -49,11 +49,6 @@ void onShowLocationSelected();
 void onPairWithLoggerSelected();
 void onClearFlashSelected();
 void onAppSettingSelected();
-void putBitmapIcon(TFT_eSprite *, const uint8_t *, int16_t, int16_t, int32_t);
-void drawApplicationIcon(TFT_eSprite *, int16_t, int16_t);
-void drawBluetoothIcon(TFT_eSprite *, int16_t, int16_t);
-void putSDcardIcon(TFT_eSprite *, int16_t, int16_t);
-void putBatteryIcon(TFT_eSprite *, int16_t, int16_t);
 void onPrevButtonClick();
 void onNextButtonClick();
 void onSelectButtonClick();
@@ -61,6 +56,9 @@ void onNavButtonPress(btnid_t);
 void onDialogOKButtonClick();
 void onDialogCancelButtonClick();
 void onDialogNaviButtonPress(btnid_t);
+void onTimezoneOffsetChange();
+void updateAppHint();
+void updateConfigMenuDescr();
 
 const char *APP_NAME = "SmallStep";
 const char LCD_BRIGHTNESS = 10;
@@ -71,7 +69,8 @@ MtkLogger logger = MtkLogger();
 appstatus_t app;
 appconfig_t config;
 navmenu_t mainnav;
-mainmenu_t mainmenu;
+menudata_t mainmenu;
+menudata_t cfgmenu;
 uint32_t idleTimer;
 
 void updateAppHint() {
@@ -111,9 +110,7 @@ void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
 
 void progressCallback(int32_t progRate) { ui.drawDialogProgress(progRate); }
 
-void onTimer() {
-  
-}
+void onTimer() {}
 
 /**
     private static final String QUERY_LOG_BY_TIME_COMMAND  =
@@ -504,20 +501,71 @@ void onClearFlashSelected() {
   ui.waitForOk();
 }
 
-void onAppSettingSelected() {}
+void onAppSettingSelected() {
+  updateConfigMenuDescr();
+  ui.drawConfigMenu(&cfgmenu);
+
+  bool endFlag = false;
+  while (!endFlag) {
+    // check the button input
+    switch (ui.checkButtonInput(&mainnav)) {
+      case BID_BTN_A:
+        cfgmenu.selIndex =
+            (cfgmenu.selIndex + (cfgmenu.itemCount - 1)) % cfgmenu.itemCount;
+
+        if ((cfgmenu.itemCount < 4) || (cfgmenu.selIndex <= 1)) {
+          cfgmenu.topIndex = 0;
+        } else if (cfgmenu.selIndex >= cfgmenu.itemCount - 2) {
+          cfgmenu.topIndex = cfgmenu.itemCount - 4;
+        } else {
+          cfgmenu.topIndex = cfgmenu.selIndex - 1;
+        }
+
+        ui.drawConfigMenu(&cfgmenu);
+        break;
+      case BID_BTN_B:
+        cfgmenu.selIndex = (cfgmenu.selIndex + 1) % cfgmenu.itemCount;
+
+        if ((cfgmenu.itemCount < 4) || (cfgmenu.selIndex <= 1)) {
+          cfgmenu.topIndex = 0;
+        } else if (cfgmenu.selIndex >= cfgmenu.itemCount - 2) {
+          cfgmenu.topIndex = cfgmenu.itemCount - 4;
+        } else {
+          cfgmenu.topIndex = cfgmenu.selIndex - 2;
+        }
+
+        ui.drawConfigMenu(&cfgmenu);
+        break;
+      case BID_BTN_C:
+        if (cfgmenu.items[cfgmenu.selIndex].onSelect != NULL) {
+          cfgmenu.items[cfgmenu.selIndex].onSelect();
+
+          updateConfigMenuDescr();
+          ui.drawConfigMenu(&cfgmenu);
+        }
+
+        endFlag = (cfgmenu.items[cfgmenu.selIndex].onSelect == NULL);
+        break;
+    }
+
+    delay(LOOP_INTERVAL);
+  }
+
+  saveAppConfig();
+}
 
 void onPrevButtonClick() {
-  mainmenu.selectedIndex = (mainmenu.selectedIndex + 5) % 6;
+  mainmenu.selIndex = (mainmenu.selIndex + 5) % 6;
   ui.drawMainMenu(&mainmenu);
 }
 
 void onNextButtonClick() {
-  mainmenu.selectedIndex = (mainmenu.selectedIndex + 1) % 6;
+  mainmenu.selIndex = (mainmenu.selIndex + 1) % 6;
   ui.drawMainMenu(&mainmenu);
 }
 
 void onSelectButtonClick() {
-  menuitem_t *mi = &(mainmenu.items[mainmenu.selectedIndex]);
+  menuitem_t *mi = &(mainmenu.items[mainmenu.selIndex]);
   if (mi->onSelect != NULL) {
     mi->onSelect();
     ui.drawMainMenu(&mainmenu);
@@ -538,6 +586,64 @@ void onNavButtonPress(btnid_t bid) {
   }
 }
 
+void updateConfigMenuDescr() {
+  for (int i = 0; i < cfgmenu.itemCount; i++) {
+    if (cfgmenu.items[i].valueDescr == NULL) {
+      cfgmenu.items[i].valueDescr = (char *)malloc(32);
+      memset(cfgmenu.items[i].valueDescr, 0, 32);
+    }
+  }
+
+  menuitem_t *trkmode = &cfgmenu.items[1];
+  if (config.trackMode == TRK_ONE_DAY) {
+    strcpy(trkmode->valueDescr, "A track per day");
+  } else if (config.trackMode == TRK_AS_IS) {
+    strcpy(trkmode->valueDescr, "As log recorded");
+  } else {
+    strcpy(trkmode->valueDescr, "One track");
+  }
+
+  menuitem_t *tzoffset = &cfgmenu.items[2];
+  sprintf(tzoffset->valueDescr, "UTC%+.1f", config.timeOffset);
+
+  menuitem_t *putpoi = &cfgmenu.items[3];
+  // sprintf();
+
+  menuitem_t *logdist = &cfgmenu.items[4];
+  if (config.logByDistance == 0) {
+    strcpy(logdist->valueDescr, "Disabled");
+  } else {
+    sprintf(logdist->valueDescr, "Every %d meters", config.logByDistance);
+  }
+
+  menuitem_t *logtime = &cfgmenu.items[5];
+  if (config.logByTime == 0) {
+    strcpy(logtime->valueDescr, "Disabled");
+  } else {
+    sprintf(logtime->valueDescr, "Every %d seconds", config.logByTime);
+  }
+
+  menuitem_t *logspd = &cfgmenu.items[6];
+  if (config.logBySpeed == 0) {
+    strcpy(logspd->valueDescr, "Disabled");
+  } else {
+    sprintf(logspd->valueDescr, "Over %d m/s", config.logBySpeed);
+  }
+}
+
+void onTrackModeChange() {
+  config.trackMode = (trackmode_t)(((int)config.trackMode + 1) % 3);
+}
+
+void onTimezoneOffsetChange() {
+  config.timeOffset += 0.5;
+  if (config.timeOffset > 12.0) config.timeOffset = -12.0;
+}
+
+void onLogByDistanceChange() {}
+void onLogByTimeChange() {}
+void onLogBySpeedChange() {}
+
 void saveAppConfig() {
   uint8_t *pcfg = (uint8_t *)(&config);
   uint8_t chk = 0;
@@ -554,29 +660,34 @@ void saveAppConfig() {
   Serial.printf("SmallStep.saveConfig: configuration data saved\n");
 }
 
-bool loadAppConfig() {
+bool loadAppConfig(bool loadDefault) {
   uint8_t *pcfg = (uint8_t *)(&config);
   uint8_t chk = 0;
 
   Serial.printf("SmallStep.loadConfig: loading configuration data...\n");
 
-  Serial.printf("EEPROM data: ");
-  // read configuration data from EEPROM
-  for (int8_t i = 0; i < sizeof(appconfig_t); i++) {
-    uint8_t b = EEPROM.read(i);
-    *pcfg = b;
-    chk ^= *pcfg;
-    pcfg += 1;
+  if (!loadDefault) {
+    // read configuration data from EEPROM
+    for (int8_t i = 0; i < sizeof(appconfig_t); i++) {
+      uint8_t b = EEPROM.read(i);
+      *pcfg = b;
+      chk ^= *pcfg;
+      pcfg += 1;
 
-    Serial.printf("%02X ", b);
+      Serial.printf("%02X ", b);
+    }
   }
-  Serial.printf("\n");
 
-  // validate the configuration data by the checksum
-  if ((config.length != sizeof(config)) ||
-      (EEPROM.read(sizeof(appconfig_t) != chk))) {
+  // load the default configuration if loadDefault is set to true or
+  // the EEPROM data is invalid
+  loadDefault |= ((config.length != sizeof(appconfig_t)) ||
+                  (EEPROM.read(sizeof(appconfig_t) != chk)));
+  if (loadDefault) {
     memset(&config, 0, sizeof(appconfig_t));
     config.length = sizeof(appconfig_t);
+    config.trackMode = TRK_ONE_DAY;
+    config.timeOffset = 9.0f;
+    config.logByTime = 30;
 
     Serial.printf("SmallStep.loadConfig: default configuration loaded\n");
 
@@ -592,74 +703,80 @@ void setup() {
   // start the serial
   Serial.begin(115200);
 
-  // initialize the M5Stack
-  M5.begin();
-  M5.Power.begin();
-  M5.Lcd.setBrightness(LCD_BRIGHTNESS);
-
   // zero-clear global variables (status & config)
   memset(&app, 0, sizeof(app));
   memset(&config, 0, sizeof(config));
 
+  // initialize the M5Stack
+  M5.begin();
+  M5.Power.begin();
+  M5.Lcd.setBrightness(LCD_BRIGHTNESS);
   EEPROM.begin(sizeof(appconfig_t) + 1);
-  loadAppConfig();
-
-  // initialize the SD card
-  if (!SDcard.begin(GPIO_NUM_4, SD_ACCESS_SPEED)) {
-    Serial.printf("SmallStep.setup: failed to initialize the SD card.\n");
-  }
-  app.sdcAvail = (SDcard.card()->sectorCount() > 0);
+  SDcard.begin(GPIO_NUM_4, SD_ACCESS_SPEED);
 
   logger.setEventCallback(bluetoothCallback);
+  app.sdcAvail = (SDcard.card()->sectorCount() > 0);
 
   // navigation menu
-  mainnav.onButtonPress = &(onNavButtonPress);
-  mainnav.items[0].caption = "Prev";
-  mainnav.items[0].enabled = true;
-  mainnav.items[1].caption = "Next";
-  mainnav.items[1].enabled = true;
-  mainnav.items[2].caption = "Select";
-  mainnav.items[2].enabled = true;
+  mainnav.items[0] = {"Prev", true};
+  mainnav.items[1] = {"Next", true};
+  mainnav.items[2] = {"Select", true};
 
-  // main menu icons
-  mainmenu.items[0].caption = "Download Log";
-  mainmenu.items[0].iconData = ICON_DOWNLOAD_LOG;
-  mainmenu.items[0].onSelect = &(onDownloadLogSelected);
-  mainmenu.items[1].caption = "Fix RTC time";
-  mainmenu.items[1].iconData = ICON_FIX_RTC;
-  mainmenu.items[1].onSelect = &(onFixRTCtimeSelected);
-  mainmenu.items[2].caption = "Erase Log Data";
-  mainmenu.items[2].iconData = ICON_ERASE_LOG;
-  mainmenu.items[2].onSelect = &(onClearFlashSelected);
-  mainmenu.items[3].caption = "Show Location";
-  mainmenu.items[3].iconData = ICON_SHOW_LOCATION;
-  mainmenu.items[3].onSelect = &(onShowLocationSelected);
-  mainmenu.items[4].caption = "Pair w/ Logger";
-  mainmenu.items[4].iconData = ICON_PAIR_LOGGER;
-  mainmenu.items[4].onSelect = &(onPairWithLoggerSelected);
-  mainmenu.items[5].caption = "App Settings";
-  mainmenu.items[5].iconData = ICON_APP_SETTINGS;
-  mainmenu.items[5].onSelect = &(onAppSettingSelected);
+  // main menu
+  memset(&mainmenu, 0, sizeof(menudata_t));
+  mainmenu.itemCount = 6;
+  mainmenu.items[0] = {"Download Log", NULL, NULL, ICON_DOWNLOAD_LOG,
+                       &onDownloadLogSelected};
+  mainmenu.items[1] = {"Fix RTC time", NULL, NULL, ICON_FIX_RTC,
+                       &onFixRTCtimeSelected};
+  mainmenu.items[2] = {"Erase Log Data", NULL, NULL, ICON_ERASE_LOG,
+                       &onClearFlashSelected};
+  mainmenu.items[3] = {"Show Location", NULL, NULL, ICON_SHOW_LOCATION,
+                       &onShowLocationSelected};
+  mainmenu.items[4] = {"Pair w/ Logger", NULL, NULL, ICON_PAIR_LOGGER,
+                       &onPairWithLoggerSelected};
+  mainmenu.items[5] = {"App Settings", NULL, NULL, ICON_APP_SETTINGS,
+                       &onAppSettingSelected};
 
+  // config menu
+  memset(&cfgmenu, 0, sizeof(menudata_t));
+  cfgmenu.itemCount = 7;
+  cfgmenu.items[0] = {"Save and exit", "Return to the main menu", NULL, NULL,
+                      NULL};
+  cfgmenu.items[1] = {"Track Mode", "How to divide tracks in GPX", NULL, NULL,
+                      &onTrackModeChange};
+  cfgmenu.items[2] = {"UTC offset", "Timezone offset", NULL, NULL,
+                      &onTimezoneOffsetChange};
+  cfgmenu.items[3] = {"Store POI", "Manually recorded point as POI", NULL, NULL,
+                      NULL};
+  cfgmenu.items[4] = {"Preset/Log by Distance", "Auto log by distance", NULL,
+                      NULL, &onLogByDistanceChange};
+  cfgmenu.items[5] = {"Preset/Log by Time", "Auto log by time", NULL, NULL,
+                      &onLogByTimeChange};
+  cfgmenu.items[6] = {"Preset/Log by Speed", "Auto log by speed", NULL, NULL,
+                      &onLogBySpeedChange};
+  updateConfigMenuDescr();
+
+  // load the configuration data
   M5.update();
-  if (M5.BtnA.read() == 1) {
-    M5.Lcd.setTextFont(2);
-    M5.Lcd.setTextSize(1);
-    M5.Lcd.setTextColor(RED);
-    M5.Lcd.printf("The configuration was cleared.");
+  bool defaultConfig = (M5.BtnA.read() == 1);
+  bool firstBoot = (loadAppConfig(defaultConfig) == false);
 
-    memset(&config, 0, sizeof(appconfig_t));
-    saveAppConfig();
-
-    delay(3000);
-  }
-
-  // draw the initial screen
-  ui.setTitle(APP_NAME);
+  // draw the screen
   updateAppHint();
+  ui.setTitle(APP_NAME);
   ui.drawTitleBar(app.sdcAvail, app.sppActive);
-  ui.drawMainMenu(&mainmenu);
   ui.drawNavBar(&mainnav);
+
+  // if left button is pressed, clear the configuration
+  if (firstBoot) {
+    ui.drawDialogFrame("Hello!");
+    ui.printDialogMessage(BLACK, 0, "The default configuration is loaded.");
+    ui.printDialogMessage(BLACK, 1, "Please run the app setting menu and");
+    ui.printDialogMessage(BLACK, 2, "pairing with your GPS logger.");
+    ui.waitForOk();
+  }
+  ui.drawMainMenu(&mainmenu);
 
   app.idleTimer = millis() + POWER_OFF_TIME;
 }
@@ -667,12 +784,10 @@ void setup() {
 void loop() {
   btnid_t bid = ui.checkButtonInput(&mainnav);
   if (bid != BID_NONE) {
-    if (mainnav.onButtonPress != NULL) {
-      mainnav.onButtonPress((btnid_t)bid);
+    onNavButtonPress((btnid_t)bid);
 
-      ui.drawMainMenu(&mainmenu);
-      ui.drawNavBar(&mainnav);
-    }
+    ui.drawMainMenu(&mainmenu);
+    ui.drawNavBar(&mainnav);
 
     app.idleTimer = millis() + POWER_OFF_TIME;  // reset the idle timer
   }

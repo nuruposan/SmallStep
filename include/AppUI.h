@@ -92,16 +92,19 @@ typedef struct {
 } navmenu_t;
 
 typedef struct {
-  const char *caption;
-  const uint8_t *iconData;
-  bool enabled;
+  const char *caption;  // used on drawing as the main menu or the config menu
+  const char *description;  // used on drawing as the config menu
+  char *valueDescr;         // used on drawing as the config menu
+  const uint8_t *iconData;  // used on drawing as the main menu
   void (*onSelect)();
 } menuitem_t;
 
 typedef struct {
-  menuitem_t items[6];
-  int8_t selectedIndex;
-} mainmenu_t;
+  menuitem_t items[20];
+  int8_t itemCount;
+  int8_t selIndex;
+  int8_t topIndex;
+} menudata_t;
 
 class AppUI {
  private:
@@ -149,7 +152,8 @@ class AppUI {
   void drawDialogFrame(const char *title);
   void drawDialogProgress(int32_t progress);
   void printDialogMessage(int16_t color, int8_t line, String msg);
-  void drawMainMenu(mainmenu_t *menu);
+  void drawMainMenu(menudata_t *menu);
+  void drawConfigMenu(menudata_t *menu);
   void drawNavBar(navmenu_t *menu);
   void drawTitleBar(bool sdAvail, bool btActive);
   btnid_t checkButtonInput(navmenu_t *menu);
