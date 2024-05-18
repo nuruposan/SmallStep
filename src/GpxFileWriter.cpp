@@ -5,32 +5,58 @@ GpxFileWriter::GpxFileWriter(File32 *output) {
   out->seek(0);
 
   inTrack = false;
+  inSegment = false;
   tracks = 0;
   points = 0;
+
+  startXml();
 }
 
-void GpxFileWriter::flush() { out->flush(); }
+void GpxFileWriter::flush() {
+  out->flush();
+}
 
-void GpxFileWriter::startTrack() {
+void GpxFileWriter::startTrack(char *trkname) {
   if (inTrack) endTrack();
-  out->write("<trk><trkseg>\n");
+
+  out->write("<trk>\n");
+  if (trkname != NULL) {
+    char buf[64];
+    out->write(sprintf(buf, "<name>%s</name>\n", trkname));
+  }
+  startTrackSegment();
 
   inTrack = true;
   tracks += 1;
 }
 
+void GpxFileWriter::startTrackSegment() {
+  out->write("<trkseg>\n");
+  inSegment = true;
+}
+
 void GpxFileWriter::startXml() {
   out->write(
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-      "<gpx version=\"1.1\" creator=\"SmallStep M5Stack v0.01\""
+      "<gpx version=\"1.1\" creator=\"SmallStep(M5Stack) v20240515\""
       " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema\""
       " xmlns=\"https://www.topografix.com/GPX/1/1/gpx.xsd\">\n");
   inTrack = false;
 }
 
 void GpxFileWriter::endTrack() {
-  if (inTrack) out->write("</trkseg></trk>\n");
+  if (inTrack) {
+    endTrackSegment();
+    out->write("</trk>\n");
+  }
+
   inTrack = false;
+}
+
+void GpxFileWriter::endTrackSegment() {
+  if (inSegment) out->write("</trkseg>\n");
+
+  inSegment = false;
 }
 
 void GpxFileWriter::endXml() {
@@ -39,9 +65,20 @@ void GpxFileWriter::endXml() {
 }
 
 void GpxFileWriter::putTrkpt(gpsrecord_t rcd) {
-  char buf[40];
+  char buf[48];
 
-  if (!inTrack) startTrack();
+  if (!inTrack) {
+    if (rcd.format & REG_TIME) {
+      time_t tt = rcd.time;
+      struct tm *t = localtime(&tt);
+      sprintf(buf, "Start at %04d-%02d-%02d %02d:%02d:%02d", (t->tm_year + 1900), (t->tm_mon + 1),
+              t->tm_mday, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
+
+      startTrack(buf);
+    } else {
+      startTrack(NULL);
+    }
+  }
 
   out->write("<trkpt");
   if (rcd.format & REG_LAT) {
@@ -58,9 +95,8 @@ void GpxFileWriter::putTrkpt(gpsrecord_t rcd) {
     time_t tt = rcd.time;
     struct tm *t = localtime(&tt);
 
-    sprintf(buf, "<time>%04d-%02d-%02dT%02d:%02d:%02dZ</time>",
-            (t->tm_year + 1900), (t->tm_mon + 1), t->tm_mday, t->tm_hour,
-            t->tm_min, t->tm_sec);
+    sprintf(buf, "<time>%04d-%02d-%02dT%02d:%02d:%02dZ</time>", (t->tm_year + 1900),
+            (t->tm_mon + 1), t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
     out->write(buf);
   }
 
@@ -79,5 +115,10 @@ void GpxFileWriter::putTrkpt(gpsrecord_t rcd) {
   points += 1;
 }
 
-int32_t GpxFileWriter::getTrackCount() { return tracks; }
-int32_t GpxFileWriter::getTrkptCount() { return points; }
+int32_t GpxFileWriter::getTrackCount() {
+  return tracks;
+}
+
+int32_t GpxFileWriter::getTrkptCount() {
+  return points;
+}

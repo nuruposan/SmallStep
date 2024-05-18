@@ -6,7 +6,7 @@
 #include <time.h>
 
 MtkParser::MtkParser() {
-  memset(&options, 0, sizeof(parseoption_t));
+  memset(&options, 0, sizeof(parseopt_t));
   memset(&status, 0, sizeof(parsestatus_t));
 }
 
@@ -46,15 +46,14 @@ void MtkParser::setRecordFormat(uint32_t fmt) {
   //  NSAT, SID, (ALT, AZI) x SID, RCR, MSEC} '*' CHKSUM
 }
 
-float MtkParser::setTimeOffset(float offset) {
-  const float OFFSET_MAX = 12.0;   // UTC+12
+void MtkParser::setOptions(parseopt_t opts) {
+  const float OFFSET_MAX = 13.0;   // UTC+13
   const float OFFSET_MIN = -12.0;  // UTC-12
 
-  options.timeOffset = offset;
-  if (options.timeOffset > OFFSET_MAX) options.timeOffset = OFFSET_MAX;
-  if (options.timeOffset < OFFSET_MIN) options.timeOffset = OFFSET_MIN;
+  if (opts.timeOffset > OFFSET_MAX) opts.timeOffset = OFFSET_MAX;
+  if (opts.timeOffset < OFFSET_MIN) opts.timeOffset = OFFSET_MIN;
 
-  return options.timeOffset;
+  memcpy(&options, &opts, sizeof(parseopt_t));
 }
 
 bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
@@ -158,7 +157,11 @@ bool MtkParser::readBinMarkers() {
           setRecordFormat(dsVal);
           break;
         case DSP_LOG_STARTSTOP:  // log start/stop
-          if (options.trackMode == TRK_AS_IS) out->endTrack();
+          if (options.trackMode == TRK_ONE_DAY) {
+            out->endTrackSegment();
+          } else if (options.trackMode == TRK_AS_IS) {
+            out->endTrack();
+          }
           break;
       }
 
@@ -195,7 +198,7 @@ bool MtkParser::convert(File32 *input, File32 *output,
   int32_t progRate = 0;
   bool fileend = false;
 
-  out->startXml();
+  //  out->startXml();
 
   uint32_t startPos = 0;
   uint32_t currentPos = 0;
@@ -213,10 +216,16 @@ bool MtkParser::convert(File32 *input, File32 *output,
     }
 
     if (dataStart >= in->filesize()) {
-      //      printf("Parser.convert: finished [tracks=%d, trkpts=%d]\n",
-      //             status.totalTracks, status.totalRecords);
       fileend = true;
       break;
+    }
+
+    if (callback != NULL) {
+      int32_t _pr = 100 * ((float)in->position() / in->filesize());
+      if (_pr > progRate) {
+        callback(_pr);
+        progRate = _pr;
+      }
     }
 
     if (in->position() <= sectorStart) {
@@ -250,14 +259,6 @@ bool MtkParser::convert(File32 *input, File32 *output,
 
     if ((in->position() + rcd.size) >= sectorEnd) {
       status.sectorPos += 1;
-    }
-
-    if (callback != NULL) {
-      int32_t _pr = 100 * ((float)in->position() / in->filesize());
-      if (_pr > progRate) {
-        callback(_pr);
-        progRate = _pr;
-      }
     }
   }
 

@@ -20,23 +20,24 @@ typedef struct appstatus {
 } appstatus_t;
 
 typedef struct _appconfig {
-  uint16_t length;         // sizeof(appconfig_t)
-  uint8_t loggerAddr[6];   // app - address of paired logger
-  char loggerName[24];     // logger model ID of pairded logger
-  logformat_t logFormat;   // logger - what to record
-  uint16_t logByDistance;  // logger - auto log by distance (meter, 0: disable)
-  uint16_t logByTime;      // logger - auto log by time (seconds, 0: disable)
-  uint16_t logBySpeed;     // logger - auto log by speed (meter/sec, 0:disabled)
+  uint16_t length;           // sizeof(appconfig_t)
+  uint8_t loggerAddr[6];     // app - address of paired logger
+  char loggerName[24];       // logger model ID of pairded logger
+  logformat_t logFormat;     // logger - what to record
+  uint8_t logDistIdx;        // logger - auto log by distance (meter, 0: disable)
+  uint8_t logTimeIdx;        // logger - auto log by time (seconds, 0: disable)
+  uint8_t logSpeedIdx;       // logger - auto log by speed (meter/sec, 0:disabled)
   recordmode_t reccordMode;  // logger - log record mode
   trackmode_t trackMode;     // parser - how to divide/put tracks
-  float timeOffset;  // parser - timezone offset in hours (-12.0 to 12.0)
+  uint8_t timeOffsetIdx;     // parser - timezone offset in hours (-12.0 to 12.0)
+  bool putPOI;               // parser - treat manually recorded points as POIs
 } appconfig_t;
 
 // ******** function prototypes ********
 bool isZeroedBytes(void *, uint16_t);
 bool checkLoggerPaired();
 void saveAppConfig();
-bool loadAppConfig(bool loadDefault);
+bool loadAppConfig(bool);
 void bluetoothCallback(esp_spp_cb_event_t, esp_spp_cb_param_t *);
 void progressCallback(int32_t);
 bool runDownloadLog();
@@ -63,14 +64,23 @@ void updateConfigMenuDescr();
 const char *APP_NAME = "SmallStep";
 const char LCD_BRIGHTNESS = 10;
 
+const float timeOffsetValues[] = {-12, -11, -10, -9, -8, -7, -6,  -5,  -4.5, -4,  -3.5,
+                                  -3,  -2,  -1,  0,  1,  2,  3,   3.5, 4,    4.5, 5,
+                                  5.5, 6,   6.5, 7,  8,  9,  9.5, 10,  12,   13};  // uint: hours
+const int16_t logDistValues[] = {0, 10, 30, 50, 100, 200, 300, 500};               // uint: meters
+const int16_t logTimeValues[] = {0, 1, 3, 5, 10, 15, 30, 60, 120, 180, 300};       // unit: seconds
+const int16_t logSpeedValues[] = {0,  10, 20,  30,  40,  50,  60,  70,
+                                  80, 90, 100, 120, 140, 160, 180, 200};  // uint: km/h
+
 AppUI ui = AppUI();
 SdFat SDcard;
 MtkLogger logger = MtkLogger();
 appstatus_t app;
 appconfig_t config;
 navmenu_t mainnav;
-menudata_t mainmenu;
-menudata_t cfgmenu;
+mainmenu_t mainmenu;
+cfgmenu_t cfgmenu;
+cfgmenu_t submenu;
 uint32_t idleTimer;
 
 void updateAppHint() {
@@ -78,61 +88,39 @@ void updateAppHint() {
   if (!isZeroedBytes(&config.loggerAddr, sizeof(config.loggerAddr))) {
     char addrStr[16];
     sprintf(addrStr, "%02X%02X-%02X%02X-%02X%02X",  // xxxx-xxxx-xxxx
-            config.loggerAddr[0], config.loggerAddr[1], config.loggerAddr[2],
-            config.loggerAddr[3], config.loggerAddr[4], config.loggerAddr[5]);
-    ui.setHints(config.loggerName, addrStr);
+            config.loggerAddr[0], config.loggerAddr[1], config.loggerAddr[2], config.loggerAddr[3],
+            config.loggerAddr[4], config.loggerAddr[5]);
+    ui.setAppHints(config.loggerName, addrStr);
   } else {
-    ui.setHints("NO LOGGER", "0000-0000-0000");
+    ui.setAppHints("NO LOGGER", "0000-0000-0000");
   }
 }
 
 void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   switch (event) {
-    case ESP_SPP_INIT_EVT:
-      if (param == NULL) {
-        app.sppActive = true;
-        ui.drawTitleBar(app.sdcAvail, app.sppActive);
-      }
-      break;
+  case ESP_SPP_INIT_EVT:
+    if (param == NULL) {
+      app.sppActive = true;
+      ui.drawTitleBar(app.sdcAvail, app.sppActive);
+    }
+    break;
 
-    case ESP_SPP_OPEN_EVT:  // SPP connection established
-      memcpy(app.loggerAddr, param->open.rem_bda, 6);
-      break;
+  case ESP_SPP_OPEN_EVT:  // SPP connection established
+    memcpy(app.loggerAddr, param->open.rem_bda, 6);
+    break;
 
-    case ESP_SPP_UNINIT_EVT:
-      if (param == NULL) {
-        app.sppActive = false;
-        ui.drawTitleBar(app.sdcAvail, app.sppActive);
-      }
-      break;
+  case ESP_SPP_UNINIT_EVT:
+    if (param == NULL) {
+      app.sppActive = false;
+      ui.drawTitleBar(app.sdcAvail, app.sppActive);
+    }
+    break;
   }
 }
 
-void progressCallback(int32_t progRate) { ui.drawDialogProgress(progRate); }
-
-void onTimer() {}
-
-/**
-    private static final String QUERY_LOG_BY_TIME_COMMAND  =
- "PMTK182,2,3,0"; private static final String QUERY_LOG_BY_TIME_RESPONSE =
- "^\\$(PMTK182,3,3,(\\w+))\\*(\\w+)$"; private static final String
- QUERY_LOG_BY_DIST_COMMAND  = "PMTK182,2,4,0"; private static final String
- QUERY_LOG_BY_DIST_RESPONSE = "^\\$(PMTK182,3,4,(\\w+))\\*(\\w+)$";
- private static final String QUERY_LOG_BY_SPD_COMMAND   = "PMTK182,2,5,0";
- private static final String QUERY_LOG_BY_SPD_RESPONSE  =
- "^\\$(PMTK182,3,5,(\\w+))\\*(\\w+)$"; private static final String
- static final String QUERY_LOG_STATUS_COMMAND  = "PMTK182,2,7"; private
- static final String QUERY_LOG_STATUS_RESPONSE =
- "^\\$(PMTK182,3,7,(\\w+))\\*(\\w+)$"; private static final String
- QUERY_RCD_ADDR_COMMAND    = "PMTK182,2,8"; private static final String
- QUERY_RCD_ADDR_RESPONSE   =
- "^\\$(PMTK182,3,8,(\\w+))\\*(\\w+)$"; private static final String
- QUERY_RCD_RCNT_COMMAND    = "PMTK182,2,10"; private static final String
- QUERY_RCD_RCNT_RESPONSE   = "^\\$(PMTK182,3,10,(\\w+))\\*(\\w+)$";
- private
-
- change format: PMTK182,1,2,80060E7F
- */
+void progressCallback(int32_t progRate) {
+  ui.drawDialogProgress(progRate);
+}
 
 bool isZeroedBytes(void *p, uint16_t size) {
   uint8_t *pb = (uint8_t *)p;
@@ -158,8 +146,7 @@ bool checkLoggerPaired() {
       if (paired) ui.waitForOk();
     } else {
       paired = false;
-      ui.printDialogMessage(BLACK, 1,
-                            "Pair with your GPS logger now? [Cancel]");
+      ui.printDialogMessage(BLACK, 1, "Pair with your GPS logger now? [Cancel]");
       ui.printDialogMessage(BLUE, 2, "The Operation was canceled.");
     }
   }
@@ -251,9 +238,11 @@ bool runDownloadLog() {
 
   ui.printDialogMessage(BLUE, 2, "Converting data to GPX format...");
   {
+    parseopt_t parseopt = {config.trackMode, timeOffsetValues[config.timeOffsetIdx]};
+
     // convert the binary file to GPX file and get the summary
     MtkParser *parser = new MtkParser();
-    parser->setTimeOffset(9.0);
+    parser->setOptions(parseopt);
     parser->convert(&binFileR, &gpxFileW, &progressCallback);
     uint32_t tracks = parser->getTrackCount();
     uint32_t trkpts = parser->getTrkptCount();
@@ -296,8 +285,7 @@ bool runDownloadLog() {
 
       // print the result message
       ui.printDialogMessage(BLACK, 2, "Converting data to GPX format... done.");
-      ui.printDialogMessage(BLUE, 3,
-                            "No output file is saved because of there is");
+      ui.printDialogMessage(BLUE, 3, "No output file is saved because of there is");
       ui.printDialogMessage(BLUE, 4, "no valid record in the log data.");
     }
   }
@@ -351,10 +339,8 @@ bool runFixRTCtime() {
   }
   // print the result message
   ui.printDialogMessage(BLACK, 1, "Setting RTC datetime... done.");
-  ui.printDialogMessage(BLUE, 2, "The GPS week rollover is now fixed.");
-  ui.printDialogMessage(BLUE, 3,
-                        "Please check the logging status as the logger");
-  ui.printDialogMessage(BLUE, 4, "has been restarted to apply the fix.");
+  ui.printDialogMessage(BLUE, 2, "The logger has been restarted to apply the fix.");
+  ui.printDialogMessage(BLUE, 3, "Please check the logging status.");
 
   return true;
 }
@@ -399,11 +385,10 @@ bool runPairWithLogger() {
 
       // print the success message
       sprintf(msgbuf1, "- %s : found.", DEVICE_NAMES[i].c_str());
-      sprintf(msgbuf2, "Logger address : %02X%02X-%02X%02X-%02X%02X", addr[0],
-              addr[1], addr[2], addr[3], addr[4], addr[5]);
+      sprintf(msgbuf2, "Logger address : %02X%02X-%02X%02X-%02X%02X", addr[0], addr[1], addr[2],
+              addr[3], addr[4], addr[5]);
       ui.printDialogMessage(BLACK, (1 + i), msgbuf1);
-      ui.printDialogMessage(BLUE, (2 + i),
-                            "Successfully paired with the discovered logger.");
+      ui.printDialogMessage(BLUE, (2 + i), "Successfully paired with the discovered logger.");
       ui.printDialogMessage(BLUE, (3 + i), msgbuf2);
 
       // copy the address and model name to the configuration
@@ -423,13 +408,10 @@ bool runPairWithLogger() {
   }
 
   // print the failure message
-  ui.printDialogMessage(RED, (1 + DEVICE_COUNT),
-                        "Cannot discover any supported logger.");
-  ui.printDialogMessage(RED, (2 + DEVICE_COUNT),
-                        "- Make sure Bluetooth is enabled on your");
+  ui.printDialogMessage(RED, (1 + DEVICE_COUNT), "Cannot discover any supported logger.");
+  ui.printDialogMessage(RED, (2 + DEVICE_COUNT), "- Make sure Bluetooth is enabled on your");
   ui.printDialogMessage(RED, (3 + DEVICE_COUNT), "  GPS logger");
-  ui.printDialogMessage(RED, (4 + DEVICE_COUNT),
-                        "- Power cycling may fix this problem");
+  ui.printDialogMessage(RED, (4 + DEVICE_COUNT), "- Power cycling may fix this problem");
 
   return false;
 }
@@ -454,8 +436,7 @@ bool runClearFlash() {
   ui.printDialogMessage(BLUE, 0, "Are you sure to erase log data?");
   {
     if (ui.waitForOkCancel() == BID_CANCEL) {
-      ui.printDialogMessage(BLACK, 0,
-                            "Are you sure to erase log data?  [Cancel]");
+      ui.printDialogMessage(BLACK, 0, "Are you sure to erase log data?  [Cancel]");
       ui.printDialogMessage(RED, 1, "The operation was canceled by the user.");
       return false;
     }
@@ -489,6 +470,8 @@ bool runClearFlash() {
       ui.printDialogMessage(RED, 4, "- Power cycling may fix this problem");
     }
     logger.disconnect();
+
+    return false;
   }
   ui.printDialogMessage(BLACK, 2, "Erasing log data... done.");
   ui.printDialogMessage(BLUE, 3, "Hope you have a nice trip next time!");
@@ -502,54 +485,12 @@ void onClearFlashSelected() {
 }
 
 void onAppSettingSelected() {
-  updateConfigMenuDescr();
+  cfgmenu.selIndex = 0;
+  cfgmenu.topIndex = 0;
+
+  //  updateConfigMenuDescr();
   ui.drawConfigMenu(&cfgmenu);
-
-  bool endFlag = false;
-  while (!endFlag) {
-    // check the button input
-    switch (ui.checkButtonInput(&mainnav)) {
-      case BID_BTN_A:
-        cfgmenu.selIndex =
-            (cfgmenu.selIndex + (cfgmenu.itemCount - 1)) % cfgmenu.itemCount;
-
-        if ((cfgmenu.itemCount < 4) || (cfgmenu.selIndex <= 1)) {
-          cfgmenu.topIndex = 0;
-        } else if (cfgmenu.selIndex >= cfgmenu.itemCount - 2) {
-          cfgmenu.topIndex = cfgmenu.itemCount - 4;
-        } else {
-          cfgmenu.topIndex = cfgmenu.selIndex - 1;
-        }
-
-        ui.drawConfigMenu(&cfgmenu);
-        break;
-      case BID_BTN_B:
-        cfgmenu.selIndex = (cfgmenu.selIndex + 1) % cfgmenu.itemCount;
-
-        if ((cfgmenu.itemCount < 4) || (cfgmenu.selIndex <= 1)) {
-          cfgmenu.topIndex = 0;
-        } else if (cfgmenu.selIndex >= cfgmenu.itemCount - 2) {
-          cfgmenu.topIndex = cfgmenu.itemCount - 4;
-        } else {
-          cfgmenu.topIndex = cfgmenu.selIndex - 2;
-        }
-
-        ui.drawConfigMenu(&cfgmenu);
-        break;
-      case BID_BTN_C:
-        if (cfgmenu.items[cfgmenu.selIndex].onSelect != NULL) {
-          cfgmenu.items[cfgmenu.selIndex].onSelect();
-
-          updateConfigMenuDescr();
-          ui.drawConfigMenu(&cfgmenu);
-        }
-
-        endFlag = (cfgmenu.items[cfgmenu.selIndex].onSelect == NULL);
-        break;
-    }
-
-    delay(LOOP_INTERVAL);
-  }
+  ui.handleInputForConfigMenu(&cfgmenu);
 
   saveAppConfig();
 }
@@ -574,27 +515,27 @@ void onSelectButtonClick() {
 
 void onNavButtonPress(btnid_t bid) {
   switch (bid) {
-    case BID_BTN_A:
-      onPrevButtonClick();
-      break;
-    case BID_BTN_B:
-      onNextButtonClick();
-      break;
-    case BID_BTN_C:
-      onSelectButtonClick();
-      break;
+  case BID_BTN_A:
+    onPrevButtonClick();
+    break;
+  case BID_BTN_B:
+    onNextButtonClick();
+    break;
+  case BID_BTN_C:
+    onSelectButtonClick();
+    break;
   }
 }
 
 void updateConfigMenuDescr() {
   for (int i = 0; i < cfgmenu.itemCount; i++) {
     if (cfgmenu.items[i].valueDescr == NULL) {
-      cfgmenu.items[i].valueDescr = (char *)malloc(32);
-      memset(cfgmenu.items[i].valueDescr, 0, 32);
+      cfgmenu.items[i].valueDescr = (char *)malloc(20);
+      memset(cfgmenu.items[i].valueDescr, 0, 20);
     }
   }
 
-  menuitem_t *trkmode = &cfgmenu.items[1];
+  cfgitem_t *trkmode = &cfgmenu.items[1];
   if (config.trackMode == TRK_ONE_DAY) {
     strcpy(trkmode->valueDescr, "A track per day");
   } else if (config.trackMode == TRK_AS_IS) {
@@ -603,46 +544,82 @@ void updateConfigMenuDescr() {
     strcpy(trkmode->valueDescr, "One track");
   }
 
-  menuitem_t *tzoffset = &cfgmenu.items[2];
-  sprintf(tzoffset->valueDescr, "UTC%+.1f", config.timeOffset);
+  cfgitem_t *tzoffset = &cfgmenu.items[2];
+  sprintf(tzoffset->valueDescr, "UTC%+.1f", timeOffsetValues[config.timeOffsetIdx]);
 
-  menuitem_t *putpoi = &cfgmenu.items[3];
-  // sprintf();
+  cfgitem_t *putpoi = &cfgmenu.items[3];
+  if (!config.putPOI) {
+    strcpy(putpoi->valueDescr, "Disabled");
+  } else {
+    strcpy(putpoi->valueDescr, "Enabled");
+  }
 
-  menuitem_t *logdist = &cfgmenu.items[4];
-  if (config.logByDistance == 0) {
+  cfgitem_t *logdist = &cfgmenu.items[4];
+  if (logDistValues[config.logDistIdx] == 0) {
     strcpy(logdist->valueDescr, "Disabled");
   } else {
-    sprintf(logdist->valueDescr, "Every %d meters", config.logByDistance);
+    sprintf(logdist->valueDescr, "%d meters", logDistValues[config.logDistIdx]);
   }
 
-  menuitem_t *logtime = &cfgmenu.items[5];
-  if (config.logByTime == 0) {
+  cfgitem_t *logtime = &cfgmenu.items[5];
+  if (logTimeValues[config.logTimeIdx] == 0) {
     strcpy(logtime->valueDescr, "Disabled");
   } else {
-    sprintf(logtime->valueDescr, "Every %d seconds", config.logByTime);
+    sprintf(logtime->valueDescr, "%d seconds", logTimeValues[config.logTimeIdx]);
   }
 
-  menuitem_t *logspd = &cfgmenu.items[6];
-  if (config.logBySpeed == 0) {
+  cfgitem_t *logspd = &cfgmenu.items[6];
+  if (logSpeedValues[config.logSpeedIdx] == 0) {
     strcpy(logspd->valueDescr, "Disabled");
   } else {
-    sprintf(logspd->valueDescr, "Over %d m/s", config.logBySpeed);
+    sprintf(logspd->valueDescr, "%d km/h", logSpeedValues[config.logSpeedIdx]);
   }
 }
 
 void onTrackModeChange() {
   config.trackMode = (trackmode_t)(((int)config.trackMode + 1) % 3);
+  updateConfigMenuDescr();
 }
 
 void onTimezoneOffsetChange() {
-  config.timeOffset += 0.5;
-  if (config.timeOffset > 12.0) config.timeOffset = -12.0;
+  uint8_t valCount = sizeof(timeOffsetValues) / sizeof(float);
+
+  config.timeOffsetIdx = (config.timeOffsetIdx + 1) % valCount;
+  updateConfigMenuDescr();
 }
 
-void onLogByDistanceChange() {}
-void onLogByTimeChange() {}
-void onLogBySpeedChange() {}
+void onPutPointOfInterestChange() {
+  //
+  config.putPOI = (!config.putPOI);
+  updateConfigMenuDescr();
+}
+
+void onLogByDistanceChange() {
+  uint8_t valCount = sizeof(logDistValues) / sizeof(int16_t);
+
+  config.logDistIdx = (config.logDistIdx + 1) % valCount;
+  config.logTimeIdx = 0;
+  config.logSpeedIdx = 0;
+  updateConfigMenuDescr();
+}
+
+void onLogByTimeChange() {
+  uint8_t valCount = sizeof(logTimeValues) / sizeof(int16_t);
+
+  config.logDistIdx = 0;
+  config.logTimeIdx = (config.logTimeIdx + 1) % valCount;
+  config.logSpeedIdx = 0;
+  updateConfigMenuDescr();
+}
+
+void onLogBySpeedChange() {
+  uint8_t valCount = sizeof(logSpeedValues) / sizeof(int16_t);
+
+  config.logDistIdx = 0;
+  config.logTimeIdx = 0;
+  config.logSpeedIdx = (config.logSpeedIdx + 1) % valCount;
+  updateConfigMenuDescr();
+}
 
 void saveAppConfig() {
   uint8_t *pcfg = (uint8_t *)(&config);
@@ -680,14 +657,16 @@ bool loadAppConfig(bool loadDefault) {
 
   // load the default configuration if loadDefault is set to true or
   // the EEPROM data is invalid
-  loadDefault |= ((config.length != sizeof(appconfig_t)) ||
-                  (EEPROM.read(sizeof(appconfig_t) != chk)));
+  loadDefault |=
+      ((config.length != sizeof(appconfig_t)) || (EEPROM.read(sizeof(appconfig_t) != chk)));
   if (loadDefault) {
     memset(&config, 0, sizeof(appconfig_t));
     config.length = sizeof(appconfig_t);
     config.trackMode = TRK_ONE_DAY;
-    config.timeOffset = 9.0f;
-    config.logByTime = 30;
+    config.timeOffsetIdx = 14;  // timeOffsetValues[14] = 0 (UTC+0)
+    config.logDistIdx = 0;      // logDistValues[0] = 0 (disabled)
+    config.logTimeIdx = 5;      // logTimeValues[5] = 15
+    config.logSpeedIdx = 0;     // logSpeedValues[0] = 0 (disabled)
 
     Serial.printf("SmallStep.loadConfig: default configuration loaded\n");
 
@@ -723,39 +702,25 @@ void setup() {
   mainnav.items[2] = {"Select", true};
 
   // main menu
-  memset(&mainmenu, 0, sizeof(menudata_t));
+  memset(&mainmenu, 0, sizeof(mainmenu_t));
   mainmenu.itemCount = 6;
-  mainmenu.items[0] = {"Download Log", NULL, NULL, ICON_DOWNLOAD_LOG,
-                       &onDownloadLogSelected};
-  mainmenu.items[1] = {"Fix RTC time", NULL, NULL, ICON_FIX_RTC,
-                       &onFixRTCtimeSelected};
-  mainmenu.items[2] = {"Erase Log Data", NULL, NULL, ICON_ERASE_LOG,
-                       &onClearFlashSelected};
-  mainmenu.items[3] = {"Show Location", NULL, NULL, ICON_SHOW_LOCATION,
-                       &onShowLocationSelected};
-  mainmenu.items[4] = {"Pair w/ Logger", NULL, NULL, ICON_PAIR_LOGGER,
-                       &onPairWithLoggerSelected};
-  mainmenu.items[5] = {"App Settings", NULL, NULL, ICON_APP_SETTINGS,
-                       &onAppSettingSelected};
+  mainmenu.items[0] = {"Download Log", ICON_DOWNLOAD_LOG, true, &onDownloadLogSelected};
+  mainmenu.items[1] = {"Fix RTC time", ICON_FIX_RTC, true, &onFixRTCtimeSelected};
+  mainmenu.items[2] = {"Erase Log Data", ICON_ERASE_LOG, true, &onClearFlashSelected};
+  mainmenu.items[3] = {"Show Location", ICON_SHOW_LOCATION, true, &onShowLocationSelected};
+  mainmenu.items[4] = {"Pair w/ Logger", ICON_PAIR_LOGGER, true, &onPairWithLoggerSelected};
+  mainmenu.items[5] = {"App Settings", ICON_APP_SETTINGS, true, &onAppSettingSelected};
 
   // config menu
-  memset(&cfgmenu, 0, sizeof(menudata_t));
-  cfgmenu.itemCount = 7;
-  cfgmenu.items[0] = {"Save and exit", "Return to the main menu", NULL, NULL,
-                      NULL};
-  cfgmenu.items[1] = {"Track Mode", "How to divide tracks in GPX", NULL, NULL,
-                      &onTrackModeChange};
-  cfgmenu.items[2] = {"UTC offset", "Timezone offset", NULL, NULL,
-                      &onTimezoneOffsetChange};
-  cfgmenu.items[3] = {"Store POI", "Manually recorded point as POI", NULL, NULL,
-                      NULL};
-  cfgmenu.items[4] = {"Preset/Log by Distance", "Auto log by distance", NULL,
-                      NULL, &onLogByDistanceChange};
-  cfgmenu.items[5] = {"Preset/Log by Time", "Auto log by time", NULL, NULL,
-                      &onLogByTimeChange};
-  cfgmenu.items[6] = {"Preset/Log by Speed", "Auto log by speed", NULL, NULL,
-                      &onLogBySpeedChange};
-  updateConfigMenuDescr();
+  memset(&cfgmenu, 0, sizeof(cfgmenu_t));
+  cfgmenu.itemCount = 4;
+  cfgmenu.items[0] = {"Save and exit", "Return to the main menu", NULL, NULL, NULL};
+  cfgmenu.items[1] = {"Output settings", "", (char *)malloc(8), NULL, NULL};
+  strcpy(cfgmenu.items[1].valueDescr, ">>");
+  cfgmenu.items[2] = {"Log mode settings", "", (char *)malloc(8), NULL, NULL};
+  strcpy(cfgmenu.items[2].valueDescr, ">>");
+  cfgmenu.items[3] = {"Log format settings", "", (char *)malloc(8), NULL, NULL};
+  strcpy(cfgmenu.items[3].valueDescr, ">>");
 
   // load the configuration data
   M5.update();
@@ -764,7 +729,7 @@ void setup() {
 
   // draw the screen
   updateAppHint();
-  ui.setTitle(APP_NAME);
+  ui.setAppTitle(APP_NAME);
   ui.drawTitleBar(app.sdcAvail, app.sppActive);
   ui.drawNavBar(&mainnav);
 

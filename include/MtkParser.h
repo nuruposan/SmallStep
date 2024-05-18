@@ -24,7 +24,7 @@ typedef enum _trkopt {
 typedef struct _parseopt {
   trackmode_t trackMode;
   float timeOffset;
-} parseoption_t;
+} parseopt_t;
 
 typedef struct _parsest {
   uint16_t sectorPos;
@@ -58,7 +58,7 @@ class MtkParser {
 
   MtkFileReader *in;
   GpxFileWriter *out;
-  parseoption_t options;
+  parseopt_t options;
   parsestatus_t status;
 
   bool isDifferentDate(uint32_t t1, uint32_t t2);
@@ -69,7 +69,7 @@ class MtkParser {
 
  public:
   MtkParser();
-  float setTimeOffset(float offset);
+  void setOptions(parseopt_t);
   bool convert(File32 *input, File32 *output, void (*callback)(int32_t));
   gpsrecord_t getFirstTrkpt();
   gpsrecord_t getLastTrkpt();
