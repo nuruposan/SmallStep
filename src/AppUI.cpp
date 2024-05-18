@@ -41,8 +41,8 @@ AppUI::AppUI() {
   dlgClientLeft = dlgFrameLeft + 4;
 }
 
-void AppUI::putBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x,
-                      int16_t y, int16_t color) {
+void AppUI::putBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x, int16_t y,
+                      int16_t color) {
   // icon data format:
   // - 1st byte: uint8_t width
   // - 2nd byte: uint8_t height
@@ -80,8 +80,7 @@ void AppUI::drawDialogProgress(int32_t progRate) {
 
   M5.Lcd.drawRect(BAR_X, BAR_Y, BAR_W, BAR_H, NAVY);
   if (progRate == 0) {
-    M5.Lcd.fillRect((BAR_X + 1), (BAR_Y + 1), (BAR_W - 2), (BAR_H - 2),
-                    LIGHTGREY);
+    M5.Lcd.fillRect((BAR_X + 1), (BAR_Y + 1), (BAR_W - 2), (BAR_H - 2), LIGHTGREY);
   } else {
     M5.Lcd.fillRect(BAR_X, BAR_Y, (BAR_W * (progRate / 100.0)), BAR_H, NAVY);
   }
@@ -133,7 +132,7 @@ void AppUI::drawDialogFrame(const char *title) {
  * Draw the main menu in the client area of the screen.
  * @param menu Main menu data
  */
-void AppUI::drawMainMenu(menudata_t *menu) {
+void AppUI::drawMainMenu(mainmenu_t *menu) {
   const int16_t MENUAREA_W = M5.Lcd.width();
   const int16_t MENUAREA_H = M5.Lcd.height() - (24 + 24);
   const int16_t MENUAREA_X = 0;
@@ -161,14 +160,13 @@ void AppUI::drawMainMenu(menudata_t *menu) {
       sprite.fillRoundRect(x, y, MENUBTN_W, MENUBTN_H, 4, DARKGREY);
     }
 
-    putBitmap(&sprite, menu->items[i].iconData,
-              (x + (MENUBTN_W / 2) - (48 / 2)), (y + 12), COLOR16(0, 32, 32));
+    putBitmap(&sprite, menu->items[i].iconData, (x + (MENUBTN_W / 2) - (48 / 2)), (y + 12),
+              COLOR16(0, 32, 32));
 
     // ボタンのキャプションを描画
     sprite.setTextSize(1);
     sprite.setTextColor(BLACK);
-    sprite.drawCentreString(menu->items[i].caption, x + (MENUBTN_W / 2),
-                            y + (MENUBTN_H - 12), 1);
+    sprite.drawCentreString(menu->items[i].caption, x + (MENUBTN_W / 2), y + (MENUBTN_H - 12), 1);
   }
 
   // transfer the sprite to the LCD
@@ -269,8 +267,7 @@ void AppUI::putAppIcon(TFT_eSprite *spr, int16_t x, int16_t y) {
   putBitmap(spr, appIcon, x, y, color);
 }
 
-void AppUI::putBluetoothIcon(TFT_eSprite *spr, int16_t x, int16_t y,
-                             bool connected) {
+void AppUI::putBluetoothIcon(TFT_eSprite *spr, int16_t x, int16_t y, bool connected) {
   // 描画色の決定。Bluetoothが未接続の場合はアイコンを灰色背景にする
   int16_t colorBg = (connected) ? BLUE : DARKGREY;
 
@@ -282,8 +279,7 @@ void AppUI::putBluetoothIcon(TFT_eSprite *spr, int16_t x, int16_t y,
 /**
  * SDカードの状態表示アイコンの描画
  */
-void AppUI::putSDcardIcon(TFT_eSprite *spr, int16_t x, int16_t y,
-                          bool mounted) {
+void AppUI::putSDcardIcon(TFT_eSprite *spr, int16_t x, int16_t y, bool mounted) {
   const int16_t ICON_W = 17;
   const int16_t ICON_H = 20;
   const int16_t PIN_W = 2;
@@ -311,8 +307,7 @@ void AppUI::putSDcardIcon(TFT_eSprite *spr, int16_t x, int16_t y,
 /**
  * バッテリーアイコンの描画
  */
-void AppUI::putBatteryIcon(TFT_eSprite *spr, int16_t x, int16_t y,
-                           int8_t level) {
+void AppUI::putBatteryIcon(TFT_eSprite *spr, int16_t x, int16_t y, int8_t level) {
   const int16_t ICON_W = 21;
   const int16_t ICON_H = 20;
   const int16_t BAR_W = 3;
@@ -336,8 +331,7 @@ void AppUI::putBatteryIcon(TFT_eSprite *spr, int16_t x, int16_t y,
 
   // draw the battery level meter
   for (int16_t i = 0; i < barCount; i++) {
-    spr->fillRect((x + 2) + ((BAR_W + 1) * i), (y + 4), BAR_W, BAR_H,
-                  LIGHTGREY);
+    spr->fillRect((x + 2) + ((BAR_W + 1) * i), (y + 4), BAR_W, BAR_H, LIGHTGREY);
   }
   if (barCount == 0) {
     spr->fillRect((x + 2), (y + 4), BAR_W, BAR_H, RED);
@@ -356,9 +350,11 @@ btnid_t AppUI::checkButtonInput(navmenu_t *nav) {
   return BID_NONE;
 }
 
-void AppUI::setTitle(const char *title) { appTitle = title; }
+void AppUI::setAppTitle(const char *title) {
+  appTitle = title;
+}
 
-void AppUI::setHints(const char *hint1, const char *hint2) {
+void AppUI::setAppHints(const char *hint1, const char *hint2) {
   memset(appHint[0], 0, sizeof(appHint[0]));
   memset(appHint[1], 0, sizeof(appHint[1]));
 
@@ -400,13 +396,13 @@ btnid_t AppUI::waitForOkCancel() {
   return ret;
 }
 
-void AppUI::drawConfigMenu(menudata_t *menu) {
+void AppUI::drawConfigMenu(cfgmenu_t *menu) {
   const int16_t MENUAREA_W = M5.Lcd.width();
-  const int16_t MENUAREA_H = M5.Lcd.height() - (24 + 24);
   const int16_t BTN_MGN_X = 8;
-  const int16_t BTN_MGN_Y = 8;
+  const int16_t BTN_MGN_T = 8;
+  const int16_t BTN_MGN_Y = 4;
   const int16_t BTN_W = MENUAREA_W - (BTN_MGN_X * 2);  // ボタンのサイズ指定
-  const int16_t BTN_H = 38;
+  const int16_t BTN_H = 35;
 
   // スプライト領域の初期化
   sprite.createSprite(menuAreaWidth, menuAreaHeight);
@@ -416,28 +412,84 @@ void AppUI::drawConfigMenu(menudata_t *menu) {
   sprite.setTextColor(BLACK);
   sprite.setTextSize(1);
 
+  sprite.fillRect(BTN_MGN_X, BTN_MGN_T, BTN_W, 18, COLOR16(0, 128, 255));
+  sprite.setTextColor(BLACK);
+  sprite.drawString("Config", (BTN_MGN_X + 4), (BTN_MGN_T + 1), 2);
+
   for (int i = 0; i < 4; i++) {
-    uint8_t idx = i + menu->topIndex;
+    uint8_t idx = menu->topIndex + i;
     if (idx >= menu->itemCount) break;
 
-    menuitem_t mi = menu->items[idx];
+    cfgitem_t mi = menu->items[idx];
 
     int16_t x = BTN_MGN_X;
-    int16_t y = (BTN_MGN_Y * (i + 1)) + (BTN_H * i);
+    int16_t y = (BTN_MGN_T + 18) + (BTN_MGN_Y * (i + 1)) + (BTN_H * i);
     int16_t color = (idx == menu->selIndex) ? LIGHTGREY : DARKGREY;
 
     sprite.fillRect(x, y, BTN_W, BTN_H, color);
 
     sprite.setTextColor(BLACK);
-    sprite.drawString(mi.caption, (x + 4), (y + 4), 2);
-    sprite.drawString(mi.description, (x + 4), (y + 24), 1);
+    sprite.drawString(mi.caption, (x + 4), (y + 3), 2);
+    sprite.drawString(mi.description, (x + 4), (y + 23), 1);
     if (mi.valueDescr != NULL) {
       sprite.setTextColor(BLUE);
-      sprite.drawRightString(mi.valueDescr, (x + (BTN_W - 4)), (y + 4), 2);
+      sprite.drawRightString(mi.valueDescr, (x + (BTN_W - 4)), (y + 3), 2);
     }
   }
 
   // transfer the sprite to the LCD
   sprite.pushSprite(menuAreaLeft, menuAreaTop);
   sprite.deleteSprite();
+}
+
+void AppUI::handleInputForConfigMenu(cfgmenu_t *menu) {
+  navmenu_t nav;
+  nav.items[0] = {"Prev", true};
+  nav.items[1] = {"Next", true};
+  nav.items[2] = {"Select", true};
+  drawNavBar(&nav);
+
+  bool endFlag = false;
+  while (!endFlag) {
+    // check the button input
+    switch (checkButtonInput(&nav)) {
+    case BID_BTN_A:
+      menu->selIndex = (menu->selIndex + (menu->itemCount - 1)) % menu->itemCount;
+
+      if ((menu->itemCount < 4) || (menu->selIndex <= 1)) {
+        menu->topIndex = 0;
+      } else if (menu->selIndex >= menu->itemCount - 2) {
+        menu->topIndex = menu->itemCount - 4;
+      } else {
+        menu->topIndex = menu->selIndex - 1;
+      }
+
+      drawConfigMenu(menu);
+      break;
+    case BID_BTN_B:
+      menu->selIndex = (menu->selIndex + 1) % menu->itemCount;
+
+      if ((menu->itemCount < 4) || (menu->selIndex <= 1)) {
+        menu->topIndex = 0;
+      } else if (menu->selIndex >= menu->itemCount - 2) {
+        menu->topIndex = menu->itemCount - 4;
+      } else {
+        menu->topIndex = menu->selIndex - 2;
+      }
+
+      drawConfigMenu(menu);
+      break;
+    case BID_BTN_C:
+      if (menu->items[menu->selIndex].onSelect != NULL) {
+        menu->items[menu->selIndex].onSelect();
+
+        drawConfigMenu(menu);
+      }
+
+      endFlag = (menu->items[menu->selIndex].onSelect == NULL);
+      break;
+    }
+
+    delay(50);
+  }
 }

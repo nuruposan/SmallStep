@@ -2,28 +2,27 @@
 
 #include <M5Stack.h>
 
-const uint8_t ICON_APP[] = {
-    32,         20,         0,          0,           // Width, Height, Color
-    0b00001100, 0b01100000, 0b00000000, 0b00000000,  //
-    0b00011110, 0b11110000, 0b00000000, 0b00000000,  //
-    0b00011110, 0b11110000, 0b00000000, 0b00000000,  //
-    0b01101100, 0b01101100, 0b00000000, 0b00000000,  //
-    0b11110011, 0b10011110, 0b00000000, 0b00000000,  //
-    0b11110111, 0b11011110, 0b00000000, 0b00000000,  //
-    0b01101111, 0b11101100, 0b00000000, 0b00000000,  //
-    0b00011111, 0b11110000, 0b00000000, 0b00000000,  //
-    0b00111111, 0b11111000, 0b01100011, 0b00000000,  //
-    0b00111111, 0b11111000, 0b11110111, 0b10000000,  //
-    0b00001111, 0b11100000, 0b11110111, 0b10000000,  //
-    0b00000000, 0b00000011, 0b01100011, 0b01100000,  //
-    0b00000000, 0b00000111, 0b10011100, 0b11110000,  //
-    0b00000000, 0b00000111, 0b10111110, 0b11110000,  //
-    0b00000000, 0b00000011, 0b01111111, 0b01100000,  //
-    0b00000000, 0b00000000, 0b11111111, 0b10000000,  //
-    0b00000000, 0b00000001, 0b11111111, 0b11000000,  //
-    0b00000000, 0b00000001, 0b11111111, 0b11000000,  //
-    0b00000000, 0b00000001, 0b11111111, 0b11000000,  //
-    0b00000000, 0b00000000, 0b01111111, 0b00000000};
+const uint8_t ICON_APP[] = {32,         20,         0,          0,           // Width, Height, Color
+                            0b00001100, 0b01100000, 0b00000000, 0b00000000,  //
+                            0b00011110, 0b11110000, 0b00000000, 0b00000000,  //
+                            0b00011110, 0b11110000, 0b00000000, 0b00000000,  //
+                            0b01101100, 0b01101100, 0b00000000, 0b00000000,  //
+                            0b11110011, 0b10011110, 0b00000000, 0b00000000,  //
+                            0b11110111, 0b11011110, 0b00000000, 0b00000000,  //
+                            0b01101111, 0b11101100, 0b00000000, 0b00000000,  //
+                            0b00011111, 0b11110000, 0b00000000, 0b00000000,  //
+                            0b00111111, 0b11111000, 0b01100011, 0b00000000,  //
+                            0b00111111, 0b11111000, 0b11110111, 0b10000000,  //
+                            0b00001111, 0b11100000, 0b11110111, 0b10000000,  //
+                            0b00000000, 0b00000011, 0b01100011, 0b01100000,  //
+                            0b00000000, 0b00000111, 0b10011100, 0b11110000,  //
+                            0b00000000, 0b00000111, 0b10111110, 0b11110000,  //
+                            0b00000000, 0b00000011, 0b01111111, 0b01100000,  //
+                            0b00000000, 0b00000000, 0b11111111, 0b10000000,  //
+                            0b00000000, 0b00000001, 0b11111111, 0b11000000,  //
+                            0b00000000, 0b00000001, 0b11111111, 0b11000000,  //
+                            0b00000000, 0b00000001, 0b11111111, 0b11000000,  //
+                            0b00000000, 0b00000000, 0b01111111, 0b00000000};
 
 const uint8_t ICON_BT_BG[] = {16,         19,          // Width, Height
                               0,          0,           // Color
@@ -92,19 +91,32 @@ typedef struct {
 } navmenu_t;
 
 typedef struct {
-  const char *caption;  // used on drawing as the main menu or the config menu
-  const char *description;  // used on drawing as the config menu
-  char *valueDescr;         // used on drawing as the config menu
-  const uint8_t *iconData;  // used on drawing as the main menu
+  const char *caption;
+  const uint8_t *iconData;
+  bool enabled;
   void (*onSelect)();
 } menuitem_t;
 
 typedef struct {
-  menuitem_t items[20];
+  menuitem_t items[12];
   int8_t itemCount;
   int8_t selIndex;
   int8_t topIndex;
-} menudata_t;
+} mainmenu_t;
+
+typedef struct {
+  const char *caption;
+  const char *description;
+  char *valueDescr;
+  void (*onSelect)();
+} cfgitem_t;
+
+typedef struct {
+  cfgitem_t items[16];
+  int8_t itemCount;
+  int8_t selIndex;
+  int8_t topIndex;
+} cfgmenu_t;
 
 class AppUI {
  private:
@@ -140,8 +152,7 @@ class AppUI {
   int16_t navBarLeft;
 
   void putAppIcon(TFT_eSprite *spr, int16_t x, int16_t y);
-  void putBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x,
-                 int16_t y, int16_t color);
+  void putBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x, int16_t y, int16_t color);
   void putBatteryIcon(TFT_eSprite *spr, int16_t x, int16_t y, int8_t level);
   void putBluetoothIcon(TFT_eSprite *spr, int16_t x, int16_t y, bool connected);
   void putSDcardIcon(TFT_eSprite *spr, int16_t x, int16_t y, bool mounted);
@@ -152,13 +163,14 @@ class AppUI {
   void drawDialogFrame(const char *title);
   void drawDialogProgress(int32_t progress);
   void printDialogMessage(int16_t color, int8_t line, String msg);
-  void drawMainMenu(menudata_t *menu);
-  void drawConfigMenu(menudata_t *menu);
+  void drawMainMenu(mainmenu_t *menu);
+  void drawConfigMenu(cfgmenu_t *menu);
   void drawNavBar(navmenu_t *menu);
   void drawTitleBar(bool sdAvail, bool btActive);
   btnid_t checkButtonInput(navmenu_t *menu);
-  void setTitle(const char *title);
-  void setHints(const char *into1, const char *info2);
+  void setAppTitle(const char *title);
+  void setAppHints(const char *into1, const char *info2);
   btnid_t waitForOk();
   btnid_t waitForOkCancel();
+  void handleInputForConfigMenu(cfgmenu_t *menu);
 };
