@@ -58,6 +58,14 @@ void onDialogOKButtonClick();
 void onDialogCancelButtonClick();
 void onDialogNaviButtonPress(btnid_t);
 void onTimezoneOffsetChange();
+void onTrackModeChange();
+void onPutPOIChange();
+void onLogDistChange();
+void onLogTimeChange();
+void onLogSpeedChange();
+void onOutputConfigMenuSelected();
+void onLogModeConfigMenuSelected();
+void onLogFormatConfigMenuSelected();
 void updateAppHint();
 void updateConfigMenuDescr();
 
@@ -78,9 +86,8 @@ MtkLogger logger = MtkLogger();
 appstatus_t app;
 appconfig_t config;
 navmenu_t mainnav;
-mainmenu_t mainmenu;
-cfgmenu_t cfgmenu;
-cfgmenu_t submenu;
+mainmenu_t mainMenu;
+cfgmenu_t congigMenu, outputMenu, logModeMenu, logFormatMenu;
 uint32_t idleTimer;
 
 void updateAppHint() {
@@ -485,31 +492,31 @@ void onClearFlashSelected() {
 }
 
 void onAppSettingSelected() {
-  cfgmenu.selIndex = 0;
-  cfgmenu.topIndex = 0;
+  congigMenu.selIndex = 0;
+  congigMenu.topIndex = 0;
 
   //  updateConfigMenuDescr();
-  ui.drawConfigMenu(&cfgmenu);
-  ui.handleInputForConfigMenu(&cfgmenu);
+  ui.drawConfigMenu(&congigMenu);
+  ui.handleInputForConfigMenu(&congigMenu);
 
   saveAppConfig();
 }
 
 void onPrevButtonClick() {
-  mainmenu.selIndex = (mainmenu.selIndex + 5) % 6;
-  ui.drawMainMenu(&mainmenu);
+  mainMenu.selIndex = (mainMenu.selIndex + 5) % 6;
+  ui.drawMainMenu(&mainMenu);
 }
 
 void onNextButtonClick() {
-  mainmenu.selIndex = (mainmenu.selIndex + 1) % 6;
-  ui.drawMainMenu(&mainmenu);
+  mainMenu.selIndex = (mainMenu.selIndex + 1) % 6;
+  ui.drawMainMenu(&mainMenu);
 }
 
 void onSelectButtonClick() {
-  menuitem_t *mi = &(mainmenu.items[mainmenu.selIndex]);
+  menuitem_t *mi = &(mainMenu.items[mainMenu.selIndex]);
   if (mi->onSelect != NULL) {
     mi->onSelect();
-    ui.drawMainMenu(&mainmenu);
+    ui.drawMainMenu(&mainMenu);
   }
 }
 
@@ -528,14 +535,14 @@ void onNavButtonPress(btnid_t bid) {
 }
 
 void updateConfigMenuDescr() {
-  for (int i = 0; i < cfgmenu.itemCount; i++) {
-    if (cfgmenu.items[i].valueDescr == NULL) {
-      cfgmenu.items[i].valueDescr = (char *)malloc(20);
-      memset(cfgmenu.items[i].valueDescr, 0, 20);
+  for (int i = 0; i < congigMenu.itemCount; i++) {
+    if (congigMenu.items[i].valueDescr == NULL) {
+      congigMenu.items[i].valueDescr = (char *)malloc(20);
+      memset(congigMenu.items[i].valueDescr, 0, 20);
     }
   }
 
-  cfgitem_t *trkmode = &cfgmenu.items[1];
+  cfgitem_t *trkmode = &congigMenu.items[1];
   if (config.trackMode == TRK_ONE_DAY) {
     strcpy(trkmode->valueDescr, "A track per day");
   } else if (config.trackMode == TRK_AS_IS) {
@@ -544,31 +551,31 @@ void updateConfigMenuDescr() {
     strcpy(trkmode->valueDescr, "One track");
   }
 
-  cfgitem_t *tzoffset = &cfgmenu.items[2];
+  cfgitem_t *tzoffset = &congigMenu.items[2];
   sprintf(tzoffset->valueDescr, "UTC%+.1f", timeOffsetValues[config.timeOffsetIdx]);
 
-  cfgitem_t *putpoi = &cfgmenu.items[3];
+  cfgitem_t *putpoi = &congigMenu.items[3];
   if (!config.putPOI) {
     strcpy(putpoi->valueDescr, "Disabled");
   } else {
     strcpy(putpoi->valueDescr, "Enabled");
   }
 
-  cfgitem_t *logdist = &cfgmenu.items[4];
+  cfgitem_t *logdist = &congigMenu.items[4];
   if (logDistValues[config.logDistIdx] == 0) {
     strcpy(logdist->valueDescr, "Disabled");
   } else {
     sprintf(logdist->valueDescr, "%d meters", logDistValues[config.logDistIdx]);
   }
 
-  cfgitem_t *logtime = &cfgmenu.items[5];
+  cfgitem_t *logtime = &congigMenu.items[5];
   if (logTimeValues[config.logTimeIdx] == 0) {
     strcpy(logtime->valueDescr, "Disabled");
   } else {
     sprintf(logtime->valueDescr, "%d seconds", logTimeValues[config.logTimeIdx]);
   }
 
-  cfgitem_t *logspd = &cfgmenu.items[6];
+  cfgitem_t *logspd = &congigMenu.items[6];
   if (logSpeedValues[config.logSpeedIdx] == 0) {
     strcpy(logspd->valueDescr, "Disabled");
   } else {
@@ -619,6 +626,21 @@ void onLogBySpeedChange() {
   config.logTimeIdx = 0;
   config.logSpeedIdx = (config.logSpeedIdx + 1) % valCount;
   updateConfigMenuDescr();
+}
+
+void onOutputConfigMenuSelected() {
+  ui.drawConfigMenu(&submenu);
+  ui.handleInputForConfigMenu(&submenu);
+}
+
+void onLogModeConfigMenuSelected() {
+  ui.drawConfigMenu(&submenu);
+  ui.handleInputForConfigMenu(&submenu);
+}
+
+void onLogFormatConfigMenuSelected() {
+  ui.drawConfigMenu(&submenu);
+  ui.handleInputForConfigMenu(&submenu);
 }
 
 void saveAppConfig() {
@@ -702,25 +724,40 @@ void setup() {
   mainnav.items[2] = {"Select", true};
 
   // main menu
-  memset(&mainmenu, 0, sizeof(mainmenu_t));
-  mainmenu.itemCount = 6;
-  mainmenu.items[0] = {"Download Log", ICON_DOWNLOAD_LOG, true, &onDownloadLogSelected};
-  mainmenu.items[1] = {"Fix RTC time", ICON_FIX_RTC, true, &onFixRTCtimeSelected};
-  mainmenu.items[2] = {"Erase Log Data", ICON_ERASE_LOG, true, &onClearFlashSelected};
-  mainmenu.items[3] = {"Show Location", ICON_SHOW_LOCATION, true, &onShowLocationSelected};
-  mainmenu.items[4] = {"Pair w/ Logger", ICON_PAIR_LOGGER, true, &onPairWithLoggerSelected};
-  mainmenu.items[5] = {"App Settings", ICON_APP_SETTINGS, true, &onAppSettingSelected};
+  memset(&mainMenu, 0, sizeof(mainmenu_t));
+  mainMenu.itemCount = 6;
+  mainMenu.items[0] = {"Download Log", ICON_DOWNLOAD_LOG, true, &onDownloadLogSelected};
+  mainMenu.items[1] = {"Fix RTC time", ICON_FIX_RTC, true, &onFixRTCtimeSelected};
+  mainMenu.items[2] = {"Erase Log Data", ICON_ERASE_LOG, true, &onClearFlashSelected};
+  mainMenu.items[3] = {"Show Location", ICON_SHOW_LOCATION, true, &onShowLocationSelected};
+  mainMenu.items[4] = {"Pair w/ Logger", ICON_PAIR_LOGGER, true, &onPairWithLoggerSelected};
+  mainMenu.items[5] = {"App Settings", ICON_APP_SETTINGS, true, &onAppSettingSelected};
 
   // config menu
-  memset(&cfgmenu, 0, sizeof(cfgmenu_t));
-  cfgmenu.itemCount = 4;
-  cfgmenu.items[0] = {"Save and exit", "Return to the main menu", NULL, NULL, NULL};
-  cfgmenu.items[1] = {"Output settings", "", (char *)malloc(8), NULL, NULL};
-  strcpy(cfgmenu.items[1].valueDescr, ">>");
-  cfgmenu.items[2] = {"Log mode settings", "", (char *)malloc(8), NULL, NULL};
-  strcpy(cfgmenu.items[2].valueDescr, ">>");
-  cfgmenu.items[3] = {"Log format settings", "", (char *)malloc(8), NULL, NULL};
-  strcpy(cfgmenu.items[3].valueDescr, ">>");
+  memset(&congigMenu, 0, sizeof(cfgmenu_t));
+  congigMenu.itemCount = 4;
+  congigMenu.items[0] = {"Save and exit", "Return to the main menu", NULL, NULL, NULL};
+  congigMenu.items[1] = {"Output settings", "", (char *)malloc(8), NULL,
+                         &onOutputConfigMenuSelected};
+  strcpy(congigMenu.items[1].valueDescr, ">>");
+  congigMenu.items[2] = {"Log mode settings", "", (char *)malloc(8), NULL,
+                         &onLogModeConfigMenuSelected};
+  strcpy(congigMenu.items[2].valueDescr, ">>");
+  congigMenu.items[3] = {"Log format settings", "", (char *)malloc(8), NULL,
+                         &onLogFormatConfigMenuSelected};
+  strcpy(congigMenu.items[3].valueDescr, ">>");
+
+  memset(&outputMenu, 0, sizeof(cfgmenu_t));
+  outputMenu.items[0] = {"Exit", "Return to the previous menu", NULL, NULL, NULL};
+  outputMenu.items[1] = {"Track mode", "How to divide tracks", NULL, NULL, &onTrackModeChange};
+  outputMenu.items[2] = {"Timezone offset", "UTC offset in hours", NULL, NULL,
+                         &onTimezoneOffsetChange};
+  outputMenu.items[3] = {"Create POIs", "[747PRO] Treat manually recorded points as POIs", NULL,
+                         NULL, &onPutPointOfInterestChange};
+
+  memset(&logModeMenu, 0, sizeof(cfgmenu_t));
+
+  memset(&logFormatMenu, 0, sizeof(cfgmenu_t));
 
   // load the configuration data
   M5.update();
@@ -741,7 +778,7 @@ void setup() {
     ui.printDialogMessage(BLACK, 2, "pairing with your GPS logger.");
     ui.waitForOk();
   }
-  ui.drawMainMenu(&mainmenu);
+  ui.drawMainMenu(&mainMenu);
 
   app.idleTimer = millis() + POWER_OFF_TIME;
 }
@@ -751,7 +788,7 @@ void loop() {
   if (bid != BID_NONE) {
     onNavButtonPress((btnid_t)bid);
 
-    ui.drawMainMenu(&mainmenu);
+    ui.drawMainMenu(&mainMenu);
     ui.drawNavBar(&mainnav);
 
     app.idleTimer = millis() + POWER_OFF_TIME;  // reset the idle timer
