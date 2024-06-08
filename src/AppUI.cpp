@@ -49,6 +49,8 @@ void AppUI::putBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x, int1
   // - 3rd-4th byte: uint16_t color
   // - 5th byte to the end: uint8_t pixelBits[]
 
+  if (iconData == NULL) return;
+
   uint8_t iconW = *iconData++;             // icon width
   uint8_t iconH = *iconData++;             // icon height
   iconData += 2;                           // icon color (unused)
@@ -86,7 +88,7 @@ void AppUI::drawDialogProgress(int32_t progRate) {
   }
 }
 
-void AppUI::printDialogMessage(int16_t color, int8_t line, String msg) {
+void AppUI::drawDialogMessage(int16_t color, int8_t line, String msg) {
   const int16_t MSG_LEFT = 10;
   const int16_t MSG_TOP = 60;
   const int16_t LINE_HEIGHT = 18;
@@ -129,10 +131,12 @@ void AppUI::drawDialogFrame(const char *title) {
 }
 
 /**
- * Draw the main menu in the client area of the screen.
- * @param menu Main menu data
+ * Draw the main menu to the client area of the screen.
+ * @param menu menu data (array of menuitem_t)
+ * @param top top item index
+ * @param select selected item index
  */
-void AppUI::drawMainMenu(mainmenu_t *menu) {
+void AppUI::drawMainMenu(menuitem_t *menu, int8_t itemCount, int8_t top, int8_t select) {
   const int16_t MENUAREA_W = M5.Lcd.width();
   const int16_t MENUAREA_H = M5.Lcd.height() - (24 + 24);
   const int16_t MENUAREA_X = 0;
@@ -144,32 +148,39 @@ void AppUI::drawMainMenu(mainmenu_t *menu) {
   const int16_t MARGIN_X = 8;
   const int16_t MARGIN_Y = 7;
 
+  // メニュー項目の表示位置を補正
+  top = (top < 0) ? 0 : (top < itemCount) ? top : itemCount;
+  select = (select < top) ? top : (select < itemCount) ? select : itemCount;
+
   // スプライト領域の初期化
   sprite.createSprite(menuAreaWidth, menuAreaHeight);
   sprite.fillScreen(BLACK);
 
-  for (int16_t i = 0; i < 6; i++) {
+  for (int8_t i = 0; i < 6; i++) {
+    int8_t idx = top + i;
+    if (idx >= itemCount) break;
+
+    menuitem_t *mi = menu + idx;
+
     int16_t x = MENUBTN1_X + ((MENUBTN_W + MARGIN_X) * (i % 3));
     int16_t y = MENUBTN1_Y + ((MENUBTN_H + MARGIN_Y) * (i / 3));
+    int16_t color = (idx == select) ? LIGHTGREY : DARKGREY;
 
-    if (i == menu->selIndex) {
-      sprite.fillRoundRect(x, y, MENUBTN_W, MENUBTN_H, 4, LIGHTGREY);
-      sprite.drawRoundRect(x, y, MENUBTN_W, MENUBTN_H, 4, BLUE);
-      sprite.drawRoundRect(x + 1, y + 1, MENUBTN_W - 2, MENUBTN_H - 2, 4, BLUE);
-    } else {
-      sprite.fillRoundRect(x, y, MENUBTN_W, MENUBTN_H, 4, DARKGREY);
+    // ボタンの背景を描画
+    sprite.fillRoundRect(x, y, MENUBTN_W, MENUBTN_H, 4, color);
+
+    // ボタンのアイコンを描画
+    if (mi->iconData != NULL) {
+      putBitmap(&sprite, mi->iconData, (x + (MENUBTN_W / 2) - (48 / 2)), (y + 12),
+                COLOR16(0, 32, 32));
     }
-
-    putBitmap(&sprite, menu->items[i].iconData, (x + (MENUBTN_W / 2) - (48 / 2)), (y + 12),
-              COLOR16(0, 32, 32));
-
     // ボタンのキャプションを描画
     sprite.setTextSize(1);
     sprite.setTextColor(BLACK);
-    sprite.drawCentreString(menu->items[i].caption, x + (MENUBTN_W / 2), y + (MENUBTN_H - 12), 1);
+    sprite.drawCentreString(mi->caption, x + (MENUBTN_W / 2), y + (MENUBTN_H - 12), 1);
   }
 
-  // transfer the sprite to the LCD
+  // transfer the sprite to the LCD and release the sprite
   sprite.pushSprite(menuAreaLeft, menuAreaTop);
   sprite.deleteSprite();
 }
@@ -219,7 +230,7 @@ void AppUI::drawNavBar(navmenu_t *nav) {
     sprite.drawCentreString(ni->caption, (x + (NAVIBTN_W / 2)), (y + 2), 4);
   }
 
-  // transfer the sprite to the LCD
+  // transfer the sprite to the LCD and release the sprite
   sprite.pushSprite(navBarLeft, navBarTop);
   sprite.deleteSprite();
 }
@@ -362,47 +373,51 @@ void AppUI::setAppHints(const char *hint1, const char *hint2) {
   if (hint2 != NULL) strncpy(appHint[1], hint2, 16);
 }
 
-btnid_t AppUI::waitForOk() {
+btnid_t AppUI::waitForButtonInput(navmenu_t *nav, bool idleShutdown) {
+  drawNavBar(nav);
+
+  btnid_t btn = BID_NONE;
+  while (btn == BID_NONE) {
+    btn = checkButtonInput(nav);
+    delay(50);
+  }
+
+  return btn;
+}
+
+btnid_t AppUI::waitForInputOk(bool idleShutdown) {
   navmenu_t nav;
   nav.items[0] = {"", false};
   nav.items[1] = {"", false};
   nav.items[2] = {"OK", true};
-  drawNavBar(&nav);
 
-  btnid_t btn = BID_NONE;
-  while (btn == BID_NONE) {
-    btn = checkButtonInput(&nav);
-    delay(50);
-  }
+  waitForButtonInput(&nav, idleShutdown);
 
   return BID_OK;
 }
 
-btnid_t AppUI::waitForOkCancel() {
+btnid_t AppUI::waitForInputOkCancel(bool idleShutdown) {
   navmenu_t nav;
   nav.items[0] = {"", false};
   nav.items[1] = {"Cancel", true};
   nav.items[2] = {"OK", true};
-  drawNavBar(&nav);
 
-  btnid_t btn = BID_NONE;
-  while (btn == BID_NONE) {
-    btn = checkButtonInput(&nav);
-    delay(50);
-  }
+  btnid_t btn = 
+    (waitForButtonInput(&nav, idleShutdown) == BID_BTN_C) ? BID_OK : BID_CANCEL;
 
-  btnid_t ret = (btn == BID_BTN_C) ? BID_OK : BID_CANCEL;
-
-  return ret;
+  return btn;
 }
 
-void AppUI::drawConfigMenu(cfgmenu_t *menu) {
+void AppUI::drawConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount, int8_t top, int8_t select) {
   const int16_t MENUAREA_W = M5.Lcd.width();
   const int16_t BTN_MGN_X = 8;
   const int16_t BTN_MGN_T = 8;
   const int16_t BTN_MGN_Y = 4;
   const int16_t BTN_W = MENUAREA_W - (BTN_MGN_X * 2);  // ボタンのサイズ指定
   const int16_t BTN_H = 35;
+
+  top = (top < 0) ? 0 : (top < itemCount) ? top : itemCount;
+  select = (select < top) ? top : (select < itemCount) ? select : itemCount;
 
   // スプライト領域の初期化
   sprite.createSprite(menuAreaWidth, menuAreaHeight);
@@ -414,26 +429,26 @@ void AppUI::drawConfigMenu(cfgmenu_t *menu) {
 
   sprite.fillRect(BTN_MGN_X, BTN_MGN_T, BTN_W, 18, COLOR16(0, 128, 255));
   sprite.setTextColor(BLACK);
-  sprite.drawString("Config", (BTN_MGN_X + 4), (BTN_MGN_T + 1), 2);
+  sprite.drawString(title, (BTN_MGN_X + 4), (BTN_MGN_T + 1), 2);
 
   for (int i = 0; i < 4; i++) {
-    uint8_t idx = menu->topIndex + i;
-    if (idx >= menu->itemCount) break;
+    int8_t idx = top + i;
+    if (idx >= itemCount) break;
 
-    cfgitem_t mi = menu->items[idx];
+    cfgitem_t *mi = menu + idx;
 
     int16_t x = BTN_MGN_X;
     int16_t y = (BTN_MGN_T + 18) + (BTN_MGN_Y * (i + 1)) + (BTN_H * i);
-    int16_t color = (idx == menu->selIndex) ? LIGHTGREY : DARKGREY;
+    int16_t color = (idx == select) ? LIGHTGREY : DARKGREY;
 
     sprite.fillRect(x, y, BTN_W, BTN_H, color);
 
     sprite.setTextColor(BLACK);
-    sprite.drawString(mi.caption, (x + 4), (y + 3), 2);
-    sprite.drawString(mi.description, (x + 4), (y + 23), 1);
-    if (mi.valueDescr != NULL) {
+    sprite.drawString(mi->caption, (x + 4), (y + 3), 2);
+    sprite.drawString(mi->description, (x + 4), (y + 23), 1);
+    if (mi->valueDescr != NULL) {
       sprite.setTextColor(BLUE);
-      sprite.drawRightString(mi.valueDescr, (x + (BTN_W - 4)), (y + 3), 2);
+      sprite.drawRightString(mi->valueDescr, (x + (BTN_W - 4)), (y + 3), 2);
     }
   }
 
@@ -442,54 +457,93 @@ void AppUI::drawConfigMenu(cfgmenu_t *menu) {
   sprite.deleteSprite();
 }
 
-void AppUI::handleInputForConfigMenu(cfgmenu_t *menu) {
+void AppUI::enterConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount, bool idleShutdown) {
   navmenu_t nav;
   nav.items[0] = {"Prev", true};
   nav.items[1] = {"Next", true};
   nav.items[2] = {"Select", true};
   drawNavBar(&nav);
 
+  int8_t top = 0;
+  int8_t select = 0;
+
+  for (int8_t i=0; i<itemCount; i++) {
+    cfgitem_t *ci = &menu[i];
+    if (ci->updateValueDescr != NULL) ci->updateValueDescr(&menu[i]);
+  }
+
   bool endFlag = false;
   while (!endFlag) {
+    drawConfigMenu(title, menu, itemCount, top, select);
+
     // check the button input
-    switch (checkButtonInput(&nav)) {
-    case BID_BTN_A:
-      menu->selIndex = (menu->selIndex + (menu->itemCount - 1)) % menu->itemCount;
+    switch (waitForButtonInput(&nav, idleShutdown)) {
+    case BID_BTN_A: // move the selection to the previous
+      select = (select + (itemCount - 1)) % itemCount;
 
-      if ((menu->itemCount < 4) || (menu->selIndex <= 1)) {
-        menu->topIndex = 0;
-      } else if (menu->selIndex >= menu->itemCount - 2) {
-        menu->topIndex = menu->itemCount - 4;
+      if ((itemCount < 4) || (select <= 1)) {
+        top = 0;
+      } else if (select >= itemCount - 2) {
+        top = itemCount - 4;
       } else {
-        menu->topIndex = menu->selIndex - 1;
+        top = select - 1;
       }
-
-      drawConfigMenu(menu);
       break;
-    case BID_BTN_B:
-      menu->selIndex = (menu->selIndex + 1) % menu->itemCount;
 
-      if ((menu->itemCount < 4) || (menu->selIndex <= 1)) {
-        menu->topIndex = 0;
-      } else if (menu->selIndex >= menu->itemCount - 2) {
-        menu->topIndex = menu->itemCount - 4;
+    case BID_BTN_B: // move the selection to the next
+      select = (select + 1) % itemCount;
+
+      if ((itemCount < 4) || (select <= 1)) {
+        top = 0;
+      } else if (select >= itemCount - 2) {
+        top = itemCount - 4;
       } else {
-        menu->topIndex = menu->selIndex - 2;
+        top = select - 2;
       }
-
-      drawConfigMenu(menu);
       break;
-    case BID_BTN_C:
-      if (menu->items[menu->selIndex].onSelect != NULL) {
-        menu->items[menu->selIndex].onSelect();
 
-        drawConfigMenu(menu);
+    case BID_BTN_C: // call the onSelect function of the selected item
+      cfgitem_t *ci = &menu[select];
+      if (ci->onSelect != NULL) {
+        ci->onSelect(ci);
+        if (ci->updateValueDescr != NULL) ci->updateValueDescr(ci);
       }
 
-      endFlag = (menu->items[menu->selIndex].onSelect == NULL);
+      endFlag = (ci->onSelect == NULL);
       break;
     }
+  }
+}
 
-    delay(50);
+
+void AppUI::enterMainMenu(menuitem_t *menu, int8_t itemCount, bool idleShutdown) {
+  navmenu_t nav;
+  nav.items[0] = {"Prev", true};
+  nav.items[1] = {"Next", true};
+  nav.items[2] = {"Select", true};
+  drawNavBar(&nav);
+
+  int8_t top = 0;
+  int8_t select = 0;
+
+  while (true) {
+    drawMainMenu(menu, itemCount, top, select);
+
+    switch (waitForButtonInput(&nav, idleShutdown)) {
+    case BID_BTN_A: // move the selection to the previous
+      select = (select + (itemCount - 1)) % itemCount;
+      top = (itemCount < 4) ? 0 : (((select-3) / 3) * 3);
+      break;
+
+    case BID_BTN_B: // move the selection to the next
+      select = (select + 1) % itemCount;
+      top = (itemCount < 6) ? 0 : (((select-3) / 3) * 3);
+      break;
+
+    case BID_BTN_C: // call the onSelect function of the selected item
+      menuitem_t *mi = &menu[select];
+      if (mi->onSelect != NULL) mi->onSelect(mi);
+      break;
+    }
   }
 }

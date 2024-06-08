@@ -23,7 +23,7 @@ void MtkParser::setRecordFormat(uint32_t fmt) {
   status.formatReg = fmt;
 
   status.ignoreLen1 = (sizeof(uint16_t) * (bool)(fmt & REG_VALID));
-  status.ignoreLen2 = (sizeof(float) * (bool)(fmt & REG_TRACK)) +
+  status.ignoreLen2 = (sizeof(float) * (bool)(fmt & REG_HEAD)) +
                       (sizeof(uint16_t) * (bool)(fmt & REG_DSTA)) +
                       (sizeof(float) * (bool)(fmt & REG_DAGE)) +
                       (sizeof(uint16_t) * (bool)(fmt & REG_PDOP)) +
