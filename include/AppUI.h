@@ -90,33 +90,20 @@ typedef struct {
   void (*onButtonPress)(btnid_t);
 } navmenu_t;
 
-typedef struct {
+typedef struct _menuitem {
   const char *caption;
   const uint8_t *iconData;
   bool enabled;
-  void (*onSelect)();
+  void (*onSelect)(_menuitem *);
 } menuitem_t;
 
-typedef struct {
-  menuitem_t items[12];
-  int8_t itemCount;
-  int8_t selIndex;
-  int8_t topIndex;
-} mainmenu_t;
-
-typedef struct {
+typedef struct _cfgitem {
   const char *caption;
   const char *description;
-  char *valueDescr;
-  void (*onSelect)();
+  char valueDescr[16];
+  void (*onSelect)(_cfgitem *);
+  void (*updateValueDescr)(_cfgitem *);
 } cfgitem_t;
-
-typedef struct {
-  cfgitem_t items[16];
-  int8_t itemCount;
-  int8_t selIndex;
-  int8_t topIndex;
-} cfgmenu_t;
 
 class AppUI {
  private:
@@ -151,6 +138,9 @@ class AppUI {
   int16_t navBarTop;
   int16_t navBarLeft;
 
+  btnid_t checkButtonInput(navmenu_t *nav);
+  void drawConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount, int8_t top, int8_t select);
+  void drawMainMenu(menuitem_t *menu, int8_t itemCount, int8_t top, int8_t select);
   void putAppIcon(TFT_eSprite *spr, int16_t x, int16_t y);
   void putBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x, int16_t y, int16_t color);
   void putBatteryIcon(TFT_eSprite *spr, int16_t x, int16_t y, int8_t level);
@@ -161,16 +151,15 @@ class AppUI {
   AppUI();
 
   void drawDialogFrame(const char *title);
+  void drawDialogMessage(int16_t color, int8_t line, String msg);
   void drawDialogProgress(int32_t progress);
-  void printDialogMessage(int16_t color, int8_t line, String msg);
-  void drawMainMenu(mainmenu_t *menu);
-  void drawConfigMenu(cfgmenu_t *menu);
-  void drawNavBar(navmenu_t *menu);
   void drawTitleBar(bool sdAvail, bool btActive);
-  btnid_t checkButtonInput(navmenu_t *menu);
+  void drawNavBar(navmenu_t *nav);
   void setAppTitle(const char *title);
   void setAppHints(const char *into1, const char *info2);
-  btnid_t waitForOk();
-  btnid_t waitForOkCancel();
-  void handleInputForConfigMenu(cfgmenu_t *menu);
+  btnid_t waitForButtonInput(navmenu_t *nav, bool idleShutdown);
+  btnid_t waitForInputOk(bool idleShutdown);
+  btnid_t waitForInputOkCancel(bool idleShutdown);
+  void enterConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount, bool idleShutdown);
+  void enterMainMenu(menuitem_t *menu, int8_t itemCount, bool idleShutdown);
 };
