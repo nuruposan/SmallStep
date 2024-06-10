@@ -33,6 +33,7 @@ class NmeaBuffer {
   void clear();
   bool put(const char ch);
   char get();
+  char* getBuffer();
   bool readHexByteFull(byte *by);
   bool readHexByteHalf(byte *by);
   bool readColumnAsInt(uint8_t clm, int32_t *num);
