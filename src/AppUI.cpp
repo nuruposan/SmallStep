@@ -7,7 +7,7 @@ AppUI::AppUI() {
   memset(appHint[0], 0, sizeof(appHint[0]));
   memset(appHint[1], 0, sizeof(appHint[1]));
 
-  appIcon = ICON_APP;
+  appIcon = NULL;
   btBgIcon = ICON_BT_BG;
   btFgIcon = ICON_BT_FG;
 
@@ -236,7 +236,7 @@ void AppUI::drawNavBar(navmenu_t *nav) {
 }
 
 void AppUI::drawTitleBar(bool sdAvail, bool btActive) {
-  const int16_t TITLE_X = 32;
+  const int16_t TITLE_X = (appIcon == NULL) ? 2 : 32;
   const int16_t TITLE_Y = 2;
   const int16_t APP_ICON_X = 2;
   const int16_t BAT_ICON_X = (titleBarWidth - 24);
@@ -254,7 +254,7 @@ void AppUI::drawTitleBar(bool sdAvail, bool btActive) {
   sprite.drawString(appTitle, TITLE_X, TITLE_Y, 4);
 
   // draw the icons
-  putAppIcon(&sprite, APP_ICON_X, ICON_Y);
+  if (appIcon != NULL) putAppIcon(&sprite, APP_ICON_X, ICON_Y);
   putBatteryIcon(&sprite, BAT_ICON_X, ICON_Y, M5.Power.getBatteryLevel());
   putSDcardIcon(&sprite, SD_ICON_X, ICON_Y, sdAvail);
   putBluetoothIcon(&sprite, BT_ICON_X, ICON_Y, btActive);
@@ -363,6 +363,10 @@ btnid_t AppUI::checkButtonInput(navmenu_t *nav) {
 
 void AppUI::setAppTitle(const char *title) {
   appTitle = title;
+}
+
+void AppUI::setAppIcon(const uint8_t *icon) {
+  appIcon = icon;
 }
 
 void AppUI::setAppHints(const char *hint1, const char *hint2) {
