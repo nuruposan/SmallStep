@@ -17,11 +17,11 @@
 #define IDLE_SHUTDOWN true  // unit: msec
 
 #define DEFAULT_TRACK_MODE TRK_ONE_DAY
-#define DEFAULT_TIME_OFFSET_IDX 14
-#define DEFAULT_LOG_DIST_IDX  0
-#define DEFAULT_LOG_TIME_IDX  4
-#define DEFAULT_LOG_SPEED_IDX 0
-#define DEFAULT_LOG_FORMAT (REG_FIX | REG_TIME | REG_LON | REG_LAT | REG_ELE | REG_SPEED)
+#define DEFAULT_TIME_OFFSET_IDX 27 // 27: UTC+9.0
+#define DEFAULT_LOG_DIST_IDX  0    // 0: disable
+#define DEFAULT_LOG_TIME_IDX  4    // 4: 10 seconds
+#define DEFAULT_LOG_SPEED_IDX 0    // 0: disable
+#define DEFAULT_LOG_FORMAT (REG_FIX | REG_TIME | REG_LON | REG_LAT | REG_ELE | REG_SPEED | REG_RCR)
 
 typedef struct appstatus {
   bool sdcAvail;
@@ -52,16 +52,20 @@ void saveAppConfig();
 bool loadAppConfig(bool);
 void bluetoothCallback(esp_spp_cb_event_t, esp_spp_cb_param_t *);
 void progressCallback(int32_t);
-void setValueDescrByBool(bool, char *);
+void setValueDescrByBool(char *, bool);
 bool runDownloadLog();
 bool runFixRTCtime();
 bool runPairWithLogger();
 bool runClearFlash();
+bool runSetLogFormat();
+bool runSetLogMode();
 void onDownloadLogSelect(menuitem_t *);
 void onFixRTCtimeSelect(menuitem_t *);
 void onShowLocationSelect(menuitem_t *);
 void onPairWithLoggerSelect(menuitem_t *);
 void onClearFlashSelect(menuitem_t *);
+void onSetLogFormatSelect(menuitem_t *);
+void onSetLogModeSelect(menuitem_t *);
 void onAppSettingSelect(menuitem_t *);
 void onTimezoneUpdate(cfgitem_t *);
 void onTimezoneSelect(cfgitem_t *);
@@ -69,6 +73,8 @@ void onTrackModeSelect(cfgitem_t *);
 void onTrackModeUpdate(cfgitem_t *);
 void onPutWayptSelect(cfgitem_t *);
 void onPutWayptUpdate(cfgitem_t *);
+void onLeaveBinFileSelect(cfgitem_t *);
+void onLeaveBinFileUpdate(cfgitem_t *);
 void onLogByDistanceSelect(cfgitem_t *);
 void onLogByDistanceUpdate(cfgitem_t *);
 void onLogByTimeSelect(cfgitem_t *);
@@ -83,6 +89,10 @@ void onRecordRCRSelect(cfgitem_t *);
 void onRecordRCRUpdate(cfgitem_t *);
 void onRecordValidSelect(cfgitem_t *);
 void onRecordValidUpdate(cfgitem_t *);
+void onRecordLocationSelect(cfgitem_t *);
+void onRecordTimeSelect(cfgitem_t *);
+void onRecordMillisSelect(cfgitem_t *);
+void onRecordMillisUpdate(cfgitem_t *);
 void onRecordSpeedSelect(cfgitem_t *);
 void onRecordSpeedUpdate(cfgitem_t *);
 void onRecordAltitudeSelect(cfgitem_t *);
@@ -94,9 +104,12 @@ void onRecordDistanceUpdate(cfgitem_t *);
 void onRecordDGPSSelect(cfgitem_t *);
 void onRecordDOPSelect(cfgitem_t *);
 void onRecordSatInViewSelect(cfgitem_t *);
+void onPairWithLoggerCfgSelect(cfgitem_t *);
+void onPairWithLoggerCfgUpdate(cfgitem_t *);
 void onOutputSubMenuSelect(cfgitem_t *);
 void onLogModeSubMenuSelect(cfgitem_t *);
 void onLogFormatSubMenuSelect(cfgitem_t *);
+void onClearSettingsSelect(cfgitem_t *);
 void updateAppHint();
 
 const char *APP_NAME = "SmallStep";
@@ -115,9 +128,9 @@ menuitem_t menuMain[] = {
   {"Download Log", ICON_DOWNLOAD_LOG, true, &onDownloadLogSelect},
   {"Fix RTC time", ICON_FIX_RTC, true, &onFixRTCtimeSelect},
   {"Erase Log Data", ICON_ERASE_LOG, true, &onClearFlashSelect},
-  {"TEST01", NULL, true, NULL},
-  {"TEST02", NULL, true, NULL},
-  {"Show Location", ICON_SHOW_LOCATION, true, &onShowLocationSelect},
+  {"Set Log Mode", NULL, true, &onSetLogModeSelect},
+  {"Set Log Format", NULL, true, &onSetLogFormatSelect},
+//  {"Show Location", ICON_SHOW_LOCATION, true, &onShowLocationSelect},
   {"Pair w/ Logger", ICON_PAIR_LOGGER, true, &onPairWithLoggerSelect},
   {"App Settings", ICON_APP_SETTINGS, true, &onAppSettingSelect},
 };
@@ -128,7 +141,7 @@ cfgitem_t cfgOutput[] = {
   {"Track mode", "How to divide tracks in GPX file", "", &onTrackModeSelect, &onTrackModeUpdate},
   {"Timezone offset", "UTC offset for 'a track per day' mode", "", &onTimezoneSelect, &onTimezoneUpdate},  
   {"Save POIs as waypts", "Convert POIs to waypts. Need RCR enabled", "", &onPutWayptSelect, &onPutWayptUpdate},
-  {"Leave BIN file", "Save BIN file with the same name as GPX file", "", NULL, NULL},
+  {"Leave BIN file", "Save BIN file with the same name as GPX file", "", &onLeaveBinFileSelect, &onLeaveBinFileUpdate},
 };
 
 cfgitem_t cfgLogMode[] = {
@@ -145,23 +158,27 @@ cfgitem_t cfgLogFormat[] = {
   {"Back", "Exit this menu", "<<", NULL, NULL},
   {"Load defaults", "Restore to the default log format", "", &onLoadDefaultFormatSelect, &onLoadDefaultFormatUpdate},
   {"RCR", "Store record reason (dist/time/speed/user)", "", &onRecordRCRSelect, &onRecordRCRUpdate},
+  {"Location (required fields)", "Store latitude and longitude", "Enabled", &onRecordLocationSelect, NULL},
+  {"Time (required fields)", "Store date and time", "Enabled", &onRecordTimeSelect, NULL},
+  {"Millis", "Store milliseconds", "", &onRecordMillisSelect, &onRecordMillisUpdate},
   {"Valid", "Store positioning status (valid/invalid)", "", &onRecordValidSelect, &onRecordValidUpdate}, // A: valid, V: invalid
   {"Speed", "Store speed", "", &onRecordSpeedSelect, &onRecordSpeedUpdate},
   {"Altitude", "Store altitude", "", &onRecordAltitudeSelect, &onRecordAltitudeUpdate},
   {"Heading", "Store moving direction", "", &onRecordHeadingSelect, &onRecordHeadingUpdate},
   {"Distance", "Store moving distance", "", &onRecordDistanceSelect, &onRecordDistanceUpdate},
-  {"DGPS info", "Store differencial GPS data", "Always disabled", &onRecordDGPSSelect, NULL},
-  {"DOP info", "Store dilution of precision data", "Always disabled", &onRecordDOPSelect, NULL},
-  {"SAT info", "Store satellite in view data", "Always disabled", &onRecordSatInViewSelect, NULL},
+  {"DGPS info (not support)", "Store differencial GPS data", "Disabled", &onRecordDGPSSelect, NULL},
+  {"DOP info (not support)", "Store dilution of precision data", "Disabled", &onRecordDOPSelect, NULL},
+  {"SAT info (not support)", "Store satellite in view data", "Disabled", &onRecordSatInViewSelect, NULL},
 };
 
 cfgitem_t cfgMain[] = {
   // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
   {"Save and exit", "Return to the main menu", "", NULL, NULL},
+  {"Pairing with a GPS logger", "Discover a supported GPS logger", ">>", &onPairWithLoggerCfgSelect, &onPairWithLoggerCfgUpdate},
   {"Output settings", "Output options", ">>", &onOutputSubMenuSelect, NULL},
   {"Log mode settings", "Logging behavior of the logger", ">>", &onLogModeSubMenuSelect, NULL},
   {"Log format settings", "Contents to be stored on the logger", ">>", &onLogFormatSubMenuSelect, NULL},
-  {"Clear all settings", "Erase the current settings of SmallStep", "", NULL, NULL},
+  {"Clear all settings", "Erase the current settings of SmallStep", "", &onClearSettingsSelect, NULL},
 };
 
 AppUI ui = AppUI();
@@ -226,7 +243,7 @@ bool isLoggerPaired() {
   if (!paired) {
     ui.drawDialogFrame("Setup Required");
     ui.drawDialogMessage(BLACK, 0, "Pairing has not been done yet.");
-    ui.drawDialogMessage(BLACK, 1, "Pair with your GPS logger now?");
+    ui.drawDialogMessage(BLUE, 1, "Pair with your GPS logger now?");
 
     if (ui.waitForInputOkCancel(IDLE_SHUTDOWN) == BID_OK) {
       ui.drawDialogMessage(BLACK, 1, "Pair with your GPS logger now? [ OK ]");
@@ -256,7 +273,7 @@ bool isSDcardAvailable() {
   return true;
 }
 
-void setValueDescrByBool(bool value, char *descr) {
+void setValueDescrByBool(char *descr, bool value) {
   if (value) {
     strcpy(descr, "Enabled");
   } else {
@@ -352,7 +369,7 @@ bool runDownloadLog() {
     if (trkpts > 0) {
       // make a unique name for the GPX file
       struct tm *ltime = localtime(&time1st);
-      char timestr[16], gpxName[32];
+      char timestr[16], gpxName[32], binName[32];
       sprintf(timestr, DATETIME_FMT,
               (ltime->tm_year + 1900),  // year (4 digits)
               (ltime->tm_mon + 1),      // month (1-12)
@@ -361,10 +378,13 @@ bool runDownloadLog() {
       sprintf(gpxName, "%s%s.gpx", GPX_PREFIX, timestr);
       for (uint16_t i = 2; SDcard.exists(gpxName) && (i < 65535); i++) {
         sprintf(gpxName, "%s%s_%02d.gpx", GPX_PREFIX, timestr, i);
+        sprintf(binName, "%s%s_%02d.bin", GPX_PREFIX, timestr, i);
       }
 
-      // rename the GPX file (download.gpx -> gpslog_YYYYMMDD-HHMMSS.gpx)
+      // rename the GPX file (download.gpx -> gpslog_YYYYMMDD-HHMMSS.gpx) and
+      // the BIN file (download.bin -> gpslog_YYYYMMDD-HHMMSS.bin) if needed
       SDcard.rename(TEMP_GPX, gpxName);
+      if (cfg.leaveBinFile) SDcard.rename(TEMP_BIN, binName);
 
       // make the output message strings
       char outputstr[48], summarystr[48];
@@ -580,10 +600,118 @@ void onClearFlashSelect(menuitem_t *item) {
   ui.waitForInputOk(IDLE_SHUTDOWN);
 }
 
+bool runSetLogFormat() {
+    // return false if the logger is not paired yet
+  if (!isLoggerPaired()) return false;
+
+  // draw a message dialog frame and clear the navigation bar
+  ui.drawDialogFrame("Set Log Format");
+  ui.drawNavBar(NULL);
+
+  // print the progress message
+  ui.drawDialogMessage(BLUE, 0, "Connecting to GPS logger...");
+  {
+    // connect to the logger
+    if (!logger.connect(cfg.loggerAddr)) {
+      ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
+      ui.drawDialogMessage(RED, 1, "- Make sure Bluetooth is enabled on your");
+      ui.drawDialogMessage(RED, 2, "  GPS logger");
+      ui.drawDialogMessage(RED, 3, "- Power cycling may fix this problem");
+
+      return false;
+    }
+  }
+  ui.drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
+
+  // get the current log format and show the menu
+  uint32_t logFormat = 0;
+  if (!logger.getLogFormat(&logFormat)) {
+    logger.disconnect();
+
+    ui.drawDialogMessage(RED, 1, "Cannot get the current log format.");
+    return false;
+  }
+
+  char buf[48];
+  sprintf(buf, "Current log format : 0x%08X", logFormat);
+  ui.drawDialogMessage(BLACK, 1, buf);
+
+  if ((logFormat = logger.setLogFormat(cfg.logFormat)) != 0) {
+    logger.disconnect();
+
+    ui.drawDialogMessage(RED, 2, "Cannot change the log format.");
+    return false;
+  }
+
+  sprintf(buf, "New log format : 0x%08X", logFormat);
+  ui.drawDialogMessage(BLACK, 2, buf);
+
+  logger.disconnect();
+
+  return true;
+}
+
+void onSetLogFormatSelect(menuitem_t *item) {
+  runSetLogFormat();
+  ui.waitForInputOk(IDLE_SHUTDOWN);
+}
+
+bool runSetLogMode() {
+      // return false if the logger is not paired yet
+  if (!isLoggerPaired()) return false;
+
+  // draw a message dialog frame and clear the navigation bar
+  ui.drawDialogFrame("Set Log Mode");
+  ui.drawNavBar(NULL);
+
+  // print the progress message
+  ui.drawDialogMessage(BLUE, 0, "Connecting to GPS logger...");
+  {
+    // connect to the logger
+    if (!logger.connect(cfg.loggerAddr)) {
+      ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
+      ui.drawDialogMessage(RED, 1, "- Make sure Bluetooth is enabled on your");
+      ui.drawDialogMessage(RED, 2, "  GPS logger");
+      ui.drawDialogMessage(RED, 3, "- Power cycling may fix this problem");
+
+      return false;
+    }
+  }
+  ui.drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
+
+  // get the current log format and show the menu
+  recordmode_t recmode = MODE_FULLSTOP;
+  if (!logger.getLogRecordMode(&recmode)) {
+    logger.disconnect();
+
+    ui.drawDialogMessage(RED, 1, "Cannot get the current log mode.");
+    return false;
+  }
+
+  recordmode_t newrecmode = (cfg.logFullStop)? MODE_FULLSTOP : MODE_OVERWRITE;
+  if (!logger.setLogRecordMode(newrecmode)) {
+    logger.disconnect();
+
+    ui.drawDialogMessage(RED, 2, "Cannot change the log mode.");
+    return false;
+  }
+
+  logger.disconnect();
+
+  return true;
+}
+
+void onSetLogModeSelect(menuitem_t *item) {
+  runSetLogMode();
+  ui.waitForInputOk(IDLE_SHUTDOWN);
+}
+
 void onAppSettingSelect(menuitem_t *item) {
+  // open the configuration menu
   int8_t itemCount = (sizeof(cfgMain) / sizeof(cfgitem_t));
   ui.enterConfigMenu("Settings", cfgMain, itemCount, IDLE_SHUTDOWN);
 
+  // save the configuration
   saveAppConfig();
 }
 
@@ -615,7 +743,15 @@ void onPutWayptSelect(cfgitem_t *item) {
 }
 
 void onPutWayptUpdate(cfgitem_t *item) {
-  setValueDescrByBool(cfg.putWaypt, item->valueDescr);
+  setValueDescrByBool(item->valueDescr, cfg.putWaypt);
+}
+
+void onLeaveBinFileSelect(cfgitem_t *item) {
+  cfg.leaveBinFile = (!cfg.leaveBinFile);
+}
+
+void onLeaveBinFileUpdate(cfgitem_t *item) {
+  setValueDescrByBool(item->valueDescr, cfg.leaveBinFile);
 }
 
 void onLogByDistanceSelect(cfgitem_t *item) {
@@ -706,7 +842,7 @@ void onRecordRCRSelect(cfgitem_t *item) {
 }
 
 void onRecordRCRUpdate(cfgitem_t *item) {
-  setValueDescrByBool((cfg.logFormat & REG_RCR), item->valueDescr);
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_RCR));
 }
 
 void onRecordValidSelect(cfgitem_t *item) {
@@ -715,7 +851,24 @@ void onRecordValidSelect(cfgitem_t *item) {
 }
 
 void onRecordValidUpdate(cfgitem_t *item) {
-  setValueDescrByBool((cfg.logFormat & REG_VALID), item->valueDescr);
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_VALID));
+}
+
+void onRecordLocationSelect(cfgitem_t *) {
+  // nothing to do (always enabled)
+}
+
+void onRecordTimeSelect(cfgitem_t *) {
+  // nothing to do (always enabled)
+}
+
+void onRecordMillisSelect(cfgitem_t *item) {
+  cfg.logFormat ^= REG_MSEC;
+  onLoadDefaultFormatUpdate(&cfgLogFormat[1]);
+}
+
+void onRecordMillisUpdate(cfgitem_t *item) {
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_MSEC));
 }
 
 void onRecordSpeedSelect(cfgitem_t *item) {
@@ -724,7 +877,7 @@ void onRecordSpeedSelect(cfgitem_t *item) {
 }
 
 void onRecordSpeedUpdate(cfgitem_t *item) {
-  setValueDescrByBool((cfg.logFormat & REG_SPEED), item->valueDescr);
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_SPEED));
 }
 
 void onRecordAltitudeSelect(cfgitem_t *item) {
@@ -733,7 +886,7 @@ void onRecordAltitudeSelect(cfgitem_t *item) {
 }
 
 void onRecordAltitudeUpdate(cfgitem_t *item) {
-  setValueDescrByBool((cfg.logFormat & REG_ELE), item->valueDescr);
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_ELE));
 }
 
 void onRecordHeadingSelect(cfgitem_t *item) {
@@ -742,7 +895,7 @@ void onRecordHeadingSelect(cfgitem_t *item) {
 }
 
 void onRecordHeadingUpdate(cfgitem_t *item) {
-  setValueDescrByBool((cfg.logFormat & REG_HEAD), item->valueDescr);
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_HEAD));
 }
 
 void onRecordDistanceSelect(cfgitem_t *item) {
@@ -751,7 +904,7 @@ void onRecordDistanceSelect(cfgitem_t *item) {
 }
 
 void onRecordDistanceUpdate(cfgitem_t *item) {
-  setValueDescrByBool((cfg.logFormat & REG_DIST), item->valueDescr);
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_DIST));
 }
 
 void onRecordDGPSSelect(cfgitem_t *item) {
@@ -764,6 +917,19 @@ void onRecordDOPSelect(cfgitem_t *item) {
 
 void onRecordSatInViewSelect(cfgitem_t *item) {
   // nothing to do (always disabled)
+}
+
+void onPairWithLoggerCfgSelect(cfgitem_t *item) {
+  runPairWithLogger();
+  ui.waitForInputOk(IDLE_SHUTDOWN);
+}
+
+void onPairWithLoggerCfgUpdate(cfgitem_t *item) {
+  if (isZeroedBytes(&cfg.loggerAddr, BT_ADDR_LEN)) {
+    strcpy(item->valueDescr, "Not paired");
+  } else {
+    strcpy(item->valueDescr, cfg.loggerName);
+  }
 }
 
 void onOutputSubMenuSelect(cfgitem_t *item) {
@@ -789,6 +955,33 @@ void onLogFormatSubMenuSelect(cfgitem_t *item) {
 
   // return to the parent menu
 }
+
+void onClearSettingsSelect(cfgitem_t *item) {
+  ui.drawDialogFrame("Clear Settings");
+  ui.drawDialogMessage(BLUE, 0, "Are you sure to clear all settings?");
+  ui.drawDialogMessage(BLACK, 1, "Note: The log data on the paired GPS logger");
+  ui.drawDialogMessage(BLACK, 2, "  and the files in the SD card will NOT be");
+  ui.drawDialogMessage(BLACK, 3, "  deleted by this operation.");
+  
+  if (ui.waitForInputOkCancel(IDLE_SHUTDOWN) == BID_OK) {
+    ui.drawDialogMessage(BLACK, 0, "Are you sure to clear all settings? [ OK ]");
+    ui.drawDialogMessage(BLUE, 5, "Clear all settings...");
+    delay(1000);
+
+    // clear the configuration data
+    cfg.length = 0; // write the invalid length to the configuration
+    saveAppConfig(); // save the configuration
+
+    // stop the SD card access and reset the device
+    SDcard.end();
+    M5.Power.reset();
+  } else {
+    ui.drawDialogMessage(BLACK, 0, "Are you sure to clear all settings? [Cancel]");
+    ui.drawDialogMessage(BLUE, 5, "The operation was canceled by the user.");
+
+    ui.waitForInputOk(IDLE_SHUTDOWN);
+  }
+} 
 
 void saveAppConfig() {
   uint8_t *pcfg = (uint8_t *)(&cfg);
@@ -873,15 +1066,15 @@ void setup() {
 
   // draw the screen
   updateAppHint();
+  ui.setAppIcon(ICON_APP);
   ui.setAppTitle(APP_NAME);
   ui.drawTitleBar(app.sdcAvail, app.sppActive);
  
   // if left button is pressed, clear the configuration
   if (firstBoot) {
     ui.drawDialogFrame("Hello :)");
-    ui.drawDialogMessage(BLUE, 0, "Thank you for using SmallStep!");
-    ui.drawDialogMessage(BLUE, 1, "This is a data downloading utility for classic");
-    ui.drawDialogMessage(BLUE, 2, "MTK GPS loggers.");
+    ui.drawDialogMessage(BLUE, 0, "Thank you for using SmallStep! This is a data");
+    ui.drawDialogMessage(BLUE, 1, "download utility for classic MTK GPS loggers.");
     ui.drawDialogMessage(BLACK, 3, "Please pair with your logger and configure the");
     ui.drawDialogMessage(BLACK, 4, "app settings before use. In particular, you");
     ui.drawDialogMessage(BLACK, 5, "WOULD need to set your timezone offset in the");

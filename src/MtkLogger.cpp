@@ -354,7 +354,7 @@ bool MtkLogger::getFlashSize(int32_t *size) {
   // return false if the GPS logger is not connected
   if (!connected()) return false;
 
-  uint32_t timeLimit = millis() + 1000;  // timeout period
+  uint32_t timeLimit = millis() + 500;  // timeout period
 
   int32_t value = 0;
   sendNmeaCommand("PMTK605");  // send query firmware release
@@ -372,14 +372,144 @@ bool MtkLogger::getFlashSize(int32_t *size) {
       value = modelIdToFlashSize(modelId);
 
       Serial.printf("Logger.getFlashSize: flash size = 0x%08X\n", value);
+      break;
     }
   }
   buffer->clear();
 
   *size = value;
 
-  return (value > 0);
+  return (value != 0);
 }
+
+bool MtkLogger::getLogFormat(uint32_t *format) {
+  // return false if the GPS logger is not connected
+  if (!connected()) return false;
+
+  uint32_t timeLimit = millis() + 500;  // timeout period
+
+  int32_t value = 0;
+  sendNmeaCommand("PMTK182,2,2");  //
+  while (gpsSerial->connected()) {
+    if (millis() > timeLimit) {
+      Serial.println("Logger.getLogFormat: timeout occurred");
+      break;
+    }
+    if (!gpsSerial->available()) continue;
+    if (!buffer->put(gpsSerial->read())) continue;
+
+    if (buffer->match("$PMTK182,3,2,")) {
+      buffer->readColumnAsInt(3, &value);
+
+      Serial.printf("Logger.getLogFormat: log format = 0x%08X\n", value);
+      break;
+    }
+  } 
+  buffer->clear();
+
+  *format = value;
+
+  return (value != 0);
+}
+
+uint32_t MtkLogger::setLogFormat(uint32_t format) {
+  // return false if the GPS logger is not connected
+  if (!connected()) return false;
+
+  uint32_t timeLimit = millis() + 500;  // timeout period
+
+  char cmdstr[24];
+  sprintf(cmdstr, "PMTK182,1,2,%08X", format);
+
+  uint32_t newFormat = 0;
+
+  sendNmeaCommand(cmdstr);
+  while (gpsSerial->connected()) {
+    if (millis() > timeLimit) {
+      Serial.println("Logger.setLogFormat: timeout occurred");
+      break;
+    }
+    if (!gpsSerial->available()) continue;
+    if (!buffer->put(gpsSerial->read())) continue;
+
+    if (buffer->match("$PMTK001,182,1,3")) {
+      Serial.printf("Logger.setLogFormat: success\n");
+
+      getLogFormat(&newFormat);
+      break;
+    } else if (buffer->match("$PMTK001,182,1,")) {
+      // failed
+      break;
+    }
+  }
+  
+  return newFormat;
+}
+
+bool MtkLogger::getLogRecordMode(recordmode_t *recmode) {
+  // return false if the GPS logger is not connected
+  if (!connected()) return false;
+
+  uint32_t timeLimit = millis() + 500;  // timeout period
+
+  int32_t value = 0;
+  sendNmeaCommand("PMTK182,2,6");  //
+  while (gpsSerial->connected()) {
+    if (millis() > timeLimit) {
+      Serial.println("Logger.getLogFullAction: timeout occurred");
+      break;
+    }
+    if (!gpsSerial->available()) continue;
+    if (!buffer->put(gpsSerial->read())) continue;
+
+    if (buffer->match("$PMTK182,3,6,")) {
+      buffer->readColumnAsInt(3, &value);
+
+      Serial.printf("Logger.getLogFullAction: action = %02d (2=STOP, 1=OVERWRAP)\n", value);
+      break;
+    }
+  }
+  buffer->clear();
+
+  *recmode = (recordmode_t)value;
+
+  return (value != 0);
+}
+
+bool MtkLogger::setLogRecordMode(recordmode_t recmode) {
+// return false if the GPS logger is not connected
+  if (!connected()) return false;
+
+  uint32_t timeLimit = millis() + 500;  // timeout period
+
+  char cmdstr[24];
+  sprintf(cmdstr, "PMTK182,1,6,%d", recmode);
+
+  bool success = false;
+  sendNmeaCommand(cmdstr);
+  while (gpsSerial->connected()) {
+    if (millis() > timeLimit) {
+      Serial.println("Logger.setLogFullAction: timeout occurred");
+      break;
+    }
+
+    if (!gpsSerial->available()) continue;
+    if (!buffer->put(gpsSerial->read())) continue;
+
+    if (buffer->match("$PMTK001,182,1,3")) {
+      Serial.printf("Logger.setLogFullAction: success\n");
+      success = true;
+      break;
+    } else if (buffer->match("$PMTK001,182,1,")) {
+      // failed
+      break;
+    }
+  }
+  buffer->clear();
+
+  return success;
+}
+
 
 bool MtkLogger::clearFlash(void (*rateCallback)(int32_t)) {
   // return false if the GPS logger is not connected

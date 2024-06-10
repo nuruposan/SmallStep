@@ -43,10 +43,14 @@ class MtkLogger {
   bool downloadLog(File32 *output, void (*rateCallback)(int));
   bool fixRTCdatetime();
   bool getFlashSize(int32_t *size);
+  bool getLogFormat(uint32_t *format);
+  bool getLogRecordMode(recordmode_t *recmode);
   bool clearFlash(void (*rateCallback)(int));
-  // int32_t setLogMode(bool overrite);
+  // int32_t setLogFullAction(bool fullstop);
   // int32_t setLogByDistance(int16_t distance);
   // int32_t setLogBySpeed(int16_t speed);
   // int32_t setLogByTime(int16_t time);
+  uint32_t setLogFormat(uint32_t format);
+  bool setLogRecordMode(recordmode_t recmode);
   void setEventCallback(esp_spp_cb_t evtCallback);
 };

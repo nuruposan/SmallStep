@@ -2,28 +2,6 @@
 
 #include <M5Stack.h>
 
-const uint8_t ICON_APP[] = {32,         20,         0,          0,           // Width, Height, Color
-                            0b00001100, 0b01100000, 0b00000000, 0b00000000,  //
-                            0b00011110, 0b11110000, 0b00000000, 0b00000000,  //
-                            0b00011110, 0b11110000, 0b00000000, 0b00000000,  //
-                            0b01101100, 0b01101100, 0b00000000, 0b00000000,  //
-                            0b11110011, 0b10011110, 0b00000000, 0b00000000,  //
-                            0b11110111, 0b11011110, 0b00000000, 0b00000000,  //
-                            0b01101111, 0b11101100, 0b00000000, 0b00000000,  //
-                            0b00011111, 0b11110000, 0b00000000, 0b00000000,  //
-                            0b00111111, 0b11111000, 0b01100011, 0b00000000,  //
-                            0b00111111, 0b11111000, 0b11110111, 0b10000000,  //
-                            0b00001111, 0b11100000, 0b11110111, 0b10000000,  //
-                            0b00000000, 0b00000011, 0b01100011, 0b01100000,  //
-                            0b00000000, 0b00000111, 0b10011100, 0b11110000,  //
-                            0b00000000, 0b00000111, 0b10111110, 0b11110000,  //
-                            0b00000000, 0b00000011, 0b01111111, 0b01100000,  //
-                            0b00000000, 0b00000000, 0b11111111, 0b10000000,  //
-                            0b00000000, 0b00000001, 0b11111111, 0b11000000,  //
-                            0b00000000, 0b00000001, 0b11111111, 0b11000000,  //
-                            0b00000000, 0b00000001, 0b11111111, 0b11000000,  //
-                            0b00000000, 0b00000000, 0b01111111, 0b00000000};
-
 const uint8_t ICON_BT_BG[] = {16,         19,          // Width, Height
                               0,          0,           // Color
                               0b00001111, 0b11110000,  //
@@ -155,8 +133,9 @@ class AppUI {
   void drawDialogProgress(int32_t progress);
   void drawTitleBar(bool sdAvail, bool btActive);
   void drawNavBar(navmenu_t *nav);
-  void setAppTitle(const char *title);
   void setAppHints(const char *into1, const char *info2);
+  void setAppTitle(const char *title);
+  void setAppIcon(const uint8_t *icon);
   btnid_t waitForButtonInput(navmenu_t *nav, bool idleShutdown);
   btnid_t waitForInputOk(bool idleShutdown);
   btnid_t waitForInputOkCancel(bool idleShutdown);
