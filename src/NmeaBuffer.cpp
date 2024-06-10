@@ -45,6 +45,10 @@ bufferpage_t *NmeaBuffer::allocatePage(bufferpage_t **pg) {
   return np;
 }
 
+char* NmeaBuffer::getBuffer() {
+  return rootPage->buf;
+}
+
 void NmeaBuffer::clear() {
   // release second and subsequent pages, zero-fill the first page
   freePages(rootPage->next);

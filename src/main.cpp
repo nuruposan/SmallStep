@@ -319,7 +319,7 @@ bool runDownloadLog() {
 
   ui.drawDialogMessage(BLUE, 1, "Downloading log data...");
   {
-    if (!logger.downloadLog(&binFileW, &progressCallback)) {
+    if (!logger.downloadLogData(&binFileW, &progressCallback)) {
       logger.disconnect();
       binFileW.close();
 
@@ -816,7 +816,7 @@ void onLogFullActionSelect(cfgitem_t *item) {
 }
 
 void onLogFullActionUpdate(cfgitem_t *item) {
-  if (!cfg.logFullStop) {
+  if (cfg.logFullStop) {
     strcpy(item->valueDescr, "Stop logging");
   } else {
     strcpy(item->valueDescr, "Overwrite");
@@ -1003,7 +1003,7 @@ bool loadAppConfig(bool loadDefault) {
   uint8_t *pcfg = (uint8_t *)(&cfg);
   uint8_t chk = 0;
 
-  Serial.printf("SmallStep.loadConfig: loading configuration data...\n");
+  Serial.printf("SmallStep.loadConfig: loading configuration data from EEPROM\n");
 
   if (!loadDefault) {
     // read configuration data from EEPROM
@@ -1015,6 +1015,7 @@ bool loadAppConfig(bool loadDefault) {
 
       Serial.printf("%02X ", b);
     }
+    Serial.printf("\n");
   }
 
   // load the default configuration if loadDefault is set to true or
@@ -1031,12 +1032,14 @@ bool loadAppConfig(bool loadDefault) {
     cfg.logTimeIdx = DEFAULT_LOG_TIME_IDX;
     cfg.logSpeedIdx = DEFAULT_LOG_DIST_IDX;
 
-    Serial.printf("SmallStep.loadConfig: default configuration loaded\n");
+    Serial.printf("SmallStep.loadConfig: "
+      "the default configuration is loaded due to no valid configuration found\n");
 
     return false;
   }
 
-  Serial.printf("SmallStep.loadConfig: configuration data loaded\n");
+  Serial.printf("SmallStep.loadConfig: the configuration was loaded\n");
+
 
   return true;
 }

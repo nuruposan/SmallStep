@@ -1,5 +1,8 @@
 #include "MtkLogger.h"
 
+#define PROGRESS_STARTED 0
+#define PROGRESS_FINISHED 100
+
 MtkLogger::MtkLogger() {
   memset(&address, 0, sizeof(address));
   gpsSerial = new BluetoothSerial();
@@ -141,15 +144,51 @@ bool MtkLogger::sendNmeaCommand(const char *cmd) {
   // return false if the GPS logger is not connected
   if (!connected()) return false;
 
-  char sendbuf[256];
-  sprintf(sendbuf, "$%s*%02X\r\n", cmd, calcNmeaChecksum(cmd));
+  char sendbuf[128];
+  sprintf(sendbuf, "$%s*%02X", cmd, calcNmeaChecksum(cmd));
 
   // send the NMEA command to the GPS logger
   for (uint16_t i = 0; sendbuf[i] != 0; i++) {
     gpsSerial->write(sendbuf[i]);
   }
+  gpsSerial->write('\r');
+  gpsSerial->write('\n');
   // Note: DO NOT call gpsSerial->flush() here!!
 
+  // print the debug message
+  Serial.printf("Logger.sendNmeaCommand: -> %s\n", sendbuf);
+
+  return true;
+}
+
+bool MtkLogger::waitForNmeaReply(const char *reply, uint16_t timeout) {
+  // return false if the GPS logger is not connected
+  if (!connected()) return false;
+  if (reply == NULL) return false;
+
+  if (timeout == 0) timeout = 500;  // default timeout is 500 msec
+
+  // set the timeout period
+  uint32_t timeStartAt = millis();
+
+  // wait for the reply from the GPS logger
+  while (gpsSerial->connected()) {
+    // exit loop if the timeout reached
+    uint32_t timeElapsed = millis() - timeStartAt;
+    if (timeElapsed > timeout) return false;
+
+    // read charactor until get a NMEA sentence
+    if (!gpsSerial->available()) continue;
+    if (!buffer->put(gpsSerial->read())) continue;
+
+    // print the debug message to the serial console
+    Serial.printf("Logger.waitForNmeaReply: <- %s\n", buffer->getBuffer());
+
+    // exit loop (and return true) if the expected response is received
+    if (buffer->match(reply)) break;
+  }
+
+  // return true if the expected reply is received
   return true;
 }
 
@@ -161,413 +200,271 @@ bool MtkLogger::sendDownloadCommand(int startPos, int reqSize) {
 }
 
 bool MtkLogger::getLastRecordAddress(int32_t *address) {
-  // return false if the GPS logger is not connected
-  if (!connected()) return false;
+  const int32_t TIMEOUT = 500;
 
-  // set the timeout period to 2 seconds
-  uint32_t timeLimit = millis() + 1000;
+  // get the log record mode (FULLSTOP or OVERWRITE)
+  recordmode_t recordMode = MODE_NONE;
+  if (!getLogRecordMode(&recordMode)) return false;
 
   // get the last address of the log data to be downloaded
   int32_t endAddr = 0;
-  sendNmeaCommand("PMTK182,2,6");  // query log recording mode
-  while (gpsSerial->connected()) {
-    // abort queries if the timeout reached
-    if (millis() > timeLimit) break;
+  switch (recordMode) {
+  case MODE_FULLSTOP:
+    if (!sendNmeaCommand("PMTK182,2,8")) return false;
+    if (!waitForNmeaReply("$PMTK182,3,8,", TIMEOUT)) return false;
+    
+    buffer->readColumnAsInt(3, &endAddr);
+    break;
+  case MODE_OVERWRITE:
+  default:
+    // send PMTK_Q_RELEASE command (query the firmware release info)
+    if (!sendNmeaCommand("PMTK605")) return false;
+    if (!waitForNmeaReply("$PMTK705,", TIMEOUT)) return false;
 
-    // read charactor until get a NMEA sentence
-    if (!gpsSerial->available()) continue;
-    if (!buffer->put(gpsSerial->read())) continue;
-
-    if (buffer->match("$PMTK182,3,6,")) {  // log mode
-      int32_t logMode = 0;
-      buffer->readColumnAsInt(3, &logMode);
-
-      if (logMode == 2) {                // fullstop mode
-        sendNmeaCommand("PMTK182,2,8");  // send query last record address
-      } else {                           // overwrite mode
-        sendNmeaCommand("PMTK605");      // send query firmware release
-      }
-
-      continue;
-
-    } else if (buffer->match("$PMTK182,3,8,")) {  // last record address
-      buffer->readColumnAsInt(3, &endAddr);
-      break;
-
-    } else if (buffer->match("$PMTK705,")) {  // firmware release
-      int32_t modelId = 0;
-      buffer->readColumnAsInt(2, &modelId);  // read modelID
-      endAddr = modelIdToFlashSize(modelId);
-      break;
-    }
+    int32_t modelId = 0;
+    buffer->readColumnAsInt(2, &modelId);  // read modelID
+    endAddr = modelIdToFlashSize(modelId);
+    break;
   }
+
   // set return value
   *address = endAddr;
 
-  // clear the receive buffer
-  buffer->clear();
+  Serial.printf("Logger.getLastRecordAddress: 0x%06X\n", endAddr);
 
   // return true if the last address is obtained
   return (endAddr > 0);
 }
 
-bool MtkLogger::downloadLog(File32 *output, void (*callback)(int)) {
-  const uint8_t MAX_RETRY = 3;
+bool MtkLogger::downloadLogData(File32 *output, void (*callback)(int)) {
+  const int32_t TIMEOUT = 1000;
+  int32_t REQ_SIZE = 0x4000;
 
   bool nextReq = true;
-  int32_t reqSize = 0x4000;
   int32_t recvSize = 0;
-  int32_t endAddr = 0;
-  int32_t nextAddr = 0x000000;
-  int8_t retries = 0;
+  int32_t endAddr  = 0;
+  int32_t nextAddr = 0;
+  
+  // finally perform the callback to notify the progress is started
+  if (callback != NULL) callback(PROGRESS_STARTED);
 
-  if (callback != NULL) callback(0);
-
-  if (!getLastRecordAddress(&endAddr)) {
-    Serial.println("Failed to get the last address of the log data.");
-    return false;
-  }
-
-  uint32_t timeLimit = millis() + 1000;  // set initial timeout period
+  // get the last address of the log data to be downloaded
+  // to calcurate the download progress rate
+  if (!getLastRecordAddress(&endAddr)) return false;
 
   while (gpsSerial->connected()) {
+    // break if the download process is finished
+    if (nextAddr >= endAddr) break;
+
+    // send the next download request if the flag set
+    if (nextReq) {
+      // send the download command
+      if (!sendDownloadCommand(nextAddr, REQ_SIZE)) return false;
+
+      nextReq = false;
+      recvSize = 0;
+    }
+
+    // wait for the next data responce
+    // abort the process if one of expected responces are NOT received
+    if (!waitForNmeaReply("$PMTK182,8,", TIMEOUT)) break;
+
+    // read the starting address of the received data from the 3rd column of the line
+    int32_t startAddr = 0;
+    buffer->readColumnAsInt(2, &startAddr);
+
+    // ignore this line if the starting address is not the expected value
+    if (startAddr != nextAddr) continue;
+
+    // call the callback function to notify the progress
+    if (callback != NULL) {  // call the progress function if available
+      callback(((float)nextAddr / endAddr) * 100);
+    }
+
+    // print the debug message to the serial console
+    Serial.printf("Logger.download: recv data [startAddr=0x%06X]\n", startAddr);
+
+    uint8_t b = 0;         // variable to store the next byte
+    uint16_t ffCount = 0;  // counter for how many 0xFFs are continuous
+
+    // read the data from the buffer and write it to the output file
+    // and count the continuous 0xFFs to detect the end of the log data
+    buffer->seekToColumn(3);  // move to the 4th column (data column)
+    while (buffer->readHexByteFull(&b)) {
+      output->write(b);
+      ffCount = (b != 0xFF) ? 0 : (ffCount + 1);  // count continuous 0xFF
+    }
+
+    // update the next address and the received size
+    nextAddr += 0x0800;
+    recvSize += 0x0800;
+    nextReq = (recvSize >= REQ_SIZE);
+    if (ffCount >= 0x200) endAddr = nextAddr;
+
     // exit loop when download process is finished or timeout occurred
     if (nextAddr >= endAddr) {
-      Serial.printf("Logger.download: finished [size=0x%05X]\n", endAddr);
+      Serial.printf("Logger.download: finished [recvSize=0x%06X]\n", endAddr);
       break;
     }
-
-    if (millis() > timeLimit) {
-      nextReq = true;
-      retries += 1;
-
-      if (retries > MAX_RETRY) {
-        Serial.println("Logger.download: timeout occurred");
-        break;
-      }
-    }
-
-    // check if the flag to send the next request is set
-    if (nextReq) {  // need to send the next download requestsf
-      // send the download command to the GPS logger
-      sendDownloadCommand(nextAddr, reqSize);
-
-      nextReq = false;  // clear the flag to send the next request
-      recvSize = 0;     // clear the received size to 0
-      timeLimit = millis() + ((reqSize / SIZE_REPLY) * 800);  // update timeout
-
-      // print the debug message to the serial console
-      Serial.printf(
-          "Logger.download: send request [start=0x%05X, size=0x%04X]\n",
-          nextAddr, reqSize);
-    }
-
-    // receive data (NMEA sentenses) and store them into buffer
-    if (!gpsSerial->available()) continue;
-    if (!buffer->put(gpsSerial->read())) continue;
-
-    // check if the received line is the expected responses
-    if (buffer->match("$PMTK182,8,")) {  // recv data block
-      // read the starting address from the 3rd column of the line
-      int32_t startAddr = 0;
-      buffer->readColumnAsInt(2, &startAddr);
-
-      // ignore this line if the starting address is not the expected value
-      if (startAddr != nextAddr) continue;
-
-      // call the callback function to notify the progress
-      if (callback != NULL) {  // call the progress function if available
-        callback(((float)nextAddr / endAddr) * 100);
-      }
-
-      // print the debug message to the serial console
-      Serial.printf("Logger.download: recv data [start=0x%05X]\n", startAddr);
-
-      uint8_t b = 0;         // variable to store the next byte
-      uint16_t ffCount = 0;  // counter for how many 0xFFs are continuous
-
-      // read the data from the buffer and write it to the output file
-      buffer->seekToColumn(3);  // move to the 4th column (data column)
-      while (buffer->readHexByteFull(&b)) {
-        output->write(b);
-        ffCount = (b != 0xFF) ? 0 : (ffCount + 1);  // count continuous 0xFF
-      }
-
-      // update the next address and the received size
-      nextAddr += 0x0800;
-      recvSize += 0x0800;
-      nextReq = (recvSize >= reqSize);
-      if (ffCount >= 0x200) endAddr = nextAddr;
-
-      continue;
-    }  // if (buffer->match("$PMTK182,8,"))
-  }    // while (gpsSerial.connected())
-
-  if (callback != NULL) callback(100);
+  } // while (gpsSerial.connected())
 
   // close the output file, then clear the buffer
   output->flush();
   buffer->clear();
+
+  // finally perform the callback to notify the progress is completed
+  if (callback != NULL) callback(PROGRESS_FINISHED);
 
   // return true if the download process is finished successfully
   return (nextAddr >= endAddr);
 }
 
 bool MtkLogger::fixRTCdatetime() {
-  if (!connected()) return false;
+  const uint32_t TIMEOUT = 1000;
 
-  bool sendCommand = true;
-  uint32_t timeLimit = 0;
-  int8_t retries = 0;
+  // send PMTK_API_SET_RTC_TIME (set date/time)
+  if (!sendNmeaCommand("PMTK335,2020,1,1,0,0,0")) return false;
+  if (!waitForNmeaReply("$PMTK001,335,3", TIMEOUT)) return false;
 
-  while ((gpsSerial->connected())) {
-    if (sendCommand) {
-      sendNmeaCommand("PMTK335,2020,1,1,0,0,0");
-      sendCommand = false;
-      timeLimit = millis() + 1000;
-    }
+  // send PMTK_CMD_HOT_START command (reload request)
+  if (!reloadDevice()) return false;
 
-    if (millis() > timeLimit) {
-      sendCommand = true;
-      retries += 1;
-      if (retries >= 3) break;
-    }
-
-    if (!gpsSerial->available()) continue;
-    if (!buffer->put(gpsSerial->read())) continue;
-
-    // check if the received line is the expected responses
-    if (buffer->match("$PMTK001,335,3")) {  // success
-      // restart GPS logger to apply new RTC datetime
-      sendNmeaCommand("PMTK101");
-      break;
-    }
-  }
-
-  // clear receive buffer
-  buffer->clear();
-
-  return (retries < 3);
+  return true;
 }
 
 bool MtkLogger::getFlashSize(int32_t *size) {
-  // return false if the GPS logger is not connected
-  if (!connected()) return false;
+  const uint32_t TIMEOUT = 1000;
 
-  uint32_t timeLimit = millis() + 500;  // timeout period
+  // send query firmware release
+  if (!sendNmeaCommand("PMTK605")) return false;
+  if (!waitForNmeaReply("$PMTK705,", TIMEOUT)) return false;
 
-  int32_t value = 0;
-  sendNmeaCommand("PMTK605");  // send query firmware release
-  while (gpsSerial->connected()) {
-    if (millis() > timeLimit) {
-      Serial.println("Logger.getModelId: timeout occurred");
-      break;
-    }
-    if (!gpsSerial->available()) continue;
-    if (!buffer->put(gpsSerial->read())) continue;
+  // determine the flash size
+  int32_t modelId = 0;
+  buffer->readColumnAsInt(2, &modelId); // read modelID from the reply
+  *size = modelIdToFlashSize(modelId);  // determine flash size from modelID
 
-    if (buffer->match("$PMTK705,")) {
-      int32_t modelId = 0;
-      buffer->readColumnAsInt(2, &modelId);  // read modelID
-      value = modelIdToFlashSize(modelId);
+  // print debug message
+  Serial.printf("Logger.getFlashSize: flash size = 0x%08X\n", *size);
 
-      Serial.printf("Logger.getFlashSize: flash size = 0x%08X\n", value);
-      break;
-    }
-  }
-  buffer->clear();
-
-  *size = value;
-
-  return (value != 0);
+  return true;
 }
 
 bool MtkLogger::getLogFormat(uint32_t *format) {
-  // return false if the GPS logger is not connected
-  if (!connected()) return false;
+  const uint32_t TIMEOUT = 1000;
 
-  uint32_t timeLimit = millis() + 500;  // timeout period
+  if (!sendNmeaCommand("PMTK182,2,2")) return false;
+  if (!waitForNmeaReply("$PMTK182,3,2,", TIMEOUT)) return false;
 
+  // read the log format from the reply
   int32_t value = 0;
-  sendNmeaCommand("PMTK182,2,2");  //
-  while (gpsSerial->connected()) {
-    if (millis() > timeLimit) {
-      Serial.println("Logger.getLogFormat: timeout occurred");
-      break;
-    }
-    if (!gpsSerial->available()) continue;
-    if (!buffer->put(gpsSerial->read())) continue;
-
-    if (buffer->match("$PMTK182,3,2,")) {
-      buffer->readColumnAsInt(3, &value);
-
-      Serial.printf("Logger.getLogFormat: log format = 0x%08X\n", value);
-      break;
-    }
-  } 
-  buffer->clear();
-
+  buffer->readColumnAsInt(3, &value);
   *format = value;
 
-  return (value != 0);
+  // print debug message
+  Serial.printf("Logger.getLogFormat: log format = 0x%08X\n", *format);
+  
+  return true;
 }
 
 uint32_t MtkLogger::setLogFormat(uint32_t format) {
-  // return false if the GPS logger is not connected
-  if (!connected()) return false;
-
-  uint32_t timeLimit = millis() + 500;  // timeout period
+  const uint32_t TIMEOUT = 1000;
 
   char cmdstr[24];
   sprintf(cmdstr, "PMTK182,1,2,%08X", format);
+  
+  if (!sendNmeaCommand(cmdstr)) return 0;
+  if (!waitForNmeaReply("$PMTK001,182,1,3", TIMEOUT)) return 0;
 
   uint32_t newFormat = 0;
+  if (getLogFormat(&newFormat) == 0) return 0;
 
-  sendNmeaCommand(cmdstr);
-  while (gpsSerial->connected()) {
-    if (millis() > timeLimit) {
-      Serial.println("Logger.setLogFormat: timeout occurred");
-      break;
-    }
-    if (!gpsSerial->available()) continue;
-    if (!buffer->put(gpsSerial->read())) continue;
-
-    if (buffer->match("$PMTK001,182,1,3")) {
-      Serial.printf("Logger.setLogFormat: success\n");
-
-      getLogFormat(&newFormat);
-      break;
-    } else if (buffer->match("$PMTK001,182,1,")) {
-      // failed
-      break;
-    }
-  }
-  
   return newFormat;
 }
 
 bool MtkLogger::getLogRecordMode(recordmode_t *recmode) {
-  // return false if the GPS logger is not connected
-  if (!connected()) return false;
-
-  uint32_t timeLimit = millis() + 500;  // timeout period
+  const uint32_t TIMEOUT = 1000;
 
   int32_t value = 0;
-  sendNmeaCommand("PMTK182,2,6");  //
-  while (gpsSerial->connected()) {
-    if (millis() > timeLimit) {
-      Serial.println("Logger.getLogFullAction: timeout occurred");
-      break;
-    }
-    if (!gpsSerial->available()) continue;
-    if (!buffer->put(gpsSerial->read())) continue;
+  if (!sendNmeaCommand("PMTK182,2,6")) return false;
+  if (!waitForNmeaReply("$PMTK182,3,6,", TIMEOUT)) return false;
 
-    if (buffer->match("$PMTK182,3,6,")) {
-      buffer->readColumnAsInt(3, &value);
-
-      Serial.printf("Logger.getLogFullAction: action = %02d (2=STOP, 1=OVERWRAP)\n", value);
-      break;
-    }
-  }
-  buffer->clear();
-
+  buffer->readColumnAsInt(3, &value);
+  Serial.printf("Logger.getLogFullAction: action = %02d (2=STOP, 1=OVERWRAP)\n", value);
+  
   *recmode = (recordmode_t)value;
 
-  return (value != 0);
+  return (*recmode != MODE_NONE);
 }
 
 bool MtkLogger::setLogRecordMode(recordmode_t recmode) {
-// return false if the GPS logger is not connected
-  if (!connected()) return false;
-
-  uint32_t timeLimit = millis() + 500;  // timeout period
+  const uint32_t TIMEOUT = 1000;
 
   char cmdstr[24];
   sprintf(cmdstr, "PMTK182,1,6,%d", recmode);
 
-  bool success = false;
-  sendNmeaCommand(cmdstr);
-  while (gpsSerial->connected()) {
-    if (millis() > timeLimit) {
-      Serial.println("Logger.setLogFullAction: timeout occurred");
-      break;
-    }
+  if (!sendNmeaCommand(cmdstr)) return false;
+  if (!waitForNmeaReply("$PMTK001,182,1,3", TIMEOUT)) return false;
 
-    if (!gpsSerial->available()) continue;
-    if (!buffer->put(gpsSerial->read())) continue;
-
-    if (buffer->match("$PMTK001,182,1,3")) {
-      Serial.printf("Logger.setLogFullAction: success\n");
-      success = true;
-      break;
-    } else if (buffer->match("$PMTK001,182,1,")) {
-      // failed
-      break;
-    }
-  }
-  buffer->clear();
-
-  return success;
+  return true;
 }
 
 
 bool MtkLogger::clearFlash(void (*rateCallback)(int32_t)) {
+  const uint32_t TIMEOUT = 500;
+
   // return false if the GPS logger is not connected
   if (!connected()) return false;
 
-  if (rateCallback != NULL) rateCallback(0);
+  if (rateCallback != NULL) rateCallback(PROGRESS_STARTED);
 
   int32_t flashSize = 0;
   if (!getFlashSize(&flashSize)) return false;
 
-  bool success = false;
   int32_t progRate = 0;
   uint32_t timeStartAt = millis();
-  uint32_t timeEstimated = (flashSize / SIZE_8MBIT) * 7500;
-  uint32_t timeLimit = timeStartAt + 45000;  // 45 sec
+  uint32_t timeEstimated = (flashSize / SIZE_8MBIT) * 8000;
 
-  sendNmeaCommand("PMTK182,6,1");
+  // send clear 
+  if (!sendNmeaCommand("PMTK182,6,1")) return false;
+
   while (gpsSerial->connected()) {
-    delay(5);
+    if (waitForNmeaReply("$PMTK001,182,6,3", TIMEOUT)) { // successfully finished
+      // reload the logger and break
+      if (!reloadDevice()) return false;
+      break;
+    }
 
-    uint32_t timeNow = millis();
-    if (timeNow > timeLimit) {
+    uint32_t timeElapsed = millis() - timeStartAt;
+    if (timeElapsed > timeEstimated) {
       Serial.println("Logger.clearFlash: timeout occurred");
       break;
     }
 
     if (rateCallback != NULL) {
-      uint32_t timeElapsed = timeNow - timeStartAt;
-      int32_t _pr = 100 * ((float)timeElapsed / timeEstimated);
-      if (_pr > progRate) {
-        rateCallback(_pr);
-        progRate = _pr;
-      }
-    }
-
-    if (!gpsSerial->available()) continue;
-    if (!buffer->put(gpsSerial->read())) continue;
-
-    if (buffer->match("$PMTK001,182,6,3")) {  // success
-      // restart GPS logger
-      sendNmeaCommand("PMTK101");
-      success = true;
-      break;
-    } else if (buffer->match("$PMTK001,182,6,")) {  // failed
-      break;
+      rateCallback(((float)timeElapsed / timeEstimated) * 100);
     }
   }
-  buffer->clear();
 
-  if (rateCallback != NULL) rateCallback(100);
+  if (rateCallback != NULL) rateCallback(PROGRESS_FINISHED);
 
-  return success;
+  return true;
 }
 
-void MtkLogger::setEventCallback(esp_spp_cb_t evtCallback) {
-  if (evtCallback != NULL) {
-    gpsSerial->register_callback(evtCallback);
+void MtkLogger::setEventCallback(esp_spp_cb_t cbfunc) {
+  if (cbfunc != NULL) {
+    gpsSerial->register_callback(cbfunc);
   }
 
-  eventCallback = evtCallback;
+  eventCallback = cbfunc;
+}
+
+bool MtkLogger::reloadDevice() {
+  const int32_t TIMEOUT = 3000;
+
+  // send PMTK_CMD_HOT_START command (reload request)
+  if (!sendNmeaCommand("PMTK101")) return false;
+  if (!waitForNmeaReply("$PMTK010,", TIMEOUT)) return false;
+
+  return true;
 }

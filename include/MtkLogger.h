@@ -14,8 +14,9 @@ typedef enum _sizeinfo {
 } sizeinfo_t;
 
 typedef enum _recordmode {
+  MODE_NONE = 0,      // no record mode (error state)
+  MODE_OVERWRITE = 1, // overwrite oldest record when flash is full
   MODE_FULLSTOP = 2,  // stop logging when flash is full
-  MODE_OVERWRITE = 1  // overwrite oldest record when flash is full
 } recordmode_t;
 
 class MtkLogger {
@@ -28,6 +29,7 @@ class MtkLogger {
 
   uint8_t calcNmeaChecksum(const char *cmd);
   bool sendNmeaCommand(const char *cmd);
+  bool waitForNmeaReply(const char *reply, uint16_t timeout);
   bool sendDownloadCommand(int startPos, int reqSize);
   static int32_t modelIdToFlashSize(uint16_t modelId);
   bool getLastRecordAddress(int32_t *size);
@@ -36,17 +38,20 @@ class MtkLogger {
   MtkLogger();
   ~MtkLogger();
 
+  bool clearFlash(void (*rateCallback)(int));
   bool connect(String name);
   bool connect(uint8_t *address);
   bool connected();
   void disconnect();
-  bool downloadLog(File32 *output, void (*rateCallback)(int));
+  bool downloadLogData(File32 *output, void (*rateCallback)(int));
   bool fixRTCdatetime();
   bool getFlashSize(int32_t *size);
+  //bool getLogByDistance(int16_t distance);
+  //bool getLogBySpeed(int16_t speed);
+  //bool getLogByTime(int16_t time);
   bool getLogFormat(uint32_t *format);
   bool getLogRecordMode(recordmode_t *recmode);
-  bool clearFlash(void (*rateCallback)(int));
-  // int32_t setLogFullAction(bool fullstop);
+  bool reloadDevice();
   // int32_t setLogByDistance(int16_t distance);
   // int32_t setLogBySpeed(int16_t speed);
   // int32_t setLogByTime(int16_t time);
