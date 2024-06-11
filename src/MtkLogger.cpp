@@ -236,7 +236,7 @@ bool MtkLogger::getLastRecordAddress(int32_t *address) {
   return (endAddr > 0);
 }
 
-bool MtkLogger::downloadLogData(File32 *output, void (*callback)(int)) {
+bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
   const int32_t TIMEOUT = 1000;
   int32_t REQ_SIZE = 0x4000;
 
@@ -245,8 +245,8 @@ bool MtkLogger::downloadLogData(File32 *output, void (*callback)(int)) {
   int32_t endAddr  = 0;
   int32_t nextAddr = 0;
   
-  // finally perform the callback to notify the progress is started
-  if (callback != NULL) callback(PROGRESS_STARTED);
+  // perform the callback to notify the download process is started
+  if (rateCallback) rateCallback(PROGRESS_STARTED);
 
   // get the last address of the log data to be downloaded
   // to calcurate the download progress rate
@@ -277,9 +277,7 @@ bool MtkLogger::downloadLogData(File32 *output, void (*callback)(int)) {
     if (startAddr != nextAddr) continue;
 
     // call the callback function to notify the progress
-    if (callback != NULL) {  // call the progress function if available
-      callback(((float)nextAddr / endAddr) * 100);
-    }
+    if (rateCallback) rateCallback(((float)nextAddr / endAddr) * 100);
 
     // print the debug message to the serial console
     Serial.printf("Logger.download: recv data [startAddr=0x%06X]\n", startAddr);
@@ -299,7 +297,8 @@ bool MtkLogger::downloadLogData(File32 *output, void (*callback)(int)) {
     nextAddr += 0x0800;
     recvSize += 0x0800;
     nextReq = (recvSize >= REQ_SIZE);
-    if (ffCount >= 0x200) endAddr = nextAddr;
+    if (ffCount >= 0x200) endAddr = nextAddr + (REQ_SIZE - recvSize);
+//    if (ffCount >= 0x200) endAddr = nextAddr;
 
     // exit loop when download process is finished or timeout occurred
     if (nextAddr >= endAddr) {
@@ -313,7 +312,7 @@ bool MtkLogger::downloadLogData(File32 *output, void (*callback)(int)) {
   buffer->clear();
 
   // finally perform the callback to notify the progress is completed
-  if (callback != NULL) callback(PROGRESS_FINISHED);
+  if (rateCallback) rateCallback(PROGRESS_FINISHED);
 
   // return true if the download process is finished successfully
   return (nextAddr >= endAddr);
@@ -367,19 +366,16 @@ bool MtkLogger::getLogFormat(uint32_t *format) {
   return true;
 }
 
-uint32_t MtkLogger::setLogFormat(uint32_t format) {
+bool MtkLogger::setLogFormat(uint32_t format) {
   const uint32_t TIMEOUT = 1000;
 
   char cmdstr[24];
   sprintf(cmdstr, "PMTK182,1,2,%08X", format);
   
-  if (!sendNmeaCommand(cmdstr)) return 0;
-  if (!waitForNmeaReply("$PMTK001,182,1,3", TIMEOUT)) return 0;
+  if (!sendNmeaCommand(cmdstr)) return false;
+  if (!waitForNmeaReply("$PMTK001,182,1,3", TIMEOUT)) return false;
 
-  uint32_t newFormat = 0;
-  if (getLogFormat(&newFormat) == 0) return 0;
-
-  return newFormat;
+  return true;
 }
 
 bool MtkLogger::getLogRecordMode(recordmode_t *recmode) {
@@ -410,13 +406,14 @@ bool MtkLogger::setLogRecordMode(recordmode_t recmode) {
 }
 
 
-bool MtkLogger::clearFlash(void (*rateCallback)(int32_t)) {
+bool MtkLogger::clearFlash(void (*rateCallback)(int8_t)) {
   const uint32_t TIMEOUT = 500;
 
   // return false if the GPS logger is not connected
   if (!connected()) return false;
 
-  if (rateCallback != NULL) rateCallback(PROGRESS_STARTED);
+  // perform the callback to notify the process is started
+  if (rateCallback) rateCallback(PROGRESS_STARTED);
 
   int32_t flashSize = 0;
   if (!getFlashSize(&flashSize)) return false;
@@ -441,12 +438,12 @@ bool MtkLogger::clearFlash(void (*rateCallback)(int32_t)) {
       break;
     }
 
-    if (rateCallback != NULL) {
-      rateCallback(((float)timeElapsed / timeEstimated) * 100);
-    }
+    // perform the callback to notify the current progress rate
+    if (rateCallback) rateCallback(((float)timeElapsed / timeEstimated) * 100);
   }
 
-  if (rateCallback != NULL) rateCallback(PROGRESS_FINISHED);
+  // perform the callback to notify the process is finiched
+  if (rateCallback) rateCallback(PROGRESS_FINISHED);
 
   return true;
 }

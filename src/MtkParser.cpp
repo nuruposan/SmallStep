@@ -20,7 +20,7 @@ bool MtkParser::isDifferentDate(uint32_t t1, uint32_t t2) {
 }
 
 void MtkParser::setRecordFormat(uint32_t fmt) {
-  status.formatReg = fmt;
+  status.logFormat = fmt;
 
   status.ignoreLen1 = (sizeof(uint16_t) * (bool)(fmt & REG_VALID));
   status.ignoreLen2 = (sizeof(float) * (bool)(fmt & REG_HEAD)) +
@@ -37,8 +37,8 @@ void MtkParser::setRecordFormat(uint32_t fmt) {
                       (sizeof(uint16_t) * (bool)(fmt & REG_MSEC));
 
   Serial.printf(
-      "Parser.setFormat: changed [fmtreg=0x%08X, ignlen={%d, %d, %d, %d}]\n",
-      status.formatReg, status.ignoreLen1, status.ignoreLen2, status.ignoreLen3,
+      "Parser.setFormat: change log format [reg=0x%08X, ignoreLen={%d, %d, %d, %d}]\n",
+      status.logFormat, status.ignoreLen1, status.ignoreLen2, status.ignoreLen3,
       status.ignoreLen4);
 
   // Note: record format is as follows:
@@ -64,10 +64,10 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   memset(rcd, 0, sizeof(gpsrecord_t));
 
   // store the current record format
-  rcd->format = status.formatReg;
+  rcd->format = status.logFormat;
 
   // read TIME field  (=UTC unixtime)
-  if (status.formatReg & REG_TIME) {
+  if (status.logFormat & REG_TIME) {
     // read value from data and correct GPS Week rollover
     rcd->time = in->readInt32();
     if (rcd->time < ROLLOVER_TIME) rcd->time += ROLLOVER_CORRECT;
@@ -175,8 +175,7 @@ bool MtkParser::readBinMarkers() {
     match = true;
 
     Serial.printf("Parser.readMarker: M-241 marker at 0x%05X\n", startPos);
-  } else if (matchBinPattern(PTN_SCT_END,
-                             sizeof(PTN_SCT_END))) {  // sector end
+  } else if (matchBinPattern(PTN_SCT_END, sizeof(PTN_SCT_END))) {  // sector end
     // seek sector position to the next
     status.sectorPos += 1;
     match = true;
@@ -187,8 +186,7 @@ bool MtkParser::readBinMarkers() {
   return match;
 }
 
-bool MtkParser::convert(File32 *input, File32 *output,
-                        void (*callback)(int32_t)) {
+bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int8_t)) {
   // clear all of the status variables before use
   memset(&status, 0, sizeof(parsestatus_t));
 
@@ -206,7 +204,7 @@ bool MtkParser::convert(File32 *input, File32 *output,
   uint32_t dataStart = 0;
   uint32_t sectorEnd = 0;
 
-  if (callback != NULL) callback(0);
+  if (rateCallback != NULL) rateCallback(0);
 
   while (true) {
     if (sectorStart != (SIZE_SECTOR * status.sectorPos)) {
@@ -220,10 +218,10 @@ bool MtkParser::convert(File32 *input, File32 *output,
       break;
     }
 
-    if (callback != NULL) {
+    if (rateCallback != NULL) {
       int32_t _pr = 100 * ((float)in->position() / in->filesize());
       if (_pr > progRate) {
-        callback(_pr);
+        rateCallback(_pr);
         progRate = _pr;
       }
     }
@@ -254,15 +252,17 @@ bool MtkParser::convert(File32 *input, File32 *output,
 
     out->putTrkpt(rcd);
 
-    if (status.firstTrkpt.time == 0) status.firstTrkpt = rcd;
-    status.lastTrkpt = rcd;
+    if (status.firstTrkpt.time == 0) {
+      memcpy(&status.firstTrkpt, &rcd, sizeof(gpsrecord_t));
+    }
+    memcpy(&status.lastTrkpt, &rcd, sizeof(gpsrecord_t));
 
     if ((in->position() + rcd.size) >= sectorEnd) {
       status.sectorPos += 1;
     }
   }
 
-  if (callback != NULL) callback(100);
+  if (rateCallback != NULL) rateCallback(100);
 
   out->endXml();
   out->flush();

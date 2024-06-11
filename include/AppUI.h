@@ -139,6 +139,6 @@ class AppUI {
   btnid_t waitForButtonInput(navmenu_t *nav, bool idleShutdown);
   btnid_t waitForInputOk(bool idleShutdown);
   btnid_t waitForInputOkCancel(bool idleShutdown);
-  void enterConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount, bool idleShutdown);
-  void enterMainMenu(menuitem_t *menu, int8_t itemCount, bool idleShutdown);
+  void openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount, bool idleShutdown);
+  void openMainMenu(menuitem_t *menu, int8_t itemCount, bool idleShutdown);
 };

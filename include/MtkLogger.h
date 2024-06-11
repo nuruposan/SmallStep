@@ -38,12 +38,12 @@ class MtkLogger {
   MtkLogger();
   ~MtkLogger();
 
-  bool clearFlash(void (*rateCallback)(int));
+  bool clearFlash(void (*rateCallback)(int8_t));
   bool connect(String name);
   bool connect(uint8_t *address);
   bool connected();
   void disconnect();
-  bool downloadLogData(File32 *output, void (*rateCallback)(int));
+  bool downloadLogData(File32 *output, void (*rateCallback)(int8_t));
   bool fixRTCdatetime();
   bool getFlashSize(int32_t *size);
   //bool getLogByDistance(int16_t distance);
@@ -55,7 +55,7 @@ class MtkLogger {
   // int32_t setLogByDistance(int16_t distance);
   // int32_t setLogBySpeed(int16_t speed);
   // int32_t setLogByTime(int16_t time);
-  uint32_t setLogFormat(uint32_t format);
+  bool setLogFormat(uint32_t format);
   bool setLogRecordMode(recordmode_t recmode);
   void setEventCallback(esp_spp_cb_t evtCallback);
 };
