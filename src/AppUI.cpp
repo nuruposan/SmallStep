@@ -461,7 +461,7 @@ void AppUI::drawConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount,
   sprite.deleteSprite();
 }
 
-void AppUI::enterConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount, bool idleShutdown) {
+void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount, bool idleShutdown) {
   navmenu_t nav;
   nav.items[0] = {"Prev", true};
   nav.items[1] = {"Next", true};
@@ -477,6 +477,7 @@ void AppUI::enterConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount
   }
 
   bool endFlag = false;
+  bool needSave = false;
   while (!endFlag) {
     drawConfigMenu(title, menu, itemCount, top, select);
 
@@ -520,7 +521,7 @@ void AppUI::enterConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount
 }
 
 
-void AppUI::enterMainMenu(menuitem_t *menu, int8_t itemCount, bool idleShutdown) {
+void AppUI::openMainMenu(menuitem_t *menu, int8_t itemCount, bool idleShutdown) {
   navmenu_t nav;
   nav.items[0] = {"Prev", true};
   nav.items[1] = {"Next", true};

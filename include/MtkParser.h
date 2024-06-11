@@ -28,7 +28,7 @@ typedef struct _parseopt {
 
 typedef struct _parsest {
   uint16_t sectorPos;
-  uint32_t formatReg;
+  uint32_t logFormat;
   uint8_t ignoreLen1;
   uint8_t ignoreLen2;
   uint8_t ignoreLen3;
@@ -70,7 +70,7 @@ class MtkParser {
  public:
   MtkParser();
   void setOptions(parseopt_t);
-  bool convert(File32 *input, File32 *output, void (*callback)(int32_t));
+  bool convert(File32 *input, File32 *output, void (*rateCallback)(int8_t));
   gpsrecord_t getFirstTrkpt();
   gpsrecord_t getLastTrkpt();
   uint32_t getTrackCount();

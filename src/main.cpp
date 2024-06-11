@@ -16,13 +16,6 @@
 #define DEV_NAME_LEN 20
 #define IDLE_SHUTDOWN true  // unit: msec
 
-#define DEFAULT_TRACK_MODE TRK_ONE_DAY
-#define DEFAULT_TIME_OFFSET_IDX 27 // 27: UTC+9.0
-#define DEFAULT_LOG_DIST_IDX  0    // 0: disable
-#define DEFAULT_LOG_TIME_IDX  4    // 4: 10 seconds
-#define DEFAULT_LOG_SPEED_IDX 0    // 0: disable
-#define DEFAULT_LOG_FORMAT (REG_FIX | REG_TIME | REG_LON | REG_LAT | REG_ELE | REG_SPEED | REG_RCR)
-
 typedef struct appstatus {
   bool sdcAvail;
   bool sppActive;
@@ -45,13 +38,14 @@ typedef struct _appconfig {
 } appconfig_t;
 
 // ******** function prototypes ********
-bool isZeroedBytes(void *, uint16_t);
+bool isZeroFilled(void *, uint16_t);
 bool isLoggerPaired();
 bool isSDcardAvailable();
+bool isDifferent(const void *, const void *, uint16_t);
 void saveAppConfig();
 bool loadAppConfig(bool);
 void bluetoothCallback(esp_spp_cb_event_t, esp_spp_cb_param_t *);
-void progressCallback(int32_t);
+void progressCallback(int8_t);
 void setValueDescrByBool(char *, bool);
 bool runDownloadLog();
 bool runFixRTCtime();
@@ -89,8 +83,6 @@ void onRecordRCRSelect(cfgitem_t *);
 void onRecordRCRUpdate(cfgitem_t *);
 void onRecordValidSelect(cfgitem_t *);
 void onRecordValidUpdate(cfgitem_t *);
-void onRecordLocationSelect(cfgitem_t *);
-void onRecordTimeSelect(cfgitem_t *);
 void onRecordMillisSelect(cfgitem_t *);
 void onRecordMillisUpdate(cfgitem_t *);
 void onRecordSpeedSelect(cfgitem_t *);
@@ -101,9 +93,7 @@ void onRecordHeadingSelect(cfgitem_t *);
 void onRecordHeadingUpdate(cfgitem_t *);
 void onRecordDistanceSelect(cfgitem_t *);
 void onRecordDistanceUpdate(cfgitem_t *);
-void onRecordDGPSSelect(cfgitem_t *);
-void onRecordDOPSelect(cfgitem_t *);
-void onRecordSatInViewSelect(cfgitem_t *);
+void onReadOnlyItemSelect(cfgitem_t *);
 void onPairWithLoggerCfgSelect(cfgitem_t *);
 void onPairWithLoggerCfgUpdate(cfgitem_t *);
 void onOutputSubMenuSelect(cfgitem_t *);
@@ -123,14 +113,29 @@ const int16_t LOG_TIME_VALUES[] = {0, 1, 3, 5, 10, 15, 30, 60, 120, 180, 300};  
 const int16_t LOG_SPEED_VALUES[] = {0,   10,  20,  30,  40,  50,  60,  70, 80, 90,
                                     100, 120, 140, 160, 180, 200, 250, 300};  // uint: km/h
 
+const appconfig_t DEFAULT_CONFIG = {
+  sizeof(appconfig_t),  // length
+  {0, 0, 0, 0, 0, 0},   // loggerAddr
+  "NO LOGGER",          // loggerName
+  TRK_ONE_DAY,          // trackMode
+  27,                   // timeOffsetIdx (27: UTC+9.0)
+  false,                // putWaypt
+  false,                // leaveBinFile 
+  0,                    // logDistIdx (0: disabled)
+  4,                    // logTimeIdx (4: 10 seconds)
+  0,                    // logSpeedIdx (0: disabled)
+  true,                 // logFullStop
+  (REG_FIX | REG_TIME | REG_LON | REG_LAT | REG_ELE | REG_SPEED | REG_RCR)  // logFormat
+};
+
 menuitem_t menuMain[] = {
   // {caption, iconData, enabled, onSelect}
   {"Download Log", ICON_DOWNLOAD_LOG, true, &onDownloadLogSelect},
   {"Fix RTC time", ICON_FIX_RTC, true, &onFixRTCtimeSelect},
   {"Erase Log Data", ICON_ERASE_LOG, true, &onClearFlashSelect},
-  {"Set Log Mode", NULL, true, &onSetLogModeSelect},
-  {"Set Log Format", NULL, true, &onSetLogFormatSelect},
-//  {"Show Location", ICON_SHOW_LOCATION, true, &onShowLocationSelect},
+  {"Set Log Mode", ICON_LOG_MODE, true, &onSetLogModeSelect},
+  {"Set Log Format", ICON_LOG_FORMAT, true, &onSetLogFormatSelect},
+  {"Show Location", ICON_NAVIGATION, true, &onShowLocationSelect},
   {"Pair w/ Logger", ICON_PAIR_LOGGER, true, &onPairWithLoggerSelect},
   {"App Settings", ICON_APP_SETTINGS, true, &onAppSettingSelect},
 };
@@ -153,23 +158,29 @@ cfgitem_t cfgLogMode[] = {
   {"Flash full behavior", "Action when flash memory is full", "", &onLogFullActionSelect, &onLogFullActionUpdate},
 };
 
+cfgitem_t *cfgLogByDist = &cfgLogMode[1];
+cfgitem_t *cfgLogByTime = &cfgLogMode[2];
+cfgitem_t *cfgLogBySpd = &cfgLogMode[3];
+
 cfgitem_t cfgLogFormat[] = {
   // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
   {"Back", "Exit this menu", "<<", NULL, NULL},
   {"Load defaults", "Restore to the default log format", "", &onLoadDefaultFormatSelect, &onLoadDefaultFormatUpdate},
   {"RCR", "Store record reason (dist/time/speed/user)", "", &onRecordRCRSelect, &onRecordRCRUpdate},
-  {"Location (required fields)", "Store latitude and longitude", "Enabled", &onRecordLocationSelect, NULL},
-  {"Time (required fields)", "Store date and time", "Enabled", &onRecordTimeSelect, NULL},
+  {"Location (required fields)", "Store latitude and longitude", "Enabled", &onReadOnlyItemSelect, NULL},
+  {"Time (required fields)", "Store date and time", "Enabled", &onReadOnlyItemSelect, NULL},
   {"Millis", "Store milliseconds", "", &onRecordMillisSelect, &onRecordMillisUpdate},
   {"Valid", "Store positioning status (valid/invalid)", "", &onRecordValidSelect, &onRecordValidUpdate}, // A: valid, V: invalid
   {"Speed", "Store speed", "", &onRecordSpeedSelect, &onRecordSpeedUpdate},
   {"Altitude", "Store altitude", "", &onRecordAltitudeSelect, &onRecordAltitudeUpdate},
   {"Heading", "Store moving direction", "", &onRecordHeadingSelect, &onRecordHeadingUpdate},
   {"Distance", "Store moving distance", "", &onRecordDistanceSelect, &onRecordDistanceUpdate},
-  {"DGPS info (not support)", "Store differencial GPS data", "Disabled", &onRecordDGPSSelect, NULL},
-  {"DOP info (not support)", "Store dilution of precision data", "Disabled", &onRecordDOPSelect, NULL},
-  {"SAT info (not support)", "Store satellite in view data", "Disabled", &onRecordSatInViewSelect, NULL},
+  {"DGPS info (not support)", "Store differencial GPS data", "Disabled", &onReadOnlyItemSelect, NULL},
+  {"DOP info (not support)", "Store dilution of precision data", "Disabled", &onReadOnlyItemSelect, NULL},
+  {"SAT info (not support)", "Store satellite in view data", "Disabled", &onReadOnlyItemSelect, NULL},
 };
+
+cfgitem_t *cfgResetFormat = &cfgLogFormat[1];
 
 cfgitem_t cfgMain[] = {
   // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
@@ -190,21 +201,17 @@ uint32_t idleTimer;
 
 void updateAppHint() {
   // set the Paied logger name and address as the application hint
-  if (!isZeroedBytes(&cfg.loggerAddr, sizeof(cfg.loggerAddr))) {
-    char addrStr[16];
-    sprintf(addrStr, "%02X%02X-%02X%02X-%02X%02X",  // xxxx-xxxx-xxxx
-            cfg.loggerAddr[0], cfg.loggerAddr[1], cfg.loggerAddr[2],
-            cfg.loggerAddr[3], cfg.loggerAddr[4], cfg.loggerAddr[5]);
-    ui.setAppHints(cfg.loggerName, addrStr);
-  } else {
-    ui.setAppHints("NO LOGGER", "0000-0000-0000");
-  }
+  char addrStr[16];
+  sprintf(addrStr, "%02X%02X-%02X%02X-%02X%02X",  // xxxx-xxxx-xxxx
+          cfg.loggerAddr[0], cfg.loggerAddr[1], cfg.loggerAddr[2],
+          cfg.loggerAddr[3], cfg.loggerAddr[4], cfg.loggerAddr[5]);
+  ui.setAppHints(cfg.loggerName, addrStr);
 }
 
 void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   switch (event) {
   case ESP_SPP_INIT_EVT:
-    if (param == NULL) {
+    if (param == NULL) { // SPP started
       app.sppActive = true;
       ui.drawTitleBar(app.sdcAvail, app.sppActive);
     }
@@ -214,7 +221,7 @@ void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
     memcpy(app.loggerAddr, param->open.rem_bda, BT_ADDR_LEN);
     break;
 
-  case ESP_SPP_UNINIT_EVT:
+  case ESP_SPP_UNINIT_EVT: // SPP closed
     if (param == NULL) {
       app.sppActive = false;
       ui.drawTitleBar(app.sdcAvail, app.sppActive);
@@ -223,11 +230,11 @@ void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   }
 }
 
-void progressCallback(int32_t progRate) {
+void progressCallback(int8_t progRate) {
   ui.drawDialogProgress(progRate);
 }
 
-bool isZeroedBytes(void *p, uint16_t size) {
+bool isZeroFilled(void *p, uint16_t size) {
   uint8_t *pb = (uint8_t *)p;
 
   bool allZero = true;
@@ -239,7 +246,7 @@ bool isZeroedBytes(void *p, uint16_t size) {
 }
 
 bool isLoggerPaired() {
-  bool paired = (!isZeroedBytes(&cfg.loggerAddr, BT_ADDR_LEN));
+  bool paired = (!isZeroFilled(&cfg.loggerAddr, BT_ADDR_LEN));
   if (!paired) {
     ui.drawDialogFrame("Setup Required");
     ui.drawDialogMessage(BLACK, 0, "Pairing has not been done yet.");
@@ -248,9 +255,9 @@ bool isLoggerPaired() {
     if (ui.waitForInputOkCancel(IDLE_SHUTDOWN) == BID_OK) {
       ui.drawDialogMessage(BLACK, 1, "Pair with your GPS logger now? [ OK ]");
       paired = runPairWithLogger();
+
       if (paired) ui.waitForInputOk(IDLE_SHUTDOWN);
     } else {
-      paired = false;
       ui.drawDialogMessage(BLACK, 1, "Pair with your GPS logger now? [Cancel]");
       ui.drawDialogMessage(BLUE, 2, "The Operation was canceled.");
     }
@@ -303,7 +310,6 @@ bool runDownloadLog() {
       ui.drawDialogMessage(RED, 1, "- Make sure Bluetooth is enabled on your");
       ui.drawDialogMessage(RED, 2, "  GPS logger");
       ui.drawDialogMessage(RED, 3, "- Power cycling may fix this problem");
-
       return false;
     }
   }
@@ -311,8 +317,6 @@ bool runDownloadLog() {
 
   File32 binFileW = SDcard.open(TEMP_BIN, (O_CREAT | O_WRITE | O_TRUNC));
   if (!binFileW) {
-    logger.disconnect();
-
     ui.drawDialogMessage(RED, 1, "Cannot create a temporaly BIN file.");
     return false;
   }
@@ -320,7 +324,6 @@ bool runDownloadLog() {
   ui.drawDialogMessage(BLUE, 1, "Downloading log data...");
   {
     if (!logger.downloadLogData(&binFileW, &progressCallback)) {
-      logger.disconnect();
       binFileW.close();
 
       ui.drawDialogMessage(RED, 1, "Downloading log data... failed.");
@@ -330,8 +333,8 @@ bool runDownloadLog() {
     }
 
     // disconnect from the logger and close the downloaded file
-    logger.disconnect();
     binFileW.close();
+    logger.disconnect();
   }
   ui.drawDialogMessage(BLACK, 1, "Downloading log data... done.");
 
@@ -414,6 +417,7 @@ bool runDownloadLog() {
  */
 void onDownloadLogSelect(menuitem_t *item) {
   runDownloadLog();
+  logger.disconnect();
   ui.waitForInputOk(IDLE_SHUTDOWN);
 }
 
@@ -443,15 +447,11 @@ bool runFixRTCtime() {
   ui.drawDialogMessage(BLUE, 1, "Setting RTC datetime...");
   {
     if (!logger.fixRTCdatetime()) {
-      logger.disconnect();
-
       ui.drawDialogMessage(RED, 1, "Setting RTC datetime... failed.");
       ui.drawDialogMessage(RED, 2, "- Keep GPS logger close to this device");
 
       return false;
     }
-
-    logger.disconnect();
   }
   // print the result message
   ui.drawDialogMessage(BLACK, 1, "Setting RTC datetime... done.");
@@ -466,6 +466,7 @@ bool runFixRTCtime() {
  */
 void onFixRTCtimeSelect(menuitem_t *item) {
   runFixRTCtime();
+  logger.disconnect();
   ui.waitForInputOk(IDLE_SHUTDOWN);
 }
 
@@ -510,11 +511,13 @@ bool runPairWithLogger() {
       // copy the address and model name to the configuration
       memcpy(cfg.loggerAddr, addr, BT_ADDR_LEN);
       strncpy(cfg.loggerName, DEVICE_NAMES[i].c_str(), (DEV_NAME_LEN-1));
-      saveAppConfig();
 
+      // update GUI
       updateAppHint();
       ui.drawTitleBar(app.sdcAvail, app.sppActive);
 
+      // save the app configuration
+      saveAppConfig();
       return true;
     } else {  // failed to connect to the device
       sprintf(msgbuf1, "- %s : not found.", DEVICE_NAMES[i].c_str());
@@ -579,15 +582,10 @@ bool runClearFlash() {
   {
     // erase the log data
     if (!logger.clearFlash(&progressCallback)) {
-      logger.disconnect();
-
       ui.drawDialogMessage(RED, 2, "Erasing log data... failed.");
       ui.drawDialogMessage(RED, 3, "- Keep GPS logger close to this device");
       ui.drawDialogMessage(RED, 4, "- Power cycling may fix this problem");
     }
-    logger.disconnect();
-
-    return false;
   }
   ui.drawDialogMessage(BLACK, 2, "Erasing log data... done.");
   ui.drawDialogMessage(BLUE, 3, "Hope you have a nice trip next time!");
@@ -597,6 +595,7 @@ bool runClearFlash() {
 
 void onClearFlashSelect(menuitem_t *item) {
   runClearFlash();
+  logger.disconnect();
   ui.waitForInputOk(IDLE_SHUTDOWN);
 }
 
@@ -626,33 +625,33 @@ bool runSetLogFormat() {
   // get the current log format and show the menu
   uint32_t logFormat = 0;
   if (!logger.getLogFormat(&logFormat)) {
-    logger.disconnect();
-
     ui.drawDialogMessage(RED, 1, "Cannot get the current log format.");
     return false;
+  } else if (cfg.logFormat == logFormat) {
+    char buf[48];
+    sprintf(buf, "The format 0x%08X is already set.", cfg.logFormat);
+
+    ui.drawDialogMessage(BLUE, 1, "The Log format on the logger is unchanged.");
+    ui.drawDialogMessage(BLUE, 2, buf);
+    return true;
   }
 
-  char buf[48];
-  sprintf(buf, "Current log format : 0x%08X", logFormat);
-  ui.drawDialogMessage(BLACK, 1, buf);
-
-  if ((logFormat = logger.setLogFormat(cfg.logFormat)) != 0) {
-    logger.disconnect();
-
-    ui.drawDialogMessage(RED, 2, "Cannot change the log format.");
+  if (!logger.setLogFormat(cfg.logFormat)) {
+    ui.drawDialogMessage(RED, 2, "Failed to change the log format.");
     return false;
+  } else {
+    char buf[48];
+    sprintf(buf, "from 0x%08X to 0x%08X.", logFormat, cfg.logFormat);
+    ui.drawDialogMessage(BLUE, 2, "The Log format on the logger is changed");
+    ui.drawDialogMessage(BLUE, 3, buf);
   }
-
-  sprintf(buf, "New log format : 0x%08X", logFormat);
-  ui.drawDialogMessage(BLACK, 2, buf);
-
-  logger.disconnect();
 
   return true;
 }
 
 void onSetLogFormatSelect(menuitem_t *item) {
   runSetLogFormat();
+  logger.disconnect();
   ui.waitForInputOk(IDLE_SHUTDOWN);
 }
 
@@ -682,37 +681,39 @@ bool runSetLogMode() {
   // get the current log format and show the menu
   recordmode_t recmode = MODE_FULLSTOP;
   if (!logger.getLogRecordMode(&recmode)) {
-    logger.disconnect();
-
     ui.drawDialogMessage(RED, 1, "Cannot get the current log mode.");
     return false;
   }
 
   recordmode_t newrecmode = (cfg.logFullStop)? MODE_FULLSTOP : MODE_OVERWRITE;
   if (!logger.setLogRecordMode(newrecmode)) {
-    logger.disconnect();
-
     ui.drawDialogMessage(RED, 2, "Cannot change the log mode.");
     return false;
   }
-
-  logger.disconnect();
 
   return true;
 }
 
 void onSetLogModeSelect(menuitem_t *item) {
   runSetLogMode();
+  logger.disconnect();
   ui.waitForInputOk(IDLE_SHUTDOWN);
 }
 
 void onAppSettingSelect(menuitem_t *item) {
+  Serial.printf("SmallStep.onAppSettingSelect: open the app settings menu\n");
+ 
+  appconfig_t oldcfg;
+  memcpy(&oldcfg, &cfg, sizeof(appconfig_t));
+
   // open the configuration menu
   int8_t itemCount = (sizeof(cfgMain) / sizeof(cfgitem_t));
-  ui.enterConfigMenu("Settings", cfgMain, itemCount, IDLE_SHUTDOWN);
+  ui.openConfigMenu("Settings", cfgMain, itemCount, IDLE_SHUTDOWN);
 
-  // save the configuration
-  saveAppConfig();
+  // save the configuration if modified
+  if (isDifferent(&oldcfg, &cfg, sizeof(appconfig_t))) {
+    saveAppConfig();
+  }
 }
 
 void onTrackModeSelect(cfgitem_t *item) {
@@ -761,8 +762,8 @@ void onLogByDistanceSelect(cfgitem_t *item) {
   cfg.logTimeIdx = 0;
   cfg.logSpeedIdx = 0;
 
-  cfgLogMode[2].updateValueDescr(&cfgLogMode[2]); // update the logByTime menu
-  cfgLogMode[3].updateValueDescr(&cfgLogMode[3]); // update the logBySpeed menu
+  cfgLogByTime->updateValueDescr(cfgLogByTime); // update the logByTime menu
+  cfgLogBySpd->updateValueDescr(cfgLogBySpd); // update the logBySpeed menu
 }
 
 void onLogByDistanceUpdate(cfgitem_t *item) {
@@ -780,8 +781,8 @@ void onLogByTimeSelect(cfgitem_t *item) {
   cfg.logTimeIdx = max(1, (cfg.logTimeIdx + 1) % valCount);
   cfg.logSpeedIdx = 0;
 
-  cfgLogMode[1].updateValueDescr(&cfgLogMode[1]); // update the logByDist menu
-  cfgLogMode[3].updateValueDescr(&cfgLogMode[3]); // update the logBySpeed menu
+  cfgLogByDist->updateValueDescr(cfgLogByDist); // update the logByDist menu
+  cfgLogBySpd->updateValueDescr(cfgLogBySpd); // update the logBySpeed menu
 }
 
 void onLogByTimeUpdate(cfgitem_t *item) {
@@ -799,8 +800,8 @@ void onLogBySpeedSelect(cfgitem_t *item) {
   cfg.logTimeIdx = 0;
   cfg.logSpeedIdx = max(1, (cfg.logSpeedIdx + 1) % valCount);
   
-  cfgLogMode[1].updateValueDescr(&cfgLogMode[1]); // update the logByDist menu
-  cfgLogMode[2].updateValueDescr(&cfgLogMode[2]); // update the logByTime menu
+  cfgLogByDist->updateValueDescr(cfgLogByDist); // update the logByDist menu
+  cfgLogByTime->updateValueDescr(cfgLogByTime); // update the logByTime menu
 }
 
 void onLogBySpeedUpdate(cfgitem_t *item) {
@@ -824,7 +825,7 @@ void onLogFullActionUpdate(cfgitem_t *item) {
 }
 
 void onLoadDefaultFormatSelect(cfgitem_t *item) {
-  cfg.logFormat = DEFAULT_LOG_FORMAT;
+  cfg.logFormat = DEFAULT_CONFIG.logFormat;
 
   for (int8_t i = 0; i < sizeof(cfgLogFormat) / sizeof(cfgitem_t); i++) {
     cfgitem_t *ci = &cfgLogFormat[i];
@@ -838,7 +839,7 @@ void onLoadDefaultFormatUpdate(cfgitem_t *item) {
 
 void onRecordRCRSelect(cfgitem_t *item) {
   cfg.logFormat ^= REG_RCR;
-  onLoadDefaultFormatUpdate(&cfgLogFormat[1]);
+  onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
 void onRecordRCRUpdate(cfgitem_t *item) {
@@ -847,24 +848,16 @@ void onRecordRCRUpdate(cfgitem_t *item) {
 
 void onRecordValidSelect(cfgitem_t *item) {
   cfg.logFormat ^= REG_VALID;
-  onLoadDefaultFormatUpdate(&cfgLogFormat[1]);
+  onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
 void onRecordValidUpdate(cfgitem_t *item) {
   setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_VALID));
 }
 
-void onRecordLocationSelect(cfgitem_t *) {
-  // nothing to do (always enabled)
-}
-
-void onRecordTimeSelect(cfgitem_t *) {
-  // nothing to do (always enabled)
-}
-
 void onRecordMillisSelect(cfgitem_t *item) {
   cfg.logFormat ^= REG_MSEC;
-  onLoadDefaultFormatUpdate(&cfgLogFormat[1]);
+  onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
 void onRecordMillisUpdate(cfgitem_t *item) {
@@ -873,7 +866,7 @@ void onRecordMillisUpdate(cfgitem_t *item) {
 
 void onRecordSpeedSelect(cfgitem_t *item) {
   cfg.logFormat ^= REG_SPEED;
-  onLoadDefaultFormatUpdate(&cfgLogFormat[1]);
+  onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
 void onRecordSpeedUpdate(cfgitem_t *item) {
@@ -882,7 +875,7 @@ void onRecordSpeedUpdate(cfgitem_t *item) {
 
 void onRecordAltitudeSelect(cfgitem_t *item) {
   cfg.logFormat ^= REG_ELE;
-  onLoadDefaultFormatUpdate(&cfgLogFormat[1]);
+  onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
 void onRecordAltitudeUpdate(cfgitem_t *item) {
@@ -891,7 +884,7 @@ void onRecordAltitudeUpdate(cfgitem_t *item) {
 
 void onRecordHeadingSelect(cfgitem_t *item) {
   cfg.logFormat ^= REG_HEAD;
-  onLoadDefaultFormatUpdate(&cfgLogFormat[1]);
+  onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
 void onRecordHeadingUpdate(cfgitem_t *item) {
@@ -900,23 +893,11 @@ void onRecordHeadingUpdate(cfgitem_t *item) {
 
 void onRecordDistanceSelect(cfgitem_t *item) {
   cfg.logFormat ^= REG_DIST;
-  onLoadDefaultFormatUpdate(&cfgLogFormat[1]);
+  onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
 void onRecordDistanceUpdate(cfgitem_t *item) {
   setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_DIST));
-}
-
-void onRecordDGPSSelect(cfgitem_t *item) {
-    // nothing to do (always disabled)
-}
-
-void onRecordDOPSelect(cfgitem_t *item) {
-  // nothing to do (always disabled)
-}
-
-void onRecordSatInViewSelect(cfgitem_t *item) {
-  // nothing to do (always disabled)
 }
 
 void onPairWithLoggerCfgSelect(cfgitem_t *item) {
@@ -925,17 +906,21 @@ void onPairWithLoggerCfgSelect(cfgitem_t *item) {
 }
 
 void onPairWithLoggerCfgUpdate(cfgitem_t *item) {
-  if (isZeroedBytes(&cfg.loggerAddr, BT_ADDR_LEN)) {
+  if (isZeroFilled(&cfg.loggerAddr, BT_ADDR_LEN)) {
     strcpy(item->valueDescr, "Not paired");
   } else {
     strcpy(item->valueDescr, cfg.loggerName);
   }
 }
 
+void onReadOnlyItemSelect(cfgitem_t *item) {
+  // nothing to do!
+}
+
 void onOutputSubMenuSelect(cfgitem_t *item) {
   // enter the output configuration sub-menu
   int8_t itemCount = (sizeof(cfgOutput) / sizeof(cfgitem_t));
-  ui.enterConfigMenu("Settings > Output", cfgOutput, itemCount, IDLE_SHUTDOWN);
+  ui.openConfigMenu("Settings > Output", cfgOutput, itemCount, IDLE_SHUTDOWN);
 
   // return to the parent menu
 }
@@ -943,7 +928,7 @@ void onOutputSubMenuSelect(cfgitem_t *item) {
 void onLogModeSubMenuSelect(cfgitem_t *item) {
   // enter the log mode configuration sub-menu
   int8_t itemCount = (sizeof(cfgLogMode) / sizeof(cfgitem_t));
-  ui.enterConfigMenu("Settings > Log Mode", cfgLogMode, itemCount, IDLE_SHUTDOWN);
+  ui.openConfigMenu("Settings > Log Mode", cfgLogMode, itemCount, IDLE_SHUTDOWN);
   
   // return to the parent menu
 }
@@ -951,7 +936,7 @@ void onLogModeSubMenuSelect(cfgitem_t *item) {
 void onLogFormatSubMenuSelect(cfgitem_t *item) {
   // enter the log format configuration sub-menu
   int8_t itemCount = (sizeof(cfgLogFormat) / sizeof(cfgitem_t));
-  ui.enterConfigMenu("Settings > Log Format", cfgLogFormat, itemCount, IDLE_SHUTDOWN);
+  ui.openConfigMenu("Settings > Log Format", cfgLogFormat, itemCount, IDLE_SHUTDOWN);
 
   // return to the parent menu
 }
@@ -983,31 +968,45 @@ void onClearSettingsSelect(cfgitem_t *item) {
   }
 } 
 
+bool isDifferent(const void *data1, const void *data2, uint16_t size) {
+  uint8_t *pdata1 = (uint8_t *)(data1);
+  uint8_t *pdata2 = (uint8_t *)(data2);
+  bool diff = false;
+
+  for (uint16_t i=0; i<size; i++) {
+    diff |= (*pdata1 != *pdata2);
+    pdata1 += 1;
+    pdata2 += 1;
+  }
+
+  return diff;
+}
+
 void saveAppConfig() {
   uint8_t *pcfg = (uint8_t *)(&cfg);
   uint8_t chk = 0;
 
-  // write configuration data to EEPROM
-  for (int8_t i = 0; i < sizeof(appconfig_t); i++) {
-    EEPROM.write(i, *pcfg);
-    chk ^= *pcfg;
+  // write the current configuration to EEPROM
+  for (uint16_t i = 0; i < sizeof(appconfig_t); i++) {
+    EEPROM.write(i, *pcfg); // write the configuration data byte
+    chk ^= *pcfg;           // calculate the checksum (XOR all bytes)
     pcfg += 1;
   }
-  EEPROM.write(sizeof(appconfig_t), chk);
+  EEPROM.write(sizeof(appconfig_t), chk); // checksum
   EEPROM.commit();
 
-  Serial.printf("SmallStep.saveConfig: configuration data saved\n");
+  Serial.printf("SmallStep.saveConfig: the configuration is saved to the EEPROM\n");
 }
 
 bool loadAppConfig(bool loadDefault) {
   uint8_t *pcfg = (uint8_t *)(&cfg);
   uint8_t chk = 0;
 
-  Serial.printf("SmallStep.loadConfig: loading configuration data from EEPROM\n");
+  Serial.printf("SmallStep.loadConfig: loading configuration data from the EEPROM\n");
 
   if (!loadDefault) {
     // read configuration data from EEPROM
-    for (int8_t i = 0; i < sizeof(appconfig_t); i++) {
+    for (uint16_t i = 0; i < sizeof(appconfig_t); i++) {
       uint8_t b = EEPROM.read(i);
       *pcfg = b;
       chk ^= *pcfg;
@@ -1018,28 +1017,19 @@ bool loadAppConfig(bool loadDefault) {
     Serial.printf("\n");
   }
 
-  // load the default configuration if loadDefault is set to true or
-  // the EEPROM data is invalid
+  // load the default configuration if loadDefault is set to true or the EEPROM data is invalid
+  // (the length field is wrong or the checksum is not matched)
   loadDefault |=
       ((cfg.length != sizeof(appconfig_t)) || (EEPROM.read(sizeof(appconfig_t) != chk)));
   if (loadDefault) {
-    memset(&cfg, 0, sizeof(appconfig_t));
-    cfg.length = sizeof(appconfig_t);
-    cfg.trackMode = DEFAULT_TRACK_MODE;
-    cfg.logFormat = DEFAULT_LOG_FORMAT;
-    cfg.timeOffsetIdx = DEFAULT_TIME_OFFSET_IDX;
-    cfg.logDistIdx = DEFAULT_LOG_DIST_IDX;
-    cfg.logTimeIdx = DEFAULT_LOG_TIME_IDX;
-    cfg.logSpeedIdx = DEFAULT_LOG_DIST_IDX;
+    memcpy(&cfg, &DEFAULT_CONFIG, sizeof(appconfig_t));
 
-    Serial.printf("SmallStep.loadConfig: "
-      "the default configuration is loaded due to no valid configuration found\n");
+    Serial.printf("SmallStep.loadConfig: the default configuration is loaded\n");
 
     return false;
   }
 
-  Serial.printf("SmallStep.loadConfig: the configuration was loaded\n");
-
+  Serial.printf("SmallStep.loadConfig: the EEPROM configuration is loaded\n");
 
   return true;
 }
@@ -1048,7 +1038,7 @@ void setup() {
   // start the serial
   Serial.begin(115200);
 
-  // zero-clear global variables (status & config)
+  // clear the global variables (app status & config)
   memset(&app, 0, sizeof(app));
   memset(&cfg, 0, sizeof(cfg));
 
@@ -1087,7 +1077,7 @@ void setup() {
 
   // enter the main menu (infinit loop in this function)
   int8_t itemCount = (sizeof(menuMain) / sizeof(menuitem_t));
-  ui.enterMainMenu(menuMain, itemCount, IDLE_SHUTDOWN);
+  ui.openMainMenu(menuMain, itemCount, IDLE_SHUTDOWN);
 }
 
 void loop() {
