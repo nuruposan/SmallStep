@@ -68,7 +68,7 @@ void GpxFileWriter::putTrkpt(gpsrecord_t rcd) {
   char buf[48];
 
   if (!inTrack) {
-    if (rcd.format & REG_TIME) {
+    if (rcd.format & FMT_TIME) {
       time_t tt = rcd.time;
       struct tm *t = localtime(&tt);
       sprintf(buf, "Start at %04d-%02d-%02d %02d:%02d:%02d", (t->tm_year + 1900), (t->tm_mon + 1),
@@ -81,17 +81,17 @@ void GpxFileWriter::putTrkpt(gpsrecord_t rcd) {
   }
 
   out->write("<trkpt");
-  if (rcd.format & REG_LAT) {
+  if (rcd.format & FMT_LAT) {
     sprintf(buf, " lat=\"%0.6f\"", rcd.latitude);
     out->write(buf);
   }
-  if (rcd.format & REG_LON) {
+  if (rcd.format & FMT_LON) {
     sprintf(buf, " lon=\"%0.6f\"", rcd.longitude);
     out->write(buf);
   }
   out->write(">");
 
-  if (rcd.format & REG_TIME) {
+  if (rcd.format & FMT_TIME) {
     time_t tt = rcd.time;
     struct tm *t = localtime(&tt);
 
@@ -100,12 +100,12 @@ void GpxFileWriter::putTrkpt(gpsrecord_t rcd) {
     out->write(buf);
   }
 
-  if (rcd.format & REG_ELE) {
+  if (rcd.format & FMT_HEIGHT) {
     sprintf(buf, "<ele>%0.2f</ele>", rcd.elevation);
     out->write(buf);
   }
 
-  if (rcd.format & REG_SPEED) {
+  if (rcd.format & FMT_SPEED) {
     sprintf(buf, "<speed>%0.2f</speed>", rcd.speed);
     out->write(buf);
   }

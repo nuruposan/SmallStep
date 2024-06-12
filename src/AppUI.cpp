@@ -174,6 +174,7 @@ void AppUI::drawMainMenu(menuitem_t *menu, int8_t itemCount, int8_t top, int8_t 
       putBitmap(&sprite, mi->iconData, (x + (MENUBTN_W / 2) - (48 / 2)), (y + 12),
                 COLOR16(0, 32, 32));
     }
+
     // ボタンのキャプションを描画
     sprite.setTextSize(1);
     sprite.setTextColor(BLACK);

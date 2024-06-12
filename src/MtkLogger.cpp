@@ -237,7 +237,7 @@ bool MtkLogger::getLastRecordAddress(int32_t *address) {
 }
 
 bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
-  const int32_t TIMEOUT = 1000;
+  const int32_t TIMEOUT = 1200;
   int32_t REQ_SIZE = 0x4000;
 
   bool nextReq = true;
