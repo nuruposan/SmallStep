@@ -93,6 +93,12 @@ void onRecordHeadingSelect(cfgitem_t *);
 void onRecordHeadingUpdate(cfgitem_t *);
 void onRecordDistanceSelect(cfgitem_t *);
 void onRecordDistanceUpdate(cfgitem_t *);
+void onRecordDgpsSelect(cfgitem_t *);
+void onRecordDgpsUpdate(cfgitem_t *);
+void onRecordDopSelect(cfgitem_t *);
+void onRecordDopUpdate(cfgitem_t *);
+void onRecordSatSelect(cfgitem_t *);
+void onRecordSatUpdate(cfgitem_t *);
 void onReadOnlyItemSelect(cfgitem_t *);
 void onPairWithLoggerCfgSelect(cfgitem_t *);
 void onPairWithLoggerCfgUpdate(cfgitem_t *);
@@ -125,7 +131,7 @@ const appconfig_t DEFAULT_CONFIG = {
   4,                    // logTimeIdx (4: 10 seconds)
   0,                    // logSpeedIdx (0: disabled)
   true,                 // logFullStop
-  (REG_FIX | REG_TIME | REG_LON | REG_LAT | REG_ELE | REG_SPEED | REG_RCR)  // logFormat
+  (FMT_FIXONLY | FMT_TIME | FMT_LON | FMT_LAT | FMT_HEIGHT | FMT_SPEED)  // logFormat
 };
 
 menuitem_t menuMain[] = {
@@ -166,18 +172,19 @@ cfgitem_t cfgLogFormat[] = {
   // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
   {"Back", "Exit this menu", "<<", NULL, NULL},
   {"Load defaults", "Restore to the default log format", "", &onLoadDefaultFormatSelect, &onLoadDefaultFormatUpdate},
-  {"RCR", "Store record reason (dist/time/speed/user)", "", &onRecordRCRSelect, &onRecordRCRUpdate},
-  {"Location (required fields)", "Store latitude and longitude", "Enabled", &onReadOnlyItemSelect, NULL},
-  {"Time (required fields)", "Store date and time", "Enabled", &onReadOnlyItemSelect, NULL},
-  {"Millis", "Store milliseconds", "", &onRecordMillisSelect, &onRecordMillisUpdate},
-  {"Valid", "Store positioning status (valid/invalid)", "", &onRecordValidSelect, &onRecordValidUpdate}, // A: valid, V: invalid
-  {"Speed", "Store speed", "", &onRecordSpeedSelect, &onRecordSpeedUpdate},
-  {"Altitude", "Store altitude", "", &onRecordAltitudeSelect, &onRecordAltitudeUpdate},
-  {"Heading", "Store moving direction", "", &onRecordHeadingSelect, &onRecordHeadingUpdate},
-  {"Distance", "Store moving distance", "", &onRecordDistanceSelect, &onRecordDistanceUpdate},
-  {"DGPS info (not support)", "Store differencial GPS data", "Disabled", &onReadOnlyItemSelect, NULL},
-  {"DOP info (not support)", "Store dilution of precision data", "Disabled", &onReadOnlyItemSelect, NULL},
-  {"SAT info (not support)", "Store satellite in view data", "Disabled", &onReadOnlyItemSelect, NULL},
+//  {"Load defaults", "Restore to the default log format", "", &onLoadDefaultFormatSelect, &onLoadDefaultFormatUpdate},
+  {"TIME (required fields)", "Logs date and time data in seconds", "Enabled", &onReadOnlyItemSelect, NULL},
+  {"LAT, LON (required fields)", "Logs latitude and longitude data of each point", "Enabled", &onReadOnlyItemSelect, NULL},
+  {"SPEED", "Logs moving speed data", "", &onRecordSpeedSelect, &onRecordSpeedUpdate},
+  {"ALT", "Logs altitude data", "", &onRecordAltitudeSelect, &onRecordAltitudeUpdate},
+  {"RCR", "Logs record reason (needed for create WAYPTs)", "", &onRecordRCRSelect, &onRecordRCRUpdate},
+  {"TRACK", "Logs track angle data (not used by SmallStep)", "", &onRecordHeadingSelect, &onRecordHeadingUpdate},
+  {"VALID", "Logs positioning status (not used by SmallStep)", "", &onRecordValidSelect, &onRecordValidUpdate}, // A: valid, V: invalid
+  {"DIST", "Logs moving distance data (not used by SmallStep)", "", &onRecordDistanceSelect, &onRecordDistanceUpdate},
+  {"MSEC", "Logs time data in msec (not used by SmallStep)", "", &onRecordMillisSelect, &onRecordMillisUpdate},
+  {"DSTA, DAGE", "Logs differencial GPS data (not used by SS)", "Disabled", &onRecordDgpsSelect, &onRecordDgpsUpdate},
+  {"PDOP, HDOP, VDOP", "Logs dilution of precision data (not used by SS)", "Disabled", &onRecordDopSelect, &onRecordDopUpdate},
+  {"NSAT, ALT, AZI, SNR", "Logs satellite data (not used by SmallStep)", "Disabled", &onRecordSatSelect, &onRecordSatUpdate},
 };
 
 cfgitem_t *cfgResetFormat = &cfgLogFormat[1];
@@ -685,7 +692,7 @@ bool runSetLogMode() {
     return false;
   }
 
-  recordmode_t newrecmode = (cfg.logFullStop)? MODE_FULLSTOP : MODE_OVERWRITE;
+  recordmode_t newrecmode = (cfg.logFullStop) ? MODE_FULLSTOP : MODE_OVERWRITE;
   if (!logger.setLogRecordMode(newrecmode)) {
     ui.drawDialogMessage(RED, 2, "Cannot change the log mode.");
     return false;
@@ -838,67 +845,104 @@ void onLoadDefaultFormatUpdate(cfgitem_t *item) {
 }
 
 void onRecordRCRSelect(cfgitem_t *item) {
-  cfg.logFormat ^= REG_RCR;
+  cfg.logFormat ^= FMT_RCR;
   onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
 void onRecordRCRUpdate(cfgitem_t *item) {
-  setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_RCR));
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & FMT_RCR));
 }
 
 void onRecordValidSelect(cfgitem_t *item) {
-  cfg.logFormat ^= REG_VALID;
+  cfg.logFormat ^= FMT_VALID;
   onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
 void onRecordValidUpdate(cfgitem_t *item) {
-  setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_VALID));
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & FMT_VALID));
 }
 
 void onRecordMillisSelect(cfgitem_t *item) {
-  cfg.logFormat ^= REG_MSEC;
+  cfg.logFormat ^= FMT_MSEC;
   onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
 void onRecordMillisUpdate(cfgitem_t *item) {
-  setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_MSEC));
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & FMT_MSEC));
 }
 
 void onRecordSpeedSelect(cfgitem_t *item) {
-  cfg.logFormat ^= REG_SPEED;
+  cfg.logFormat ^= FMT_SPEED;
   onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
 void onRecordSpeedUpdate(cfgitem_t *item) {
-  setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_SPEED));
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & FMT_SPEED));
 }
 
 void onRecordAltitudeSelect(cfgitem_t *item) {
-  cfg.logFormat ^= REG_ELE;
+  cfg.logFormat ^= FMT_HEIGHT;
   onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
 void onRecordAltitudeUpdate(cfgitem_t *item) {
-  setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_ELE));
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & FMT_HEIGHT));
 }
 
 void onRecordHeadingSelect(cfgitem_t *item) {
-  cfg.logFormat ^= REG_HEAD;
+  cfg.logFormat ^= FMT_TRACK;
   onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
 void onRecordHeadingUpdate(cfgitem_t *item) {
-  setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_HEAD));
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & FMT_TRACK));
 }
 
 void onRecordDistanceSelect(cfgitem_t *item) {
-  cfg.logFormat ^= REG_DIST;
+  cfg.logFormat ^= FMT_DIST;
   onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
 void onRecordDistanceUpdate(cfgitem_t *item) {
-  setValueDescrByBool(item->valueDescr, (cfg.logFormat & REG_DIST));
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & FMT_DIST));
 }
+
+void onRecordDgpsSelect(cfgitem_t *item) {
+  cfg.logFormat ^= FMT_DSTA;
+  cfg.logFormat |= FMT_DAGE;
+  if (cfg.logFormat & FMT_DSTA) cfg.logFormat ^= FMT_DAGE;
+
+  onLoadDefaultFormatUpdate(cfgResetFormat);
+};
+
+void onRecordDgpsUpdate(cfgitem_t *item) {
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & FMT_DSTA));
+};
+
+void onRecordDopSelect(cfgitem_t *item) {
+  cfg.logFormat ^= FMT_PDOP;
+  cfg.logFormat |= (FMT_HDOP | FMT_VDOP);
+  if (!(cfg.logFormat & FMT_PDOP)) cfg.logFormat ^= (FMT_HDOP | FMT_VDOP);
+
+  onLoadDefaultFormatUpdate(cfgResetFormat);
+};
+
+void onRecordDopUpdate(cfgitem_t *item) {
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & FMT_PDOP));
+};
+
+void onRecordSatSelect(cfgitem_t *item) {
+  cfg.logFormat ^= FMT_NSAT;
+  cfg.logFormat |= (FMT_ELE | FMT_AZI | FMT_SNR);
+  if (!(cfg.logFormat & FMT_NSAT)) cfg.logFormat ^= (FMT_ELE | FMT_AZI | FMT_SNR);
+
+  onLoadDefaultFormatUpdate(cfgResetFormat);
+};
+
+void onRecordSatUpdate(cfgitem_t *item) {
+  setValueDescrByBool(item->valueDescr, (cfg.logFormat & FMT_NSAT));
+};
+
 
 void onPairWithLoggerCfgSelect(cfgitem_t *item) {
   runPairWithLogger();
