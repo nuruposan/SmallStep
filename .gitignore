@@ -31,10 +31,13 @@
 *.out
 *.app
 
+# macOS
+.DS_Store
+
 # PlatformIO
+c_cpp_properties.json
 .pioenvs
 .piolibdeps
 .clang_complete
 .gcc-flags.json
 .pio
-

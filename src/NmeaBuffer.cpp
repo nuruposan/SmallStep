@@ -45,7 +45,7 @@ bufferpage_t *NmeaBuffer::allocatePage(bufferpage_t **pg) {
   return np;
 }
 
-char* NmeaBuffer::getBuffer() {
+char *NmeaBuffer::getBuffer() {
   return rootPage->buf;
 }
 
@@ -70,12 +70,12 @@ bool NmeaBuffer::isTextChar(char ch) {
 
 uint8_t NmeaBuffer::hexCharToByte(char ch) {
   switch (ch) {
-    case '0' ... '9':  // return 0-9 for '0'-'9'
-      return (ch - '0');
-    case 'a' ... 'f':  // return 10-16 for 'a'-'f'
-      return (ch - 'a' + 10);
-    case 'A' ... 'F':  // return 10-16 for 'A'-'F'
-      return (ch - 'A' + 10);
+  case '0' ... '9':  // return 0-9 for '0'-'9'
+    return (ch - '0');
+  case 'a' ... 'f':  // return 10-16 for 'a'-'f'
+    return (ch - 'a' + 10);
+  case 'A' ... 'F':  // return 10-16 for 'A'-'F'
+    return (ch - 'A' + 10);
   }
 
   // return zero for others ([$*,\r\n] and others)
@@ -106,15 +106,15 @@ void NmeaBuffer::updateChecksum(char ch) {
 
 bool NmeaBuffer::put(char ch) {
   switch (ch) {
-    case '$':  // begining of a new sentense
-      clear();
-      break;
-    case ',':  // delimiter of columns in a sentense
-      columnCount += 1;
-      break;
-    case '*':  // begining of checksum field
-      columnCount = RB_CCNT_CHKSUM;
-      break;
+  case '$':  // begining of a new sentense
+    clear();
+    break;
+  case ',':  // delimiter of columns in a sentense
+    columnCount += 1;
+    break;
+  case '*':  // begining of checksum field
+    columnCount = RB_CCNT_CHKSUM;
+    break;
   }
 
   if (isTextChar(ch)) {
@@ -144,16 +144,20 @@ char NmeaBuffer::get() {
   return ch;
 }
 
-bool NmeaBuffer::readColumnAsInt(uint8_t clm, int32_t *num) {
+bool NmeaBuffer::readColumnAsInt(uint8_t clm, int32_t *value, bool hex) {
   if (seekToColumn(clm) == false) return false;
 
-  uint8_t b = 0;
-  int32_t n = 0;
+  *value = 0;
+  for (int8_t i = 0; i < 32; i++) {
+    char ch = get();
+    if ((ch == ',') || (ch == '*') || (ch == 0)) break;
 
-  while (readHexByteHalf(&b)) {
-    n = (n << 4) + b;
+    if (!hex) {
+      *value = (*value * 10) + (ch - '0');
+    } else {
+      *value = (*value << 4) + hexCharToByte(ch);
+    }
   }
-  *num = n;
 
   return true;
 }
@@ -199,12 +203,12 @@ bool NmeaBuffer::seekToColumn(uint8_t clm) {
       }
 
       switch (pg->buf[pt]) {
-        case ',':
-          cc += 1;
-          break;
-        case '*':
-          cc = RB_CCNT_CHKSUM;
-          break;
+      case ',':
+        cc += 1;
+        break;
+      case '*':
+        cc = RB_CCNT_CHKSUM;
+        break;
       }
     }
 

@@ -33,13 +33,12 @@ void MtkParser::setRecordFormat(uint32_t format) {
   status.ignoreLen3 = (sizeof(int16_t) * (bool)(format & FMT_ELE)) +
                       (sizeof(uint16_t) * (bool)(format & FMT_AZI)) +
                       (sizeof(uint16_t) * (bool)(format & FMT_SNR));
-  status.ignoreLen4 = (sizeof(uint16_t) * (bool)(format & FMT_MSEC)) + 
-                      (sizeof(double) * (bool)(format & FMT_DIST));
+  status.ignoreLen4 =
+      (sizeof(uint16_t) * (bool)(format & FMT_MSEC)) + (sizeof(double) * (bool)(format & FMT_DIST));
 
-  Serial.printf(
-      "Parser.setFormat: change log format [reg=0x%08X, ignoreLen={%d, %d, %d, %d}]\n",
-      status.logFormat, status.ignoreLen1, status.ignoreLen2, status.ignoreLen3,
-      status.ignoreLen4);
+  Serial.printf("Parser.setFormat: change log format [reg=0x%08X, ignoreLen={%d, %d, %d, %d}]\n",
+                status.logFormat, status.ignoreLen1, status.ignoreLen2, status.ignoreLen3,
+                status.ignoreLen4);
 }
 
 void MtkParser::setOptions(parseopt_t opts) {
@@ -92,8 +91,7 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   // skip SID, ELE + AZI + SNR fields if they exist
   if (rcd->format & FMT_SID) {
     // read the number of SATs in view
-    uint8_t siv =
-        (uint8_t)(in->readInt32() & 0x0000FFFF);  // number of SATs in view
+    uint8_t siv = (uint8_t)(in->readInt32() & 0x0000FFFF);  // number of SATs in view
     siv = (siv == 0xFF) ? 0 : siv;
 
     // skip SIV x (ELE + AZI + SNR) fields
@@ -102,7 +100,7 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
 
   // read RCR field if it exists
   if (rcd->format & FMT_RCR) {
-    // get lower 4 bits of the RCR field
+    // get the lower 4 bits of the RCR field
     rcd->reason = (in->readInt16() & 0b00001111);
 
     // RCR reason code
@@ -125,7 +123,7 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
     checksum ^= (uint8_t)in->readInt8();
   }
 
-  // read the checksum delimiter '*' when the logger is not Holux M-241
+  // read the checksum delimiter '*' when the loSgger is not Holux M-241
   // nore: Holux M-241 does not write '*' before checksum value
   char chkmkr = (status.m241Mode) ? '*' : in->readInt8();
 
@@ -170,20 +168,19 @@ bool MtkParser::readBinMarkers() {
 
       // do action according to the DSP type
       switch (dsType) {
-        case DSP_CHANGE_FORMAT:  // change format register
-          setRecordFormat(dsVal);
-          break;
-        case DSP_LOG_STARTSTOP:  // log start/stop
-          if (options.trackMode == TRK_ONE_DAY) {
-            out->endTrackSegment();
-          } else if (options.trackMode == TRK_AS_IS) {
-            out->endTrack();
-          }
-          break;
+      case DSP_CHANGE_FORMAT:  // change format register
+        setRecordFormat(dsVal);
+        break;
+      case DSP_LOG_STARTSTOP:  // log start/stop
+        if (options.trackMode == TRK_ONE_DAY) {
+          out->endTrackSegment();
+        } else if (options.trackMode == TRK_AS_IS) {
+          out->endTrack();
+        }
+        break;
       }
 
-      Serial.printf("Parser.readMarker: DSP at 0x%05X [t=%d, v=0x%04X]\n",
-                    startPos, dsType, dsVal);
+      Serial.printf("Parser.readMarker: DSP at 0x%05X [t=%d, v=0x%04X]\n", startPos, dsType, dsVal);
     }
   } else if (matchBinPattern(PTN_M241, sizeof(PTN_M241))) {  // M-241
     matchBinPattern(PTN_M241_SP, sizeof(PTN_M241_SP));       // M-241 fw1.13
@@ -245,8 +242,8 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int8
 
     if (in->position() <= sectorStart) {
       in->seekCur(sectorStart - in->position());
-      printf("Parser.convert: sector#%d start at 0x%05X, %d records\n",
-             status.sectorPos, sectorStart, (uint16_t)in->readInt16());
+      printf("Parser.convert: sector#%d start at 0x%05X, %d records\n", status.sectorPos,
+             sectorStart, (uint16_t)in->readInt16());
       setRecordFormat(in->readInt32());
       in->seekCur(dataStart - in->position());
     }
@@ -256,14 +253,12 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int8
     int32_t pos = in->position();
     gpsrecord_t rcd;
     if (!readBinRecord(&rcd)) {
-      Serial.printf("Parser.convert: no valid data at 0x%05X\n",
-                    in->position());
+      Serial.printf("Parser.convert: no valid data at 0x%05X\n", in->position());
       in->seekCur(1);
       continue;
     }
 
-    if ((options.trackMode == TRK_ONE_DAY) &&
-        (isDifferentDate(status.lastTrkpt.time, rcd.time))) {
+    if ((options.trackMode == TRK_ONE_DAY) && (isDifferentDate(status.lastTrkpt.time, rcd.time))) {
       out->endTrack();
     }
 
@@ -293,7 +288,18 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int8
   return (fileend);
 }
 
-gpsrecord_t MtkParser::getFirstTrkpt() { return status.firstTrkpt; }
-gpsrecord_t MtkParser::getLastTrkpt() { return status.lastTrkpt; }
-uint32_t MtkParser::getTrackCount() { return status.trackCount; }
-uint32_t MtkParser::getTrkptCount() { return status.trkptCount; }
+gpsrecord_t MtkParser::getFirstTrkpt() {
+  return status.firstTrkpt;
+}
+
+gpsrecord_t MtkParser::getLastTrkpt() {
+  return status.lastTrkpt;
+}
+
+uint32_t MtkParser::getTrackCount() {
+  return status.trackCount;
+}
+
+uint32_t MtkParser::getTrkptCount() {
+  return status.trkptCount;
+}

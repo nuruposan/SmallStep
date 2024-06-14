@@ -33,10 +33,10 @@ class NmeaBuffer {
   void clear();
   bool put(const char ch);
   char get();
-  char* getBuffer();
+  char *getBuffer();
   bool readHexByteFull(byte *by);
   bool readHexByteHalf(byte *by);
-  bool readColumnAsInt(uint8_t clm, int32_t *num);
+  bool readColumnAsInt(uint8_t clm, int32_t *value, bool hex);
   bool seekToColumn(uint8_t clm);
   bool match(const char *str);
 };

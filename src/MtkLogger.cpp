@@ -3,7 +3,8 @@
 #define PROGRESS_STARTED 0
 #define PROGRESS_FINISHED 100
 
-MtkLogger::MtkLogger() {
+MtkLogger::MtkLogger(const char *devname) {
+  deviceName = (devname == NULL) ? "ESP32" : devname;
   memset(&address, 0, sizeof(address));
   gpsSerial = new BluetoothSerial();
   buffer = new NmeaBuffer();
@@ -25,7 +26,7 @@ MtkLogger::~MtkLogger() {
 
 bool MtkLogger::connect(String name) {
   if (!sppStarted) {
-    sppStarted = gpsSerial->begin("SmallStep", true);
+    sppStarted = gpsSerial->begin(deviceName, true);
   } else if (connected()) {
     disconnect();
   }
@@ -91,41 +92,43 @@ void MtkLogger::disconnect() {
   if (eventCallback != NULL) {
     eventCallback(ESP_SPP_UNINIT_EVT, NULL);
   }
+
+  Serial.println("Logger.disconnect: disconnected");
 }
 
 int32_t MtkLogger::modelIdToFlashSize(uint16_t modelId) {
   int32_t flashSize = 0;
   switch (modelId) {
-    // 8Mbit flash models
-    case 0x1388:  // 757/ZI v1
-    case 0x5202:  // 757/ZI v2
-      flashSize = SIZE_8MBIT;
-      break;
+  // 8Mbit flash models
+  case 0x1388:  // 757/ZI v1
+  case 0x5202:  // 757/ZI v2
+    flashSize = SIZE_8MBIT;
+    break;
 
-    // 16Mbit flash models
-    case 0x0002:  // Qstarz 815
-    case 0x001b:  // Transystem i-Blue 747
-    case 0x001d:  // BT-Q1000, BGL-32
-    case 0x0021:  // Holux M-241
-    case 0x0023:  // Holux M-241
-    case 0x0043:  // Holux M-241 (FW 1.13)
-    case 0x0051:  // Transystem i-Blue 737, Qstarz 810,
-                  // Polaris iBT-GPS, Holux M1000
-    case 0x0131:  // EB-85A
-      flashSize = SIZE_16MBIT;
-      break;
+  // 16Mbit flash models
+  case 0x0002:  // Qstarz 815
+  case 0x001b:  // Transystem i-Blue 747
+  case 0x001d:  // BT-Q1000, BGL-32
+  case 0x0021:  // Holux M-241
+  case 0x0023:  // Holux M-241
+  case 0x0043:  // Holux M-241 (FW 1.13)
+  case 0x0051:  // Transystem i-Blue 737, Qstarz 810,
+                // Polaris iBT-GPS, Holux M1000
+  case 0x0131:  // EB-85A
+    flashSize = SIZE_16MBIT;
+    break;
 
-    // 32Mbit flash models
-    case 0x0000:  // Holux M-1200E
-    case 0x0004:  // Transystem747 A+ GPS Trip Recorder
-    case 0x0005:  // Qstarz BT-Q1000P
-    case 0x0006:  // Transystem 747 A+ GPS Trip Recorder
-    case 0x0008:  // Pentagram PathFinder P 3106
-    case 0x000F:  // Transystem 747 A+ GPS Trip Recorder
-    case 0x8300:  // Qstarz BT-1200
-    default:      // assume 4Mbit for unknown models
-      flashSize = SIZE_32MBIT;
-      break;
+  // 32Mbit flash models
+  case 0x0000:  // Holux M-1200E
+  case 0x0004:  // Transystem747 A+ GPS Trip Recorder
+  case 0x0005:  // Qstarz BT-Q1000P
+  case 0x0006:  // Transystem 747 A+ GPS Trip Recorder
+  case 0x0008:  // Pentagram PathFinder P 3106
+  case 0x000F:  // Transystem 747 A+ GPS Trip Recorder
+  case 0x8300:  // Qstarz BT-1200
+  default:      // assume 4Mbit for unknown models
+    flashSize = SIZE_32MBIT;
+    break;
   }
 
   return flashSize;
@@ -212,8 +215,8 @@ bool MtkLogger::getLastRecordAddress(int32_t *address) {
   case MODE_FULLSTOP:
     if (!sendNmeaCommand("PMTK182,2,8")) return false;
     if (!waitForNmeaReply("$PMTK182,3,8,", TIMEOUT)) return false;
-    
-    buffer->readColumnAsInt(3, &endAddr);
+
+    buffer->readColumnAsInt(3, &endAddr, true);
     break;
   case MODE_OVERWRITE:
   default:
@@ -222,7 +225,7 @@ bool MtkLogger::getLastRecordAddress(int32_t *address) {
     if (!waitForNmeaReply("$PMTK705,", TIMEOUT)) return false;
 
     int32_t modelId = 0;
-    buffer->readColumnAsInt(2, &modelId);  // read modelID
+    buffer->readColumnAsInt(2, &modelId, true);  // read modelID
     endAddr = modelIdToFlashSize(modelId);
     break;
   }
@@ -237,14 +240,15 @@ bool MtkLogger::getLastRecordAddress(int32_t *address) {
 }
 
 bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
-  const int32_t TIMEOUT = 1200;
-  int32_t REQ_SIZE = 0x4000;
+  const int32_t LOG_TIMEOUT = 2000;
+  const int32_t ACK_WAIT = 100;
+  const int32_t REQ_SIZE = 0x4000;
 
   bool nextReq = true;
   int32_t recvSize = 0;
-  int32_t endAddr  = 0;
+  int32_t endAddr = 0;
   int32_t nextAddr = 0;
-  
+
   // perform the callback to notify the download process is started
   if (rateCallback) rateCallback(PROGRESS_STARTED);
 
@@ -259,6 +263,7 @@ bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
     // send the next download request if the flag set
     if (nextReq) {
       // send the download command
+      waitForNmeaReply("$PMTK001,", ACK_WAIT);
       if (!sendDownloadCommand(nextAddr, REQ_SIZE)) return false;
 
       nextReq = false;
@@ -267,11 +272,11 @@ bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
 
     // wait for the next data responce
     // abort the process if one of expected responces are NOT received
-    if (!waitForNmeaReply("$PMTK182,8,", TIMEOUT)) break;
+    if (!waitForNmeaReply("$PMTK182,8,", LOG_TIMEOUT)) break;
 
     // read the starting address of the received data from the 3rd column of the line
     int32_t startAddr = 0;
-    buffer->readColumnAsInt(2, &startAddr);
+    buffer->readColumnAsInt(2, &startAddr, true);
 
     // ignore this line if the starting address is not the expected value
     if (startAddr != nextAddr) continue;
@@ -298,14 +303,13 @@ bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
     recvSize += 0x0800;
     nextReq = (recvSize >= REQ_SIZE);
     if (ffCount >= 0x200) endAddr = nextAddr + (REQ_SIZE - recvSize);
-//    if (ffCount >= 0x200) endAddr = nextAddr;
 
     // exit loop when download process is finished or timeout occurred
     if (nextAddr >= endAddr) {
       Serial.printf("Logger.download: finished [recvSize=0x%06X]\n", endAddr);
       break;
     }
-  } // while (gpsSerial.connected())
+  }  // while (gpsSerial.connected())
 
   // close the output file, then clear the buffer
   output->flush();
@@ -319,8 +323,6 @@ bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
 }
 
 bool MtkLogger::fixRTCdatetime() {
-  const uint32_t TIMEOUT = 1000;
-
   // send PMTK_API_SET_RTC_TIME (set date/time)
   if (!sendNmeaCommand("PMTK335,2020,1,1,0,0,0")) return false;
   if (!waitForNmeaReply("$PMTK001,335,3", TIMEOUT)) return false;
@@ -332,16 +334,14 @@ bool MtkLogger::fixRTCdatetime() {
 }
 
 bool MtkLogger::getFlashSize(int32_t *size) {
-  const uint32_t TIMEOUT = 1000;
-
   // send query firmware release
   if (!sendNmeaCommand("PMTK605")) return false;
   if (!waitForNmeaReply("$PMTK705,", TIMEOUT)) return false;
 
   // determine the flash size
   int32_t modelId = 0;
-  buffer->readColumnAsInt(2, &modelId); // read modelID from the reply
-  *size = modelIdToFlashSize(modelId);  // determine flash size from modelID
+  buffer->readColumnAsInt(2, &modelId, true);  // read modelID from the reply
+  *size = modelIdToFlashSize(modelId);         // determine flash size from modelID
 
   // print debug message
   Serial.printf("Logger.getFlashSize: flash size = 0x%08X\n", *size);
@@ -350,28 +350,24 @@ bool MtkLogger::getFlashSize(int32_t *size) {
 }
 
 bool MtkLogger::getLogFormat(uint32_t *format) {
-  const uint32_t TIMEOUT = 1000;
-
   if (!sendNmeaCommand("PMTK182,2,2")) return false;
   if (!waitForNmeaReply("$PMTK182,3,2,", TIMEOUT)) return false;
 
   // read the log format from the reply
   int32_t value = 0;
-  buffer->readColumnAsInt(3, &value);
+  buffer->readColumnAsInt(3, &value, true);
   *format = value;
 
   // print debug message
   Serial.printf("Logger.getLogFormat: log format = 0x%08X\n", *format);
-  
+
   return true;
 }
 
 bool MtkLogger::setLogFormat(uint32_t format) {
-  const uint32_t TIMEOUT = 1000;
-
   char cmdstr[24];
   sprintf(cmdstr, "PMTK182,1,2,%08X", format);
-  
+
   if (!sendNmeaCommand(cmdstr)) return false;
   if (!waitForNmeaReply("$PMTK001,182,1,3", TIMEOUT)) return false;
 
@@ -379,23 +375,19 @@ bool MtkLogger::setLogFormat(uint32_t format) {
 }
 
 bool MtkLogger::getLogRecordMode(recordmode_t *recmode) {
-  const uint32_t TIMEOUT = 1000;
-
-  int32_t value = 0;
   if (!sendNmeaCommand("PMTK182,2,6")) return false;
   if (!waitForNmeaReply("$PMTK182,3,6,", TIMEOUT)) return false;
 
-  buffer->readColumnAsInt(3, &value);
+  int32_t value = 0;
+  buffer->readColumnAsInt(3, &value, true);
   Serial.printf("Logger.getLogFullAction: action = %02d (2=STOP, 1=OVERWRAP)\n", value);
-  
+
   *recmode = (recordmode_t)value;
 
   return (*recmode != MODE_NONE);
 }
 
 bool MtkLogger::setLogRecordMode(recordmode_t recmode) {
-  const uint32_t TIMEOUT = 1000;
-
   char cmdstr[24];
   sprintf(cmdstr, "PMTK182,1,6,%d", recmode);
 
@@ -405,6 +397,95 @@ bool MtkLogger::setLogRecordMode(recordmode_t recmode) {
   return true;
 }
 
+bool MtkLogger::getLogCriteria(logcriteria_t *criteria) {
+  if (!getLogByDistance(&criteria->distance)) return false;
+  if (!getLogByTime(&criteria->time)) return false;
+  if (!getLogBySpeed(&criteria->speed)) return false;
+
+  return true;
+}
+
+bool MtkLogger::setLogCriteria(logcriteria_t criteria) {
+  if (!setLogByDistance(criteria.distance)) return false;
+  if (!setLogByTime(criteria.time)) return false;
+  if (!setLogBySpeed(criteria.speed)) return false;
+
+  return true;
+}
+
+bool MtkLogger::getLogByDistance(int16_t *dist) {
+  if (!sendNmeaCommand("PMTK182,2,4")) return false;
+  if (!waitForNmeaReply("$PMTK182,3,4,", TIMEOUT)) return false;
+
+  int32_t value = 0;
+  buffer->readColumnAsInt(3, &value, false);
+  *dist = value;
+
+  Serial.printf("Logger.getLogByDistance: %d\n", *dist);
+
+  return true;
+}
+
+bool MtkLogger::setLogByDistance(int16_t distance) {
+  if (distance < 0) distance = 0;
+
+  char buf[24];
+  sprintf(buf, "PMTK182,1,4,%d", distance);  // log by distance
+
+  if (!sendNmeaCommand(buf)) return false;
+  if (!waitForNmeaReply("$PMTK001,182,1,", TIMEOUT)) return false;
+
+  return true;
+}
+
+bool MtkLogger::getLogByTime(int16_t *time) {
+  if (!sendNmeaCommand("PMTK182,2,3")) return false;
+  if (!waitForNmeaReply("$PMTK182,3,3,", TIMEOUT)) return false;
+
+  int value = 0;
+  buffer->readColumnAsInt(3, &value, false);
+  *time = value;
+
+  Serial.printf("Logger.getLogByTime: %d\n", *time);
+
+  return true;
+}
+bool MtkLogger::setLogBySpeed(int16_t speed) {
+  if (speed < 0) speed = 0;
+
+  char buf[24];
+  sprintf(buf, "PMTK182,1,5,%d", speed);  // log by speed
+
+  if (!sendNmeaCommand(buf)) return false;
+  if (!waitForNmeaReply("$PMTK001,182,1,", TIMEOUT)) return false;
+
+  return true;
+}
+
+bool MtkLogger::getLogBySpeed(int16_t *speed) {
+  if (!sendNmeaCommand("PMTK182,2,5")) return false;
+  if (!waitForNmeaReply("$PMTK182,3,5,", TIMEOUT)) return false;
+
+  int32_t value = 0;
+  buffer->readColumnAsInt(3, &value, false);
+  *speed = value;
+
+  Serial.printf("Logger.getLogBySpeed: %d\n", *speed);
+
+  return true;
+}
+
+bool MtkLogger::setLogByTime(int16_t time) {
+  if (time < 0) time = 0;
+
+  char buf[24];
+  sprintf(buf, "PMTK182,1,3,%d", time);  // log by time
+
+  if (!sendNmeaCommand(buf)) return false;
+  if (!waitForNmeaReply("$PMTK001,182,1,", TIMEOUT)) return false;
+
+  return true;
+}
 
 bool MtkLogger::clearFlash(void (*rateCallback)(int8_t)) {
   const uint32_t TIMEOUT = 500;
@@ -422,11 +503,11 @@ bool MtkLogger::clearFlash(void (*rateCallback)(int8_t)) {
   uint32_t timeStartAt = millis();
   uint32_t timeEstimated = (flashSize / SIZE_8MBIT) * 8000;
 
-  // send clear 
+  // send clear
   if (!sendNmeaCommand("PMTK182,6,1")) return false;
 
   while (gpsSerial->connected()) {
-    if (waitForNmeaReply("$PMTK001,182,6,3", TIMEOUT)) { // successfully finished
+    if (waitForNmeaReply("$PMTK001,182,6,3", TIMEOUT)) {  // successfully finished
       // reload the logger and break
       if (!reloadDevice()) return false;
       break;
