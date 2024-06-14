@@ -41,8 +41,7 @@ AppUI::AppUI() {
   dlgClientLeft = dlgFrameLeft + 4;
 }
 
-void AppUI::putBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x, int16_t y,
-                      int16_t color) {
+void AppUI::putBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x, int16_t y, int16_t color) {
   // icon data format:
   // - 1st byte: uint8_t width
   // - 2nd byte: uint8_t height
@@ -171,8 +170,7 @@ void AppUI::drawMainMenu(menuitem_t *menu, int8_t itemCount, int8_t top, int8_t 
 
     // ボタンのアイコンを描画
     if (mi->iconData != NULL) {
-      putBitmap(&sprite, mi->iconData, (x + (MENUBTN_W / 2) - (48 / 2)), (y + 12),
-                COLOR16(0, 32, 32));
+      putBitmap(&sprite, mi->iconData, (x + (MENUBTN_W / 2) - (48 / 2)), (y + 12), COLOR16(0, 32, 32));
     }
 
     // ボタンのキャプションを描画
@@ -407,8 +405,7 @@ btnid_t AppUI::waitForInputOkCancel(bool idleShutdown) {
   nav.items[1] = {"Cancel", true};
   nav.items[2] = {"OK", true};
 
-  btnid_t btn = 
-    (waitForButtonInput(&nav, idleShutdown) == BID_BTN_C) ? BID_OK : BID_CANCEL;
+  btnid_t btn = (waitForButtonInput(&nav, idleShutdown) == BID_BTN_C) ? BID_OK : BID_CANCEL;
 
   return btn;
 }
@@ -472,7 +469,7 @@ void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount,
   int8_t top = 0;
   int8_t select = 0;
 
-  for (int8_t i=0; i<itemCount; i++) {
+  for (int8_t i = 0; i < itemCount; i++) {
     cfgitem_t *ci = &menu[i];
     if (ci->updateValueDescr != NULL) ci->updateValueDescr(&menu[i]);
   }
@@ -484,7 +481,7 @@ void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount,
 
     // check the button input
     switch (waitForButtonInput(&nav, idleShutdown)) {
-    case BID_BTN_A: // move the selection to the previous
+    case BID_BTN_A:  // move the selection to the previous
       select = (select + (itemCount - 1)) % itemCount;
 
       if ((itemCount < 4) || (select <= 1)) {
@@ -496,7 +493,7 @@ void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount,
       }
       break;
 
-    case BID_BTN_B: // move the selection to the next
+    case BID_BTN_B:  // move the selection to the next
       select = (select + 1) % itemCount;
 
       if ((itemCount < 4) || (select <= 1)) {
@@ -508,7 +505,7 @@ void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount,
       }
       break;
 
-    case BID_BTN_C: // call the onSelect function of the selected item
+    case BID_BTN_C:  // call the onSelect function of the selected item
       cfgitem_t *ci = &menu[select];
       if (ci->onSelect != NULL) {
         ci->onSelect(ci);
@@ -520,7 +517,6 @@ void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount,
     }
   }
 }
-
 
 void AppUI::openMainMenu(menuitem_t *menu, int8_t itemCount, bool idleShutdown) {
   navmenu_t nav;
@@ -536,17 +532,17 @@ void AppUI::openMainMenu(menuitem_t *menu, int8_t itemCount, bool idleShutdown) 
     drawMainMenu(menu, itemCount, top, select);
 
     switch (waitForButtonInput(&nav, idleShutdown)) {
-    case BID_BTN_A: // move the selection to the previous
+    case BID_BTN_A:  // move the selection to the previous
       select = (select + (itemCount - 1)) % itemCount;
-      top = (itemCount < 4) ? 0 : (((select-3) / 3) * 3);
+      top = (itemCount < 4) ? 0 : (((select - 3) / 3) * 3);
       break;
 
-    case BID_BTN_B: // move the selection to the next
+    case BID_BTN_B:  // move the selection to the next
       select = (select + 1) % itemCount;
-      top = (itemCount < 6) ? 0 : (((select-3) / 3) * 3);
+      top = (itemCount < 6) ? 0 : (((select - 3) / 3) * 3);
       break;
 
-    case BID_BTN_C: // call the onSelect function of the selected item
+    case BID_BTN_C:  // call the onSelect function of the selected item
       menuitem_t *mi = &menu[select];
       if (mi->onSelect != NULL) mi->onSelect(mi);
       break;

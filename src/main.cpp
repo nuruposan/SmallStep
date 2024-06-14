@@ -1,4 +1,3 @@
-#include <BluetoothSerial.h>
 #include <M5Stack.h>
 #include <SdFat.h>
 
@@ -7,9 +6,10 @@
 #include "MtkParser.h"
 #include "Resources.h"
 
-/* ######## Important Notice ######## */
-/* You MUST increase RX_QUEUE_SIZE 512 to 2024 (bytes) in BluetoothSerial.h. */
+/* ################ Important Notice ################ */
+/* You MUST increase RX_QUEUE_SIZE 512 to 4094 in BluetoothSerial.h. */
 /* Otherwise, the BluetoothSerial library will not work properly. */
+/* ################################################## */
 
 #define SD_ACCESS_SPEED 15000000  // 20MHz may cause SD card error
 #define BT_ADDR_LEN 6
@@ -23,18 +23,18 @@ typedef struct appstatus {
 } appstatus_t;
 
 typedef struct _appconfig {
-  uint16_t length;         // sizeof(appconfig_t)
-  uint8_t loggerAddr[BT_ADDR_LEN]; // app - address of paired logger
-  char loggerName[DEV_NAME_LEN];   // app - name of pairded logger
-  trackmode_t trackMode;   // parser - how to divide/put tracks
-  uint8_t timeOffsetIdx;   // parser - timezone offset in hours
-  bool putWaypt;           // parser - treat manually recorded points as Wpts
-  bool leaveBinFile;       // parser - leave the BIN file after conversion
-  uint8_t logDistIdx;      // log mode - auto log by distance (meter, 0: disable)
-  uint8_t logTimeIdx;      // log mode - auto log by time (seconds, 0: disable)
-  uint8_t logSpeedIdx;     // log mode - auto log by speed (meter/sec, 0:disabled)
-  bool logFullStop;        // log mode - stop logging when flash is full
-  uint32_t logFormat;      // log format - Contents to be recorded 
+  uint16_t length;                  // must be sizeof(appconfig_t)
+  uint8_t loggerAddr[BT_ADDR_LEN];  // app - address of paired logger
+  char loggerName[DEV_NAME_LEN];    // app - name of pairded logger
+  trackmode_t trackMode;            // parser - how to divide/put tracks
+  uint8_t timeOffsetIdx;            // parser - timezone offset in hours
+  bool putWaypt;                    // parser - treat points recorded by button as WPTs
+  bool leaveBinFile;                // parser - leave the BIN file after conversion
+  uint8_t logDistIdx;               // log mode - auto log by distance (meter, 0: disable)
+  uint8_t logTimeIdx;               // log mode - auto log by time (seconds, 0: disable)
+  uint8_t logSpeedIdx;              // log mode - auto log by speed (meter/sec, 0:disabled)
+  bool logFullStop;                 // log mode - stop logging when flash is full
+  uint32_t logFormat;               // log format - fields to be recorded
 } appconfig_t;
 
 // ******** function prototypes ********
@@ -105,63 +105,65 @@ void onPairWithLoggerCfgUpdate(cfgitem_t *);
 void onOutputSubMenuSelect(cfgitem_t *);
 void onLogModeSubMenuSelect(cfgitem_t *);
 void onLogFormatSubMenuSelect(cfgitem_t *);
+void onPerformFormatSelect(cfgitem_t *);
 void onClearSettingsSelect(cfgitem_t *);
 void updateAppHint();
 
 const char *APP_NAME = "SmallStep";
 const char LCD_BRIGHTNESS = 10;
 
-const float TIME_OFFSET_VALUES[] = {-12, -11, -10, -9, -8, -7, -6,  -5,  -4.5, -4,  -3.5,
-                                    -3,  -2,  -1,  0,  1,  2,  3,   3.5, 4,    4.5, 5,
-                                    5.5, 6,   6.5, 7,  8,  9,  9.5, 10,  12,   13};  // uint: hours
-const int16_t LOG_DIST_VALUES[] = {0, 10, 30, 50, 100, 200, 300, 500};               // uint: meters
-const int16_t LOG_TIME_VALUES[] = {0, 1, 3, 5, 10, 15, 30, 60, 120, 180, 300};       // unit: seconds
-const int16_t LOG_SPEED_VALUES[] = {0,   10,  20,  30,  40,  50,  60,  70, 80, 90,
-                                    100, 120, 140, 160, 180, 200, 250, 300};  // uint: km/h
+const float TIME_OFFSET_VALUES[] = {
+    -12, -11, -10, -9, -8,  -7, -6,  -5, -4.5, -4, -3.5, -3, -2,  -1, 0,  1,
+    2,   3,   3.5, 4,  4.5, 5,  5.5, 6,  6.5,  7,  8,    9,  9.5, 10, 12, 13};            // uint: hours
+const int16_t LOG_DIST_VALUES[] = {0, 100, 300, 500, 1000, 2000, 3000, 5000};             // uint: .1 meters
+const int16_t LOG_TIME_VALUES[] = {0, 10, 30, 50, 100, 150, 300, 600, 1200, 1800, 3000};  // unit: .1 seconds
+const int16_t LOG_SPEED_VALUES[] = {0,   100,  200,  300,  400,  500,  600,  700,  800,
+                                    900, 1000, 1200, 1400, 1600, 1800, 2000, 2500, 3000};  // uint: .1 km/h
 
 const appconfig_t DEFAULT_CONFIG = {
-  sizeof(appconfig_t),  // length
-  {0, 0, 0, 0, 0, 0},   // loggerAddr
-  "NO LOGGER",          // loggerName
-  TRK_ONE_DAY,          // trackMode
-  27,                   // timeOffsetIdx (27: UTC+9.0)
-  false,                // putWaypt
-  false,                // leaveBinFile 
-  0,                    // logDistIdx (0: disabled)
-  4,                    // logTimeIdx (4: 10 seconds)
-  0,                    // logSpeedIdx (0: disabled)
-  true,                 // logFullStop
-  (FMT_FIXONLY | FMT_TIME | FMT_LON | FMT_LAT | FMT_HEIGHT | FMT_SPEED)  // logFormat
+    sizeof(appconfig_t),                                                   // length
+    {0, 0, 0, 0, 0, 0},                                                    // loggerAddr
+    "NO LOGGER",                                                           // loggerName
+    TRK_AS_IS,                                                             // trackMode
+    14,                                                                    // timeOffsetIdx (14: UTC+0)
+    false,                                                                 // putWaypt
+    false,                                                                 // leaveBinFile
+    0,                                                                     // logDistIdx (0: disabled)
+    4,                                                                     // logTimeIdx (7: 10 seconds)
+    0,                                                                     // logSpeedIdx (0: disabled)
+    true,                                                                  // logFullStop
+    (FMT_FIXONLY | FMT_TIME | FMT_LON | FMT_LAT | FMT_HEIGHT | FMT_SPEED)  // logFormat
 };
 
 menuitem_t menuMain[] = {
-  // {caption, iconData, enabled, onSelect}
-  {"Download Log", ICON_DOWNLOAD_LOG, true, &onDownloadLogSelect},
-  {"Fix RTC time", ICON_FIX_RTC, true, &onFixRTCtimeSelect},
-  {"Erase Log Data", ICON_ERASE_LOG, true, &onClearFlashSelect},
-  {"Set Log Mode", ICON_LOG_MODE, true, &onSetLogModeSelect},
-  {"Set Log Format", ICON_LOG_FORMAT, true, &onSetLogFormatSelect},
-  {"Show Location", ICON_NAVIGATION, true, &onShowLocationSelect},
-  {"Pair w/ Logger", ICON_PAIR_LOGGER, true, &onPairWithLoggerSelect},
-  {"App Settings", ICON_APP_SETTINGS, true, &onAppSettingSelect},
+    // {caption, iconData, enabled, onSelect}
+    {"Download Log", ICON_DOWNLOAD_LOG, true, &onDownloadLogSelect},
+    {"Fix RTC time", ICON_FIX_RTC, true, &onFixRTCtimeSelect},
+    {"Erase Log Data", ICON_ERASE_LOG, true, &onClearFlashSelect},
+    {"Set Log Mode", ICON_LOG_MODE, true, &onSetLogModeSelect},
+    {"Set Log Format", ICON_LOG_FORMAT, true, &onSetLogFormatSelect},
+    //    {"Show Location", ICON_NAVIGATION, true, &onShowLocationSelect},
+    {"Pair w/ Logger", ICON_PAIR_LOGGER, true, &onPairWithLoggerSelect},
+    {"App Settings", ICON_APP_SETTINGS, true, &onAppSettingSelect},
 };
 
 cfgitem_t cfgOutput[] = {
-  // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
-  {"Back", "Exit this menu", "<<", NULL, NULL},
-  {"Track mode", "How to divide tracks in GPX file", "", &onTrackModeSelect, &onTrackModeUpdate},
-  {"Timezone offset", "UTC offset for 'a track per day' mode", "", &onTimezoneSelect, &onTimezoneUpdate},  
-  {"Save POIs as waypts", "Convert POIs to waypts. Need RCR enabled", "", &onPutWayptSelect, &onPutWayptUpdate},
-  {"Leave BIN file", "Save BIN file with the same name as GPX file", "", &onLeaveBinFileSelect, &onLeaveBinFileUpdate},
+    // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
+    {"Back", "Exit this menu", "<<", NULL, NULL},
+    {"Track mode", "How to divide tracks in GPX file", "", &onTrackModeSelect, &onTrackModeUpdate},
+    {"Timezone offset", "UTC offset for 'a track per day' mode", "", &onTimezoneSelect, &onTimezoneUpdate},
+    // {"Put WAYPTs", "Treat points recorded by button press as WAYPTs", "", &onPutWayptSelect, &onPutWayptUpdate},
+    {"Leave BIN file", "Save BIN file with the same name as GPX file", "", &onLeaveBinFileSelect,
+     &onLeaveBinFileUpdate},
 };
 
 cfgitem_t cfgLogMode[] = {
-  // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
-  {"Back", "Exit this menu", "<<", NULL, NULL},
-  {"Log by distance", "Auto log by moving distance", "", &onLogByDistanceSelect, &onLogByDistanceUpdate},
-  {"Log by time", "Auto log by elapsed time", "", &onLogByTimeSelect, &onLogByTimeUpdate},
-  {"Log by speed", "Auto log by exceeded speed", "", &onLogBySpeedSelect, &onLogBySpeedUpdate},
-  {"Flash full behavior", "Action when flash memory is full", "", &onLogFullActionSelect, &onLogFullActionUpdate},
+    // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
+    {"Back", "Exit this menu", "<<", NULL, NULL},
+    {"Log by distance", "Auto log by moving distance", "", &onLogByDistanceSelect, &onLogByDistanceUpdate},
+    {"Log by time", "Auto log by elapsed time", "", &onLogByTimeSelect, &onLogByTimeUpdate},
+    {"Log by speed", "Auto log by exceeded speed", "", &onLogBySpeedSelect, &onLogBySpeedUpdate},
+    {"Log full action", "Behavior when the logger flash is full", "", &onLogFullActionSelect, &onLogFullActionUpdate},
 };
 
 cfgitem_t *cfgLogByDist = &cfgLogMode[1];
@@ -169,39 +171,40 @@ cfgitem_t *cfgLogByTime = &cfgLogMode[2];
 cfgitem_t *cfgLogBySpd = &cfgLogMode[3];
 
 cfgitem_t cfgLogFormat[] = {
-  // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
-  {"Back", "Exit this menu", "<<", NULL, NULL},
-  {"Load defaults", "Restore to the default log format", "", &onLoadDefaultFormatSelect, &onLoadDefaultFormatUpdate},
-//  {"Load defaults", "Restore to the default log format", "", &onLoadDefaultFormatSelect, &onLoadDefaultFormatUpdate},
-  {"TIME (required fields)", "Logs date and time data in seconds", "Enabled", &onReadOnlyItemSelect, NULL},
-  {"LAT, LON (required fields)", "Logs latitude and longitude data of each point", "Enabled", &onReadOnlyItemSelect, NULL},
-  {"SPEED", "Logs moving speed data", "", &onRecordSpeedSelect, &onRecordSpeedUpdate},
-  {"ALT", "Logs altitude data", "", &onRecordAltitudeSelect, &onRecordAltitudeUpdate},
-  {"RCR", "Logs record reason (needed for create WAYPTs)", "", &onRecordRCRSelect, &onRecordRCRUpdate},
-  {"TRACK", "Logs track angle data (not used by SmallStep)", "", &onRecordHeadingSelect, &onRecordHeadingUpdate},
-  {"VALID", "Logs positioning status (not used by SmallStep)", "", &onRecordValidSelect, &onRecordValidUpdate}, // A: valid, V: invalid
-  {"DIST", "Logs moving distance data (not used by SmallStep)", "", &onRecordDistanceSelect, &onRecordDistanceUpdate},
-  {"MSEC", "Logs time data in msec (not used by SmallStep)", "", &onRecordMillisSelect, &onRecordMillisUpdate},
-  {"DSTA, DAGE", "Logs differencial GPS data (not used by SS)", "Disabled", &onRecordDgpsSelect, &onRecordDgpsUpdate},
-  {"PDOP, HDOP, VDOP", "Logs dilution of precision data (not used by SS)", "Disabled", &onRecordDopSelect, &onRecordDopUpdate},
-  {"NSAT, ALT, AZI, SNR", "Logs satellite data (not used by SmallStep)", "Disabled", &onRecordSatSelect, &onRecordSatUpdate},
+    // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
+    {"Back", "Exit this menu", "<<", NULL, NULL},
+    {"Load defaults", "Reset to the default format", "", &onLoadDefaultFormatSelect, &onLoadDefaultFormatUpdate},
+    {"TIME (required fields)", "Date and time data in seconds", "Enabled", &onReadOnlyItemSelect, NULL},
+    {"LAT, LON (required fields)", "Latitude and longitude data", "Enabled", &onReadOnlyItemSelect, NULL},
+    {"SPEED", "Moving speed data", "", &onRecordSpeedSelect, &onRecordSpeedUpdate},
+    {"ALT", "Altitude data", "", &onRecordAltitudeSelect, &onRecordAltitudeUpdate},
+    {"RCR", "Record reason (needed to record WAYPTs)", "", &onRecordRCRSelect, &onRecordRCRUpdate},
+    {"TRACK", "Track angle data", "", &onRecordHeadingSelect, &onRecordHeadingUpdate},
+    {"VALID", "Positioning status", "", &onRecordValidSelect, &onRecordValidUpdate},
+    {"DIST", "Moving distance data", "", &onRecordDistanceSelect, &onRecordDistanceUpdate},
+    {"MSEC", "Time data in millisecond", "", &onRecordMillisSelect, &onRecordMillisUpdate},
+    {"DSTA, DAGE", "Differencial GPS data", "Disabled", &onRecordDgpsSelect, &onRecordDgpsUpdate},
+    {"PDOP, HDOP, VDOP", "Dilution of precision data", "Disabled", &onRecordDopSelect, &onRecordDopUpdate},
+    {"NSAT, ALT, AZI, SNR", "Logs satellite data", "Disabled", &onRecordSatSelect, &onRecordSatUpdate},
 };
 
 cfgitem_t *cfgResetFormat = &cfgLogFormat[1];
 
 cfgitem_t cfgMain[] = {
-  // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
-  {"Save and exit", "Return to the main menu", "", NULL, NULL},
-  {"Pairing with a GPS logger", "Discover a supported GPS logger", ">>", &onPairWithLoggerCfgSelect, &onPairWithLoggerCfgUpdate},
-  {"Output settings", "Output options", ">>", &onOutputSubMenuSelect, NULL},
-  {"Log mode settings", "Logging behavior of the logger", ">>", &onLogModeSubMenuSelect, NULL},
-  {"Log format settings", "Contents to be stored on the logger", ">>", &onLogFormatSubMenuSelect, NULL},
-  {"Clear all settings", "Erase the current settings of SmallStep", "", &onClearSettingsSelect, NULL},
+    // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
+    {"Save and exit", "Return to the main menu", "", NULL, NULL},
+    {"Pairing with a GPS logger", "Discover a supported GPS logger", ">>", &onPairWithLoggerCfgSelect,
+     &onPairWithLoggerCfgUpdate},
+    {"Output settings", "Output options", ">>", &onOutputSubMenuSelect, NULL},
+    {"Log mode settings", "Logging behavior of the logger", ">>", &onLogModeSubMenuSelect, NULL},
+    {"Log format settings", "Contents to be stored on the logger", ">>", &onLogFormatSubMenuSelect, NULL},
+    {"Format SD card", "Perform a format for the SD card", "", &onPerformFormatSelect, NULL},
+    {"Clear all settings", "Erase the current settings of SmallStep", "", &onClearSettingsSelect, NULL},
 };
 
 AppUI ui = AppUI();
 SdFat SDcard;
-MtkLogger logger = MtkLogger();
+MtkLogger logger = MtkLogger(APP_NAME);
 appstatus_t app;
 appconfig_t cfg;
 uint32_t idleTimer;
@@ -210,15 +213,15 @@ void updateAppHint() {
   // set the Paied logger name and address as the application hint
   char addrStr[16];
   sprintf(addrStr, "%02X%02X-%02X%02X-%02X%02X",  // xxxx-xxxx-xxxx
-          cfg.loggerAddr[0], cfg.loggerAddr[1], cfg.loggerAddr[2],
-          cfg.loggerAddr[3], cfg.loggerAddr[4], cfg.loggerAddr[5]);
+          cfg.loggerAddr[0], cfg.loggerAddr[1], cfg.loggerAddr[2], cfg.loggerAddr[3], cfg.loggerAddr[4],
+          cfg.loggerAddr[5]);
   ui.setAppHints(cfg.loggerName, addrStr);
 }
 
 void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   switch (event) {
   case ESP_SPP_INIT_EVT:
-    if (param == NULL) { // SPP started
+    if (param == NULL) {  // SPP started
       app.sppActive = true;
       ui.drawTitleBar(app.sdcAvail, app.sppActive);
     }
@@ -228,7 +231,7 @@ void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
     memcpy(app.loggerAddr, param->open.rem_bda, BT_ADDR_LEN);
     break;
 
-  case ESP_SPP_UNINIT_EVT: // SPP closed
+  case ESP_SPP_UNINIT_EVT:  // SPP closed
     if (param == NULL) {
       app.sppActive = false;
       ui.drawTitleBar(app.sdcAvail, app.sppActive);
@@ -266,7 +269,7 @@ bool isLoggerPaired() {
       if (paired) ui.waitForInputOk(IDLE_SHUTDOWN);
     } else {
       ui.drawDialogMessage(BLACK, 1, "Pair with your GPS logger now? [Cancel]");
-      ui.drawDialogMessage(BLUE, 2, "The Operation was canceled.");
+      ui.drawDialogMessage(BLUE, 3, "The pairing operation is not performed.");
     }
   }
 
@@ -280,7 +283,6 @@ bool isSDcardAvailable() {
     ui.drawDialogMessage(RED, 0, "A SD card is not available.");
     ui.drawDialogMessage(RED, 1, "- Make sure the SD card is inserted");
     ui.drawDialogMessage(RED, 2, "- The card must be FAT32 formatted");
-
     return false;
   }
 
@@ -309,18 +311,17 @@ bool runDownloadLog() {
   ui.drawDialogFrame("Download Log");
   ui.drawNavBar(NULL);
 
-  // print the progress message
+  // connect to the logger
   ui.drawDialogMessage(BLUE, 0, "Connecting to GPS logger...");
-  {
-    if (!logger.connect(cfg.loggerAddr)) {
-      ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
-      ui.drawDialogMessage(RED, 1, "- Make sure Bluetooth is enabled on your");
-      ui.drawDialogMessage(RED, 2, "  GPS logger");
-      ui.drawDialogMessage(RED, 3, "- Power cycling may fix this problem");
-      return false;
-    }
+  if (logger.connect(cfg.loggerAddr)) {
+    ui.drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
+  } else {
+    ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
+    ui.drawDialogMessage(RED, 1, "- Make sure BT is enabled on the GPS logger");
+    ui.drawDialogMessage(RED, 2, "- Is this occurs repeatly, please restart");
+    ui.drawDialogMessage(RED, 3, "  the logger and SmallStep");
+    return false;
   }
-  ui.drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
 
   File32 binFileW = SDcard.open(TEMP_BIN, (O_CREAT | O_WRITE | O_TRUNC));
   if (!binFileW) {
@@ -436,20 +437,17 @@ bool runFixRTCtime() {
   ui.drawDialogFrame("Fix RTC time");
   ui.drawNavBar(NULL);
 
-  // print the progress message
+  // connect to the logger
   ui.drawDialogMessage(BLUE, 0, "Connecting to GPS logger...");
-  {
-    // connect to the logger
-    if (!logger.connect(cfg.loggerAddr)) {
-      ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
-      ui.drawDialogMessage(RED, 1, "- Make sure Bluetooth is enabled on your");
-      ui.drawDialogMessage(RED, 2, "  GPS logger");
-      ui.drawDialogMessage(RED, 3, "- Power cycling may fix this problem");
-
-      return false;
-    }
+  if (logger.connect(cfg.loggerAddr)) {
+    ui.drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
+  } else {
+    ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
+    ui.drawDialogMessage(RED, 1, "- Make sure BT is enabled on the logger");
+    ui.drawDialogMessage(RED, 2, "- Is this occurs repeatly, please restart");
+    ui.drawDialogMessage(RED, 3, "  the logger and SmallStep");
+    return false;
   }
-  ui.drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
 
   ui.drawDialogMessage(BLUE, 1, "Setting RTC datetime...");
   {
@@ -481,7 +479,6 @@ void onFixRTCtimeSelect(menuitem_t *item) {
  *
  */
 void onShowLocationSelect(menuitem_t *item) {
-  Serial.printf("[DEBUG] onSetPresetConfigMenuSelected\n");
 }
 
 bool runPairWithLogger() {
@@ -492,7 +489,7 @@ bool runPairWithLogger() {
   ui.drawDialogFrame("Pair with Logger");
   ui.drawNavBar(NULL);  // disable the navigation bar
 
-  ui.drawDialogMessage(BLACK, 0, "Discovering GPS logger...");
+  ui.drawDialogMessage(BLUE, 0, "Discovering GPS logger...");
 
   for (int i = 0; i < DEVICE_COUNT; i++) {
     // print the device name trying to connect
@@ -509,15 +506,16 @@ bool runPairWithLogger() {
 
       // print the success message
       sprintf(msgbuf1, "- %s : found.", DEVICE_NAMES[i].c_str());
-      sprintf(msgbuf2, "Logger address : %02X%02X-%02X%02X-%02X%02X", addr[0], addr[1], addr[2],
-              addr[3], addr[4], addr[5]);
+      sprintf(msgbuf2, "Logger address : %02X%02X-%02X%02X-%02X%02X", addr[0], addr[1], addr[2], addr[3], addr[4],
+              addr[5]);
+      ui.drawDialogMessage(BLACK, 0, "Discovering GPS logger... done");
       ui.drawDialogMessage(BLACK, (1 + i), msgbuf1);
       ui.drawDialogMessage(BLUE, (2 + i), "Successfully paired with the discovered logger.");
       ui.drawDialogMessage(BLUE, (3 + i), msgbuf2);
 
       // copy the address and model name to the configuration
       memcpy(cfg.loggerAddr, addr, BT_ADDR_LEN);
-      strncpy(cfg.loggerName, DEVICE_NAMES[i].c_str(), (DEV_NAME_LEN-1));
+      strncpy(cfg.loggerName, DEVICE_NAMES[i].c_str(), (DEV_NAME_LEN - 1));
 
       // update GUI
       updateAppHint();
@@ -534,10 +532,11 @@ bool runPairWithLogger() {
   }
 
   // print the failure message
+  ui.drawDialogMessage(BLACK, 0, "Discovering GPS logger... failed.");
   ui.drawDialogMessage(RED, (1 + DEVICE_COUNT), "Cannot discover any supported logger.");
-  ui.drawDialogMessage(RED, (2 + DEVICE_COUNT), "- Make sure Bluetooth is enabled on your");
-  ui.drawDialogMessage(RED, (3 + DEVICE_COUNT), "  GPS logger");
-  ui.drawDialogMessage(RED, (4 + DEVICE_COUNT), "- Power cycling may fix this problem");
+  ui.drawDialogMessage(RED, (2 + DEVICE_COUNT), "- Make sure BT is enabled on the logger");
+  ui.drawDialogMessage(RED, (3 + DEVICE_COUNT), "- Is this occurs repeatly, please restart");
+  ui.drawDialogMessage(RED, (4 + DEVICE_COUNT), "  the logger and SmallStep");
 
   return false;
 }
@@ -560,40 +559,35 @@ bool runClearFlash() {
 
   // prompt the user to confirm the operation
   ui.drawDialogMessage(BLUE, 0, "Are you sure to erase log data?");
-  {
-    if (ui.waitForInputOkCancel(IDLE_SHUTDOWN) == BID_CANCEL) {
-      ui.drawDialogMessage(BLACK, 0, "Are you sure to erase log data?  [Cancel]");
-      ui.drawDialogMessage(RED, 1, "The operation was canceled by the user.");
-      return false;
-    }
+  if (ui.waitForInputOkCancel(IDLE_SHUTDOWN) == BID_OK) {
+    ui.drawDialogMessage(BLACK, 0, "Are you sure to erase log data? [ OK ]");
+    ui.drawNavBar(NULL);
+  } else {
+    ui.drawDialogMessage(BLACK, 0, "Are you sure to erase log data?  [Cancel]");
+    ui.drawDialogMessage(BLUE, 1, "The operation is not performed.");
+    return false;
   }
-  ui.drawDialogMessage(BLACK, 0, "Are you sure to erase log data? [ OK ]");
-  ui.drawNavBar(NULL);
 
-  // print the progress message
+  // connect to the logger
   ui.drawDialogMessage(BLUE, 1, "Connecting to GPS logger...");
-  {
-    // connect to the logger
-    if (!logger.connect(cfg.loggerAddr)) {
-      // if failed, print the error message and hint(s)
-      ui.drawDialogMessage(RED, 1, "Connecting to GPS logger... failed.");
-      ui.drawDialogMessage(RED, 2, "- Make sure Bluetooth is enabled on your");
-      ui.drawDialogMessage(RED, 3, "  GPS logger");
-      ui.drawDialogMessage(RED, 4, "- Power cycling may fix this problem");
-      return false;
-    }
+  if (logger.connect(cfg.loggerAddr)) {
+    ui.drawDialogMessage(BLACK, 1, "Connecting to GPS logger... done.");
+  } else {
+    ui.drawDialogMessage(RED, 1, "Connecting to GPS logger... failed.");
+    ui.drawDialogMessage(RED, 2, "- Make sure BT is enabled on the logger");
+    ui.drawDialogMessage(RED, 3, "- Is this occurs repeatly, please restart");
+    ui.drawDialogMessage(RED, 4, "  the logger and SmallStep");
+    return false;
   }
-  ui.drawDialogMessage(BLACK, 1, "Connecting to GPS logger... done.");
 
   ui.drawDialogMessage(BLUE, 2, "Erasing log data...");
-  {
-    // erase the log data
-    if (!logger.clearFlash(&progressCallback)) {
-      ui.drawDialogMessage(RED, 2, "Erasing log data... failed.");
-      ui.drawDialogMessage(RED, 3, "- Keep GPS logger close to this device");
-      ui.drawDialogMessage(RED, 4, "- Power cycling may fix this problem");
-    }
+  if (!logger.clearFlash(&progressCallback)) {
+    ui.drawDialogMessage(RED, 2, "Erasing log data... failed.");
+    ui.drawDialogMessage(RED, 3, "");
+    ui.drawDialogMessage(RED, 4, "- Power cycling may fix this problem");
+    return false;
   }
+
   ui.drawDialogMessage(BLACK, 2, "Erasing log data... done.");
   ui.drawDialogMessage(BLUE, 3, "Hope you have a nice trip next time!");
 
@@ -607,51 +601,56 @@ void onClearFlashSelect(menuitem_t *item) {
 }
 
 bool runSetLogFormat() {
-    // return false if the logger is not paired yet
+  // return false if the logger is not paired yet
   if (!isLoggerPaired()) return false;
 
   // draw a message dialog frame and clear the navigation bar
   ui.drawDialogFrame("Set Log Format");
   ui.drawNavBar(NULL);
 
-  // print the progress message
+  // connect to the logger
   ui.drawDialogMessage(BLUE, 0, "Connecting to GPS logger...");
-  {
-    // connect to the logger
-    if (!logger.connect(cfg.loggerAddr)) {
-      ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
-      ui.drawDialogMessage(RED, 1, "- Make sure Bluetooth is enabled on your");
-      ui.drawDialogMessage(RED, 2, "  GPS logger");
-      ui.drawDialogMessage(RED, 3, "- Power cycling may fix this problem");
-
-      return false;
-    }
+  if (logger.connect(cfg.loggerAddr)) {
+    ui.drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
+  } else {
+    ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
+    ui.drawDialogMessage(RED, 1, "- Make sure BT is enabled on the logger");
+    ui.drawDialogMessage(RED, 2, "- Is this occurs repeatly, please restart");
+    ui.drawDialogMessage(RED, 3, "  the logger and SmallStep");
+    return false;
   }
-  ui.drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
 
-  // get the current log format and show the menu
-  uint32_t logFormat = 0;
-  if (!logger.getLogFormat(&logFormat)) {
+  uint32_t curLogFormat = 0;
+  uint32_t newLogFormat = cfg.logFormat;
+
+  ui.drawDialogMessage(BLUE, 1, "Updating the log format...");
+  if (!logger.getLogFormat(&curLogFormat)) {
+    ui.drawDialogMessage(RED, 1, "Updating the log format... failed");
     ui.drawDialogMessage(RED, 1, "Cannot get the current log format.");
     return false;
-  } else if (cfg.logFormat == logFormat) {
-    char buf[48];
-    sprintf(buf, "The format 0x%08X is already set.", cfg.logFormat);
+  }
 
-    ui.drawDialogMessage(BLUE, 1, "The Log format on the logger is unchanged.");
-    ui.drawDialogMessage(BLUE, 2, buf);
+  if (curLogFormat == newLogFormat) {
+    char buf[40];
+    sprintf(buf, "Log format : 0x%08X", newLogFormat);
+
+    ui.drawDialogMessage(BLACK, 1, "Updating the log format... unchanged.");
+    ui.drawDialogMessage(BLUE, 2, "The configured log format is already set.");
+    ui.drawDialogMessage(BLUE, 3, buf);
     return true;
   }
 
-  if (!logger.setLogFormat(cfg.logFormat)) {
+  if (!logger.setLogFormat(newLogFormat)) {
+    ui.drawDialogMessage(RED, 1, "Updating the log format... failed");
     ui.drawDialogMessage(RED, 2, "Failed to change the log format.");
     return false;
-  } else {
-    char buf[48];
-    sprintf(buf, "from 0x%08X to 0x%08X.", logFormat, cfg.logFormat);
-    ui.drawDialogMessage(BLUE, 2, "The Log format on the logger is changed");
-    ui.drawDialogMessage(BLUE, 3, buf);
   }
+
+  char buf[48];
+  sprintf(buf, "from 0x%08X to 0x%08X.", curLogFormat, newLogFormat);
+  ui.drawDialogMessage(BLACK, 1, "Updating the log format... done.");
+  ui.drawDialogMessage(BLUE, 2, "The Log format on the logger is changed");
+  ui.drawDialogMessage(BLUE, 3, buf);
 
   return true;
 }
@@ -663,40 +662,70 @@ void onSetLogFormatSelect(menuitem_t *item) {
 }
 
 bool runSetLogMode() {
-      // return false if the logger is not paired yet
+  // return false if the logger is not paired yet
   if (!isLoggerPaired()) return false;
 
   // draw a message dialog frame and clear the navigation bar
   ui.drawDialogFrame("Set Log Mode");
   ui.drawNavBar(NULL);
 
-  // print the progress message
+  // connect to the logger
   ui.drawDialogMessage(BLUE, 0, "Connecting to GPS logger...");
-  {
-    // connect to the logger
-    if (!logger.connect(cfg.loggerAddr)) {
-      ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
-      ui.drawDialogMessage(RED, 1, "- Make sure Bluetooth is enabled on your");
-      ui.drawDialogMessage(RED, 2, "  GPS logger");
-      ui.drawDialogMessage(RED, 3, "- Power cycling may fix this problem");
-
-      return false;
-    }
-  }
-  ui.drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
-
-  // get the current log format and show the menu
-  recordmode_t recmode = MODE_FULLSTOP;
-  if (!logger.getLogRecordMode(&recmode)) {
-    ui.drawDialogMessage(RED, 1, "Cannot get the current log mode.");
+  if (logger.connect(cfg.loggerAddr)) {
+    ui.drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
+  } else {
+    ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
+    ui.drawDialogMessage(RED, 1, "- Make sure BT is enabled on the GPS logger");
+    ui.drawDialogMessage(RED, 2, "- This problem occurs repeatly, please restart");
+    ui.drawDialogMessage(RED, 3, "  the logger and SmallStep");
     return false;
   }
 
-  recordmode_t newrecmode = (cfg.logFullStop) ? MODE_FULLSTOP : MODE_OVERWRITE;
-  if (!logger.setLogRecordMode(newrecmode)) {
-    ui.drawDialogMessage(RED, 2, "Cannot change the log mode.");
+  recordmode_t curRecMode = MODE_FULLSTOP;
+  logcriteria_t curLogCri = {0, 0, 0};
+  recordmode_t newRecMode = (cfg.logFullStop) ? MODE_FULLSTOP : MODE_OVERWRITE;
+  logcriteria_t newLogCri = {LOG_DIST_VALUES[cfg.logDistIdx], LOG_TIME_VALUES[cfg.logTimeIdx],
+                             LOG_SPEED_VALUES[cfg.logSpeedIdx]};
+
+  ui.drawDialogMessage(BLUE, 1, "Updating the log mode...");
+  if (!logger.getLogRecordMode(&curRecMode) || !logger.getLogCriteria(&curLogCri)) {
+    ui.drawDialogMessage(RED, 1, "Updating the log mode... failed.");
+    ui.drawDialogMessage(RED, 2, "Cannot get the current mode. Please retry.");
     return false;
   }
+
+  char buf[2][40];
+  if ((newLogCri.time % 10) == 0) {
+    sprintf(buf[0], "Log by : %d meters, %d seconds, %d km/h", (newLogCri.distance / 10), (newLogCri.time / 10),
+            (newLogCri.speed / 10));
+  } else {
+    sprintf(buf[0], "Log by : %d meters, %d.%d seconds, %d km/h", (newLogCri.distance / 10), (newLogCri.time / 10),
+            (newLogCri.time % 10), (newLogCri.speed / 10));
+  }
+  if (newRecMode == MODE_FULLSTOP) {
+    strcpy(buf[1], "Log full action : Stop logging");
+  } else {
+    strcpy(buf[1], "Log full action : Overwrap");
+  }
+
+  if ((curRecMode == newRecMode) && (!isDifferent(&curLogCri, &newLogCri, sizeof(logcriteria_t)))) {
+    ui.drawDialogMessage(BLACK, 1, "Updating the log mode... unchanged.");
+    ui.drawDialogMessage(BLUE, 2, "The configured log mode is already set.");
+    ui.drawDialogMessage(BLUE, 3, buf[0]);
+    ui.drawDialogMessage(BLUE, 4, buf[1]);
+    return true;
+  }
+
+  if (!logger.setLogRecordMode(newRecMode) || !logger.setLogCriteria(newLogCri)) {
+    ui.drawDialogMessage(RED, 1, "Updating the log mode... failed.");
+    ui.drawDialogMessage(RED, 2, "Cannot set the new log mode. Please retry.");
+    return false;
+  }
+
+  ui.drawDialogMessage(BLACK, 1, "Updating the log mode... done.");
+  ui.drawDialogMessage(BLUE, 2, "The configured log mode is set successfully.");
+  ui.drawDialogMessage(BLUE, 3, buf[0]);
+  ui.drawDialogMessage(BLUE, 4, buf[1]);
 
   return true;
 }
@@ -709,7 +738,7 @@ void onSetLogModeSelect(menuitem_t *item) {
 
 void onAppSettingSelect(menuitem_t *item) {
   Serial.printf("SmallStep.onAppSettingSelect: open the app settings menu\n");
- 
+
   appconfig_t oldcfg;
   memcpy(&oldcfg, &cfg, sizeof(appconfig_t));
 
@@ -769,15 +798,18 @@ void onLogByDistanceSelect(cfgitem_t *item) {
   cfg.logTimeIdx = 0;
   cfg.logSpeedIdx = 0;
 
-  cfgLogByTime->updateValueDescr(cfgLogByTime); // update the logByTime menu
-  cfgLogBySpd->updateValueDescr(cfgLogBySpd); // update the logBySpeed menu
+  cfgLogByTime->updateValueDescr(cfgLogByTime);  // update the logByTime menu
+  cfgLogBySpd->updateValueDescr(cfgLogBySpd);    // update the logBySpeed menu
 }
 
 void onLogByDistanceUpdate(cfgitem_t *item) {
   if (LOG_DIST_VALUES[cfg.logDistIdx] == 0) {
     strcpy(item->valueDescr, "Disabled");
+  } else if ((LOG_DIST_VALUES[cfg.logDistIdx] % 10) == 0) {
+    sprintf(item->valueDescr, "%d meters", (LOG_DIST_VALUES[cfg.logDistIdx] / 10));
   } else {
-    sprintf(item->valueDescr, "%d meters", LOG_DIST_VALUES[cfg.logDistIdx]);
+    sprintf(item->valueDescr, "%d.%d meters", (LOG_DIST_VALUES[cfg.logDistIdx] / 10),
+            (LOG_DIST_VALUES[cfg.logDistIdx] % 10));
   }
 }
 
@@ -788,15 +820,18 @@ void onLogByTimeSelect(cfgitem_t *item) {
   cfg.logTimeIdx = max(1, (cfg.logTimeIdx + 1) % valCount);
   cfg.logSpeedIdx = 0;
 
-  cfgLogByDist->updateValueDescr(cfgLogByDist); // update the logByDist menu
-  cfgLogBySpd->updateValueDescr(cfgLogBySpd); // update the logBySpeed menu
+  cfgLogByDist->updateValueDescr(cfgLogByDist);  // update the logByDist menu
+  cfgLogBySpd->updateValueDescr(cfgLogBySpd);    // update the logBySpeed menu
 }
 
 void onLogByTimeUpdate(cfgitem_t *item) {
   if (LOG_TIME_VALUES[cfg.logTimeIdx] == 0) {
     strcpy(item->valueDescr, "Disabled");
+  } else if ((LOG_TIME_VALUES[cfg.logTimeIdx] % 10) == 0) {
+    sprintf(item->valueDescr, "%d seconds", (LOG_TIME_VALUES[cfg.logTimeIdx] / 10));
   } else {
-    sprintf(item->valueDescr, "%d seconds", LOG_TIME_VALUES[cfg.logTimeIdx]);
+    sprintf(item->valueDescr, "%d.%d seconds", (LOG_TIME_VALUES[cfg.logTimeIdx] / 10),
+            (LOG_TIME_VALUES[cfg.logTimeIdx] % 10));
   }
 }
 
@@ -806,16 +841,19 @@ void onLogBySpeedSelect(cfgitem_t *item) {
   cfg.logDistIdx = 0;
   cfg.logTimeIdx = 0;
   cfg.logSpeedIdx = max(1, (cfg.logSpeedIdx + 1) % valCount);
-  
-  cfgLogByDist->updateValueDescr(cfgLogByDist); // update the logByDist menu
-  cfgLogByTime->updateValueDescr(cfgLogByTime); // update the logByTime menu
+
+  cfgLogByDist->updateValueDescr(cfgLogByDist);  // update the logByDist menu
+  cfgLogByTime->updateValueDescr(cfgLogByTime);  // update the logByTime menu
 }
 
 void onLogBySpeedUpdate(cfgitem_t *item) {
   if (LOG_SPEED_VALUES[cfg.logSpeedIdx] == 0) {
     strcpy(item->valueDescr, "Disabled");
+  } else if ((LOG_SPEED_VALUES[cfg.logSpeedIdx] % 10) == 0) {
+    sprintf(item->valueDescr, "%d km/h", (LOG_SPEED_VALUES[cfg.logSpeedIdx] / 10));
   } else {
-    sprintf(item->valueDescr, "%d km/h", LOG_SPEED_VALUES[cfg.logSpeedIdx]);
+    sprintf(item->valueDescr, "%d.%d km/h", (LOG_SPEED_VALUES[cfg.logSpeedIdx] / 10),
+            (LOG_SPEED_VALUES[cfg.logSpeedIdx] % 10));
   }
 }
 
@@ -827,7 +865,7 @@ void onLogFullActionUpdate(cfgitem_t *item) {
   if (cfg.logFullStop) {
     strcpy(item->valueDescr, "Stop logging");
   } else {
-    strcpy(item->valueDescr, "Overwrite");
+    strcpy(item->valueDescr, "Overwrap");
   }
 }
 
@@ -943,7 +981,6 @@ void onRecordSatUpdate(cfgitem_t *item) {
   setValueDescrByBool(item->valueDescr, (cfg.logFormat & FMT_NSAT));
 };
 
-
 void onPairWithLoggerCfgSelect(cfgitem_t *item) {
   runPairWithLogger();
   ui.waitForInputOk(IDLE_SHUTDOWN);
@@ -973,7 +1010,7 @@ void onLogModeSubMenuSelect(cfgitem_t *item) {
   // enter the log mode configuration sub-menu
   int8_t itemCount = (sizeof(cfgLogMode) / sizeof(cfgitem_t));
   ui.openConfigMenu("Settings > Log Mode", cfgLogMode, itemCount, IDLE_SHUTDOWN);
-  
+
   // return to the parent menu
 }
 
@@ -985,39 +1022,72 @@ void onLogFormatSubMenuSelect(cfgitem_t *item) {
   // return to the parent menu
 }
 
+void onPerformFormatSelect(cfgitem_t *) {
+  ui.drawDialogFrame("Format SD card");
+
+  ui.drawDialogMessage(BLUE, 0, "Are you sure to format the SD card?");
+  ui.drawDialogMessage(RED, 1, "Note : All data on the SD card will be lost.");
+  ui.drawDialogMessage(RED, 2, "  This operation cannot be undone.");
+
+  if (ui.waitForInputOkCancel(IDLE_SHUTDOWN) == BID_OK) {
+    ui.drawDialogMessage(BLACK, 0, "Are you sure to format the SD card? [ OK ]");
+  } else {
+    ui.drawDialogMessage(BLACK, 0, "Are you sure to format the SD card? [Cancel]");
+    ui.drawDialogMessage(BLUE, 4, "The operation is not performed.");
+
+    ui.waitForInputOk(IDLE_SHUTDOWN);
+    return;
+  }
+
+  ui.drawDialogMessage(BLUE, 3, "Formatting the SD card...");
+  if (SDcard.format()) {
+    ui.drawDialogMessage(BLACK, 3, "Formatting the SD card... done.");
+    ui.drawDialogMessage(BLUE, 4, "The SD card is formatted successfully.");
+  } else {
+    ui.drawDialogMessage(RED, 3, "Formatting the SD card... failed.");
+    ui.drawDialogMessage(RED, 4, "Failed to format the SD card. Please retry.");
+    return;
+  }
+
+  ui.waitForInputOk(IDLE_SHUTDOWN);
+
+  SDcard.end();
+  M5.Power.reset();
+}
+
 void onClearSettingsSelect(cfgitem_t *item) {
   ui.drawDialogFrame("Clear Settings");
   ui.drawDialogMessage(BLUE, 0, "Are you sure to clear all settings?");
-  ui.drawDialogMessage(BLACK, 1, "Note: The log data on the paired GPS logger");
+  ui.drawDialogMessage(BLACK, 1, "Note : The log data on the paired GPS logger");
   ui.drawDialogMessage(BLACK, 2, "  and the files in the SD card will NOT be");
   ui.drawDialogMessage(BLACK, 3, "  deleted by this operation.");
-  
+
   if (ui.waitForInputOkCancel(IDLE_SHUTDOWN) == BID_OK) {
     ui.drawDialogMessage(BLACK, 0, "Are you sure to clear all settings? [ OK ]");
     ui.drawDialogMessage(BLUE, 5, "Clear all settings...");
     delay(1000);
 
     // clear the configuration data
-    cfg.length = 0; // write the invalid length to the configuration
-    saveAppConfig(); // save the configuration
+    cfg.length = 0;   // write the invalid length to the configuration
+    saveAppConfig();  // save the configuration
 
     // stop the SD card access and reset the device
     SDcard.end();
     M5.Power.reset();
   } else {
     ui.drawDialogMessage(BLACK, 0, "Are you sure to clear all settings? [Cancel]");
-    ui.drawDialogMessage(BLUE, 5, "The operation was canceled by the user.");
+    ui.drawDialogMessage(BLUE, 5, "The operation is not performed.");
 
     ui.waitForInputOk(IDLE_SHUTDOWN);
   }
-} 
+}
 
 bool isDifferent(const void *data1, const void *data2, uint16_t size) {
   uint8_t *pdata1 = (uint8_t *)(data1);
   uint8_t *pdata2 = (uint8_t *)(data2);
   bool diff = false;
 
-  for (uint16_t i=0; i<size; i++) {
+  for (uint16_t i = 0; i < size; i++) {
     diff |= (*pdata1 != *pdata2);
     pdata1 += 1;
     pdata2 += 1;
@@ -1032,11 +1102,11 @@ void saveAppConfig() {
 
   // write the current configuration to EEPROM
   for (uint16_t i = 0; i < sizeof(appconfig_t); i++) {
-    EEPROM.write(i, *pcfg); // write the configuration data byte
-    chk ^= *pcfg;           // calculate the checksum (XOR all bytes)
+    EEPROM.write(i, *pcfg);  // write the configuration data byte
+    chk ^= *pcfg;            // calculate the checksum (XOR all bytes)
     pcfg += 1;
   }
-  EEPROM.write(sizeof(appconfig_t), chk); // checksum
+  EEPROM.write(sizeof(appconfig_t), chk);  // checksum
   EEPROM.commit();
 
   Serial.printf("SmallStep.saveConfig: the configuration is saved to the EEPROM\n");
@@ -1063,8 +1133,7 @@ bool loadAppConfig(bool loadDefault) {
 
   // load the default configuration if loadDefault is set to true or the EEPROM data is invalid
   // (the length field is wrong or the checksum is not matched)
-  loadDefault |=
-      ((cfg.length != sizeof(appconfig_t)) || (EEPROM.read(sizeof(appconfig_t) != chk)));
+  loadDefault |= ((cfg.length != sizeof(appconfig_t)) || (EEPROM.read(sizeof(appconfig_t) != chk)));
   if (loadDefault) {
     memcpy(&cfg, &DEFAULT_CONFIG, sizeof(appconfig_t));
 
@@ -1106,16 +1175,27 @@ void setup() {
   ui.setAppIcon(ICON_APP);
   ui.setAppTitle(APP_NAME);
   ui.drawTitleBar(app.sdcAvail, app.sppActive);
- 
+
   // if left button is pressed, clear the configuration
   if (firstBoot) {
+    // show the welcome message
     ui.drawDialogFrame("Hello :)");
-    ui.drawDialogMessage(BLUE, 0, "Thank you for using SmallStep! This is a data");
-    ui.drawDialogMessage(BLUE, 1, "download utility for classic MTK GPS loggers.");
-    ui.drawDialogMessage(BLACK, 3, "Please pair with your logger and configure the");
-    ui.drawDialogMessage(BLACK, 4, "app settings before use. In particular, you");
-    ui.drawDialogMessage(BLACK, 5, "WOULD need to set your timezone offset in the");
-    ui.drawDialogMessage(BLACK, 6, "output settings menu.");
+    ui.drawDialogMessage(BLUE, 0, "SmallStep is a configuration and data down-");
+    ui.drawDialogMessage(BLUE, 1, "loading utility for classic MTK GPS loggers.");
+    ui.drawDialogMessage(BLACK, 3, "This software has been tested and released,");
+    ui.drawDialogMessage(BLACK, 4, "but comes with NO WARRANTY. If you find any");
+    ui.drawDialogMessage(BLACK, 5, "bugs, please report it to the author.");
+    ui.waitForInputOk(IDLE_SHUTDOWN);
+
+    // welcome message for Holux M-241 users
+    ui.drawDialogFrame("For Holux M-241 users");
+    ui.drawDialogMessage(BLACK, 0, "Smallstep can be used with Holux M-241.");
+    ui.drawDialogMessage(RED, 1, "However, changing the log mode and format are");
+    ui.drawDialogMessage(BLACK, 2, "NOT SUPPORTED on this model. It seems to work");
+    ui.drawDialogMessage(RED, 2, "NOT SUPPORTED on this model.");
+    ui.drawDialogMessage(BLACK, 3, "fine, but will be ignored after restart.");
+    ui.drawDialogMessage(BLACK, 5, "Please use the settings menu on the logger");
+    ui.drawDialogMessage(BLACK, 6, "to configure them.");
     ui.waitForInputOk(IDLE_SHUTDOWN);
   }
 

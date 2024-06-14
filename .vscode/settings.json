@@ -8,5 +8,6 @@
         "sstream": "cpp",
         "iomanip": "cpp"
     },
-    "C_Cpp.clang_format_style": "{ BasedOnStyle: Google, ColumnLimit: 100, UseTab: Never, IndentCaseLabels: false, AllowShortFunctionsOnASingleLine: None }"
+    "editor.formatOnSave": true,
+    "C_Cpp.clang_format_style": "{ BasedOnStyle: Google, ColumnLimit: 120, UseTab: Never, IndentCaseLabels: false, AllowShortFunctionsOnASingleLine: None }"
 }
