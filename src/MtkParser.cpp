@@ -22,23 +22,22 @@ bool MtkParser::isDifferentDate(uint32_t t1, uint32_t t2) {
 void MtkParser::setRecordFormat(uint32_t format) {
   status.logFormat = format;
 
-  status.ignoreLen1 = (sizeof(uint16_t) * (bool)(format & FMT_VALID));
-  status.ignoreLen2 = (sizeof(float) * (bool)(format & FMT_TRACK)) +
-                      (sizeof(uint16_t) * (bool)(format & FMT_DSTA)) +
-                      (sizeof(float) * (bool)(format & FMT_DAGE)) +
-                      (sizeof(uint16_t) * (bool)(format & FMT_PDOP)) +
-                      (sizeof(uint16_t) * (bool)(format & FMT_HDOP)) +
-                      (sizeof(uint16_t) * (bool)(format & FMT_VDOP)) +
-                      (sizeof(uint16_t) * (bool)(format & FMT_NSAT));
-  status.ignoreLen3 = (sizeof(int16_t) * (bool)(format & FMT_ELE)) +
-                      (sizeof(uint16_t) * (bool)(format & FMT_AZI)) +
-                      (sizeof(uint16_t) * (bool)(format & FMT_SNR));
-  status.ignoreLen4 =
-      (sizeof(uint16_t) * (bool)(format & FMT_MSEC)) + (sizeof(double) * (bool)(format & FMT_DIST));
+  status.seekOffset1 = (sizeof(uint16_t) * (bool)(format & FMT_VALID));  //
+  status.seekOffset2 = (sizeof(float) * (bool)(format & FMT_TRACK)) +    //
+                       (sizeof(uint16_t) * (bool)(format & FMT_DSTA)) +  //
+                       (sizeof(float) * (bool)(format & FMT_DAGE)) +     //
+                       (sizeof(uint16_t) * (bool)(format & FMT_PDOP)) +  //
+                       (sizeof(uint16_t) * (bool)(format & FMT_HDOP)) +  //
+                       (sizeof(uint16_t) * (bool)(format & FMT_VDOP)) +  //
+                       (sizeof(uint16_t) * (bool)(format & FMT_NSAT));   //
+  status.seekOffset3 = (sizeof(int16_t) * (bool)(format & FMT_ELE)) +    //
+                       (sizeof(uint16_t) * (bool)(format & FMT_AZI)) +   //
+                       (sizeof(uint16_t) * (bool)(format & FMT_SNR));    //
+  status.seekOffset4 = (sizeof(uint16_t) * (bool)(format & FMT_MSEC)) +  //
+                       (sizeof(double) * (bool)(format & FMT_DIST));     //
 
-  Serial.printf("Parser.setFormat: change log format [reg=0x%08X, ignoreLen={%d, %d, %d, %d}]\n",
-                status.logFormat, status.ignoreLen1, status.ignoreLen2, status.ignoreLen3,
-                status.ignoreLen4);
+  Serial.printf("Parser.setFormat: change log format [reg=0x%08X, ignoreLen={%d, %d, %d, %d}]\n", status.logFormat,
+                status.seekOffset1, status.seekOffset2, status.seekOffset3, status.seekOffset4);
 }
 
 void MtkParser::setOptions(parseopt_t opts) {
@@ -69,7 +68,7 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   }
 
   // skip VALID field if it exists
-  in->seekCur(status.ignoreLen1);
+  in->seekCur(status.seekOffset1);
 
   // read LAT, LON, ELE fields if they exist
   if (status.m241Mode) {  // for Holux M-241
@@ -86,22 +85,22 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   if (rcd->format & FMT_SPEED) rcd->speed = in->readFloat() / 3.60;
 
   // skip TRACK, DSTA, DAGE, PDOP, HDOP, VDO, NSAT fields if they exist
-  in->seekCur(status.ignoreLen2);
+  in->seekCur(status.seekOffset2);
 
   // skip SID, ELE + AZI + SNR fields if they exist
   if (rcd->format & FMT_SID) {
-    // read the number of SATs in view
-    uint8_t siv = (uint8_t)(in->readInt32() & 0x0000FFFF);  // number of SATs in view
+    // read the number of SATs in view (lower 8 bit of 32-bit int)
+    uint8_t siv = (uint8_t)(in->readInt32() & 0x000000FF);  // number of SATs in view
     siv = (siv == 0xFF) ? 0 : siv;
 
     // skip SIV x (ELE + AZI + SNR) fields
-    in->seekCur(status.ignoreLen3 * siv);
+    in->seekCur(status.seekOffset3 * siv);
   }
 
   // read RCR field if it exists
   if (rcd->format & FMT_RCR) {
     // get the lower 4 bits of the RCR field
-    rcd->reason = (in->readInt16() & 0b00001111);
+    rcd->reason = (uint8_t)(in->readInt16() & 0b00001111);
 
     // RCR reason code
     // 0b0001: recorded by the time criteria
@@ -111,7 +110,7 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   }
 
   // skip MSEC, DIST fields if they exist
-  in->seekCur(status.ignoreLen4);
+  in->seekCur(status.seekOffset4);
 
   // store the size of the record
   rcd->size = (in->position() - startPos);
@@ -168,19 +167,28 @@ bool MtkParser::readBinMarkers() {
 
       // do action according to the DSP type
       switch (dsType) {
-      case DSP_CHANGE_FORMAT:  // change format register
+      case DST_CHANGE_FORMAT:  // change format register
+        Serial.printf("Parser.readMarker: Change log format at 0x%05X [t=%d, v=0x%08X]\n", startPos, dsType, dsVal);
+
         setRecordFormat(dsVal);
         break;
-      case DSP_LOG_STARTSTOP:  // log start/stop
-        if (options.trackMode == TRK_ONE_DAY) {
-          out->endTrackSegment();
-        } else if (options.trackMode == TRK_AS_IS) {
+      case DST_LOG_STARTSTOP:  // log start(0x106), stop(0x0104)
+        Serial.printf("Parser.readMarker: LOG start/stop at 0x%05X [t=%d, v=0x%04X]\n", startPos, dsType, dsVal);
+
+        if ((dsVal == DSV_LOG_START) && (options.trackMode == TRK_AS_IS)) {
           out->endTrack();
         }
         break;
+      case DST_CHANGE_METHOD:
+      case DST_AUTOLOG_DIST:
+      case DST_AUTOLOG_TIME:
+      case DST_AUTOLOG_SPEED:
+        // do nothing
+        break;
+      default:
+        Serial.printf("Parser.readMarker: Unknown DSP type at 0x%05X [t=%d, v=0x%08X]\n", startPos, dsType, dsVal);
+        break;
       }
-
-      Serial.printf("Parser.readMarker: DSP at 0x%05X [t=%d, v=0x%04X]\n", startPos, dsType, dsVal);
     }
   } else if (matchBinPattern(PTN_M241, sizeof(PTN_M241))) {  // M-241
     matchBinPattern(PTN_M241_SP, sizeof(PTN_M241_SP));       // M-241 fw1.13
@@ -242,8 +250,8 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int8
 
     if (in->position() <= sectorStart) {
       in->seekCur(sectorStart - in->position());
-      printf("Parser.convert: sector#%d start at 0x%05X, %d records\n", status.sectorPos,
-             sectorStart, (uint16_t)in->readInt16());
+      printf("Parser.convert: sector#%d start at 0x%05X, %d records\n", status.sectorPos, sectorStart,
+             (uint16_t)in->readInt16());
       setRecordFormat(in->readInt32());
       in->seekCur(dataStart - in->position());
     }
@@ -262,8 +270,14 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int8
       out->endTrack();
     }
 
+    // write the last lecord as TRKPT
     out->putTrkpt(rcd);
 
+    if ((options.putWaypts) && (rcd.reason & RCR_LOG_BY_USER)) {
+      out->addWaypt(rcd);
+    }
+
+    // store the first and last trkpt
     if (status.firstTrkpt.time == 0) {
       memcpy(&status.firstTrkpt, &rcd, sizeof(gpsrecord_t));
     }
@@ -281,6 +295,7 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int8
 
   status.trackCount = out->getTrackCount();
   status.trkptCount = out->getTrkptCount();
+  status.wayptCount = out->getWayptCount();
 
   delete in;
   delete out;
@@ -296,10 +311,14 @@ gpsrecord_t MtkParser::getLastTrkpt() {
   return status.lastTrkpt;
 }
 
-uint32_t MtkParser::getTrackCount() {
+int32_t MtkParser::getTrackCount() {
   return status.trackCount;
 }
 
-uint32_t MtkParser::getTrkptCount() {
+int32_t MtkParser::getTrkptCount() {
   return status.trkptCount;
+}
+
+int32_t MtkParser::getWayptCount() {
+  return status.wayptCount;
 }

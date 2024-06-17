@@ -14,7 +14,6 @@
 #define SD_ACCESS_SPEED 15000000  // 20MHz may cause SD card error
 #define BT_ADDR_LEN 6
 #define DEV_NAME_LEN 20
-#define IDLE_SHUTDOWN true  // unit: msec
 
 typedef struct appstatus {
   bool sdcAvail;
@@ -53,6 +52,7 @@ bool runPairWithLogger();
 bool runClearFlash();
 bool runSetLogFormat();
 bool runSetLogMode();
+void onAppInputIdle();
 void onDownloadLogSelect(menuitem_t *);
 void onFixRTCtimeSelect(menuitem_t *);
 void onShowLocationSelect(menuitem_t *);
@@ -111,6 +111,7 @@ void updateAppHint();
 
 const char *APP_NAME = "SmallStep";
 const char LCD_BRIGHTNESS = 10;
+const uint32_t IDLE_TIMEOUT = 120000;
 
 const float TIME_OFFSET_VALUES[] = {
     -12, -11, -10, -9, -8,  -7, -6,  -5, -4.5, -4, -3.5, -3, -2,  -1, 0,  1,
@@ -121,18 +122,18 @@ const int16_t LOG_SPEED_VALUES[] = {0,   100,  200,  300,  400,  500,  600,  700
                                     900, 1000, 1200, 1400, 1600, 1800, 2000, 2500, 3000};  // uint: .1 km/h
 
 const appconfig_t DEFAULT_CONFIG = {
-    sizeof(appconfig_t),                                                   // length
-    {0, 0, 0, 0, 0, 0},                                                    // loggerAddr
-    "NO LOGGER",                                                           // loggerName
-    TRK_AS_IS,                                                             // trackMode
-    14,                                                                    // timeOffsetIdx (14: UTC+0)
-    false,                                                                 // putWaypt
-    false,                                                                 // leaveBinFile
-    0,                                                                     // logDistIdx (0: disabled)
-    4,                                                                     // logTimeIdx (7: 10 seconds)
-    0,                                                                     // logSpeedIdx (0: disabled)
-    true,                                                                  // logFullStop
-    (FMT_FIXONLY | FMT_TIME | FMT_LON | FMT_LAT | FMT_HEIGHT | FMT_SPEED)  // logFormat
+    sizeof(appconfig_t),                                                             // length
+    {0, 0, 0, 0, 0, 0},                                                              // loggerAddr
+    "NO LOGGER",                                                                     // loggerName
+    TRK_ONE_DAY,                                                                     // trackMode
+    14,                                                                              // timeOffsetIdx (14: UTC+0)
+    true,                                                                            // putWaypt
+    false,                                                                           // leaveBinFile
+    0,                                                                               // logDistIdx (0: disabled)
+    4,                                                                               // logTimeIdx (7: 10 seconds)
+    0,                                                                               // logSpeedIdx (0: disabled)
+    true,                                                                            // logFullStop
+    (FMT_FIXONLY | FMT_TIME | FMT_LON | FMT_LAT | FMT_HEIGHT | FMT_SPEED | FMT_RCR)  // logFormat
 };
 
 menuitem_t menuMain[] = {
@@ -152,7 +153,7 @@ cfgitem_t cfgOutput[] = {
     {"Back", "Exit this menu", "<<", NULL, NULL},
     {"Track mode", "How to divide tracks in GPX file", "", &onTrackModeSelect, &onTrackModeUpdate},
     {"Timezone offset", "UTC offset for 'a track per day' mode", "", &onTimezoneSelect, &onTimezoneUpdate},
-    // {"Put WAYPTs", "Treat points recorded by button press as WAYPTs", "", &onPutWayptSelect, &onPutWayptUpdate},
+    {"Put WAYPTs", "Treat points recorded by button press as WAYPTs", "", &onPutWayptSelect, &onPutWayptUpdate},
     {"Leave BIN file", "Save BIN file with the same name as GPX file", "", &onLeaveBinFileSelect,
      &onLeaveBinFileUpdate},
 };
@@ -185,7 +186,7 @@ cfgitem_t cfgLogFormat[] = {
     {"MSEC", "Time data in millisecond", "", &onRecordMillisSelect, &onRecordMillisUpdate},
     {"DSTA, DAGE", "Differencial GPS data", "Disabled", &onRecordDgpsSelect, &onRecordDgpsUpdate},
     {"PDOP, HDOP, VDOP", "Dilution of precision data", "Disabled", &onRecordDopSelect, &onRecordDopUpdate},
-    {"NSAT, ALT, AZI, SNR", "Logs satellite data", "Disabled", &onRecordSatSelect, &onRecordSatUpdate},
+    {"NSAT, ELE, AZI, SNR", "Satellite data", "Disabled", &onRecordSatSelect, &onRecordSatUpdate},
 };
 
 cfgitem_t *cfgResetFormat = &cfgLogFormat[1];
@@ -262,11 +263,11 @@ bool isLoggerPaired() {
     ui.drawDialogMessage(BLACK, 0, "Pairing has not been done yet.");
     ui.drawDialogMessage(BLUE, 1, "Pair with your GPS logger now?");
 
-    if (ui.waitForInputOkCancel(IDLE_SHUTDOWN) == BID_OK) {
+    if (ui.waitForInputOkCancel() == BID_OK) {
       ui.drawDialogMessage(BLACK, 1, "Pair with your GPS logger now? [ OK ]");
       paired = runPairWithLogger();
 
-      if (paired) ui.waitForInputOk(IDLE_SHUTDOWN);
+      if (paired) ui.waitForInputOk();
     } else {
       ui.drawDialogMessage(BLACK, 1, "Pair with your GPS logger now? [Cancel]");
       ui.drawDialogMessage(BLUE, 3, "The pairing operation is not performed.");
@@ -300,7 +301,7 @@ void setValueDescrByBool(char *descr, bool value) {
 bool runDownloadLog() {
   const char TEMP_BIN[] = "download.bin";
   const char TEMP_GPX[] = "download.gpx";
-  const char GPX_PREFIX[] = "gpslog_";
+  const char GPX_PREFIX[] = "gps_";
   const char DATETIME_FMT[] = "%04d%02d%02d-%02d%02d%02d";
 
   // return false if the logger is not paired yet
@@ -341,8 +342,9 @@ bool runDownloadLog() {
     }
 
     // disconnect from the logger and close the downloaded file
-    binFileW.close();
     logger.disconnect();
+    binFileW.flush();
+    binFileW.close();
   }
   ui.drawDialogMessage(BLACK, 1, "Downloading log data... done.");
 
@@ -360,16 +362,17 @@ bool runDownloadLog() {
     return false;
   }
 
-  ui.drawDialogMessage(BLUE, 2, "Converting data to GPX format...");
+  ui.drawDialogMessage(BLUE, 2, "Converting data to GPX file...");
   {
-    parseopt_t parseopt = {cfg.trackMode, TIME_OFFSET_VALUES[cfg.timeOffsetIdx]};
+    parseopt_t parseopt = {cfg.trackMode, TIME_OFFSET_VALUES[cfg.timeOffsetIdx], cfg.putWaypt};
 
     // convert the binary file to GPX file and get the summary
     MtkParser *parser = new MtkParser();
     parser->setOptions(parseopt);
     parser->convert(&binFileR, &gpxFileW, &progressCallback);
-    uint32_t tracks = parser->getTrackCount();
-    uint32_t trkpts = parser->getTrkptCount();
+    uint32_t trackCnt = parser->getTrackCount();
+    uint32_t trkptCnt = parser->getTrkptCount();
+    uint32_t wayptCnt = parser->getWayptCount();
     time_t time1st = parser->getFirstTrkpt().time;
     delete parser;
 
@@ -377,7 +380,7 @@ bool runDownloadLog() {
     binFileR.close();
     gpxFileW.close();
 
-    if (trkpts > 0) {
+    if (trkptCnt > 0) {
       // make a unique name for the GPX file
       struct tm *ltime = localtime(&time1st);
       char timestr[16], gpxName[32], binName[32];
@@ -386,32 +389,42 @@ bool runDownloadLog() {
               (ltime->tm_mon + 1),      // month (1-12)
               ltime->tm_mday,           // day of month (1-31)
               ltime->tm_hour, ltime->tm_min, ltime->tm_sec);
-      sprintf(gpxName, "%s%s.gpx", GPX_PREFIX, timestr);
-      for (uint16_t i = 2; SDcard.exists(gpxName) && (i < 65535); i++) {
+
+      uint16_t i = 1;
+      do {
         sprintf(gpxName, "%s%s_%02d.gpx", GPX_PREFIX, timestr, i);
         sprintf(binName, "%s%s_%02d.bin", GPX_PREFIX, timestr, i);
-      }
+        i++;
+      } while (SDcard.exists(gpxName) && (i > 0));
 
       // rename the GPX file (download.gpx -> gpslog_YYYYMMDD-HHMMSS.gpx) and
       // the BIN file (download.bin -> gpslog_YYYYMMDD-HHMMSS.bin) if needed
       SDcard.rename(TEMP_GPX, gpxName);
-      if (cfg.leaveBinFile) SDcard.rename(TEMP_BIN, binName);
+      if (cfg.leaveBinFile) {
+        SDcard.rename(TEMP_BIN, binName);
+      } else {
+        SDcard.remove(TEMP_BIN);
+      }
 
       // make the output message strings
       char outputstr[48], summarystr[48];
       sprintf(outputstr, "Output file : %s", gpxName);
-      sprintf(summarystr, "Log summary : %d tracks, %d trkpts", tracks, trkpts);
-
+      if (cfg.putWaypt) {
+        sprintf(summarystr, "Summary : %d TRKs, %d TRKPTs, %d WPTs", trackCnt, trkptCnt, wayptCnt);
+      } else {
+        sprintf(summarystr, "Summary : %d TRKs, %d TRKPTs", trackCnt, trkptCnt);
+      }
       // print the result message
-      ui.drawDialogMessage(BLACK, 2, "Converting data to GPX format... done.");
+      ui.drawDialogMessage(BLACK, 2, "Converting data to GPX file... done.");
       ui.drawDialogMessage(BLUE, 3, outputstr);
       ui.drawDialogMessage(BLUE, 4, summarystr);
     } else {
       // remove the GPX file that has no valid record
       SD.remove(TEMP_GPX);
+      SD.remove(TEMP_BIN);
 
       // print the result message
-      ui.drawDialogMessage(BLACK, 2, "Converting data to GPX format... done.");
+      ui.drawDialogMessage(BLACK, 2, "Converting data to GPX file... done.");
       ui.drawDialogMessage(BLUE, 3, "No output file is saved because of there is");
       ui.drawDialogMessage(BLUE, 4, "no valid record in the log data.");
     }
@@ -420,13 +433,19 @@ bool runDownloadLog() {
   return true;
 }
 
+void onAppInputIdle() {
+  Serial.printf("SmallStep.onAppInputIdle: idle shutdown\n");
+  SDcard.end();
+  M5.Power.powerOFF();
+}
+
 /**
  *
  */
 void onDownloadLogSelect(menuitem_t *item) {
   runDownloadLog();
   logger.disconnect();
-  ui.waitForInputOk(IDLE_SHUTDOWN);
+  ui.waitForInputOk();
 }
 
 bool runFixRTCtime() {
@@ -472,7 +491,7 @@ bool runFixRTCtime() {
 void onFixRTCtimeSelect(menuitem_t *item) {
   runFixRTCtime();
   logger.disconnect();
-  ui.waitForInputOk(IDLE_SHUTDOWN);
+  ui.waitForInputOk();
 }
 
 /**
@@ -546,7 +565,7 @@ bool runPairWithLogger() {
  */
 void onPairWithLoggerSelect(menuitem_t *item) {
   runPairWithLogger();
-  ui.waitForInputOk(IDLE_SHUTDOWN);
+  ui.waitForInputOk();
 }
 
 bool runClearFlash() {
@@ -559,7 +578,7 @@ bool runClearFlash() {
 
   // prompt the user to confirm the operation
   ui.drawDialogMessage(BLUE, 0, "Are you sure to erase log data?");
-  if (ui.waitForInputOkCancel(IDLE_SHUTDOWN) == BID_OK) {
+  if (ui.waitForInputOkCancel() == BID_OK) {
     ui.drawDialogMessage(BLACK, 0, "Are you sure to erase log data? [ OK ]");
     ui.drawNavBar(NULL);
   } else {
@@ -597,7 +616,7 @@ bool runClearFlash() {
 void onClearFlashSelect(menuitem_t *item) {
   runClearFlash();
   logger.disconnect();
-  ui.waitForInputOk(IDLE_SHUTDOWN);
+  ui.waitForInputOk();
 }
 
 bool runSetLogFormat() {
@@ -658,7 +677,7 @@ bool runSetLogFormat() {
 void onSetLogFormatSelect(menuitem_t *item) {
   runSetLogFormat();
   logger.disconnect();
-  ui.waitForInputOk(IDLE_SHUTDOWN);
+  ui.waitForInputOk();
 }
 
 bool runSetLogMode() {
@@ -733,7 +752,7 @@ bool runSetLogMode() {
 void onSetLogModeSelect(menuitem_t *item) {
   runSetLogMode();
   logger.disconnect();
-  ui.waitForInputOk(IDLE_SHUTDOWN);
+  ui.waitForInputOk();
 }
 
 void onAppSettingSelect(menuitem_t *item) {
@@ -744,7 +763,7 @@ void onAppSettingSelect(menuitem_t *item) {
 
   // open the configuration menu
   int8_t itemCount = (sizeof(cfgMain) / sizeof(cfgitem_t));
-  ui.openConfigMenu("Settings", cfgMain, itemCount, IDLE_SHUTDOWN);
+  ui.openConfigMenu("Settings", cfgMain, itemCount);
 
   // save the configuration if modified
   if (isDifferent(&oldcfg, &cfg, sizeof(appconfig_t))) {
@@ -983,7 +1002,7 @@ void onRecordSatUpdate(cfgitem_t *item) {
 
 void onPairWithLoggerCfgSelect(cfgitem_t *item) {
   runPairWithLogger();
-  ui.waitForInputOk(IDLE_SHUTDOWN);
+  ui.waitForInputOk();
 }
 
 void onPairWithLoggerCfgUpdate(cfgitem_t *item) {
@@ -1001,7 +1020,7 @@ void onReadOnlyItemSelect(cfgitem_t *item) {
 void onOutputSubMenuSelect(cfgitem_t *item) {
   // enter the output configuration sub-menu
   int8_t itemCount = (sizeof(cfgOutput) / sizeof(cfgitem_t));
-  ui.openConfigMenu("Settings > Output", cfgOutput, itemCount, IDLE_SHUTDOWN);
+  ui.openConfigMenu("Settings > Output", cfgOutput, itemCount);
 
   // return to the parent menu
 }
@@ -1009,7 +1028,7 @@ void onOutputSubMenuSelect(cfgitem_t *item) {
 void onLogModeSubMenuSelect(cfgitem_t *item) {
   // enter the log mode configuration sub-menu
   int8_t itemCount = (sizeof(cfgLogMode) / sizeof(cfgitem_t));
-  ui.openConfigMenu("Settings > Log Mode", cfgLogMode, itemCount, IDLE_SHUTDOWN);
+  ui.openConfigMenu("Settings > Log Mode", cfgLogMode, itemCount);
 
   // return to the parent menu
 }
@@ -1017,25 +1036,26 @@ void onLogModeSubMenuSelect(cfgitem_t *item) {
 void onLogFormatSubMenuSelect(cfgitem_t *item) {
   // enter the log format configuration sub-menu
   int8_t itemCount = (sizeof(cfgLogFormat) / sizeof(cfgitem_t));
-  ui.openConfigMenu("Settings > Log Format", cfgLogFormat, itemCount, IDLE_SHUTDOWN);
+  ui.openConfigMenu("Settings > Log Format", cfgLogFormat, itemCount);
 
   // return to the parent menu
 }
 
 void onPerformFormatSelect(cfgitem_t *) {
   ui.drawDialogFrame("Format SD card");
+  ui.drawNavBar(NULL);
 
   ui.drawDialogMessage(BLUE, 0, "Are you sure to format the SD card?");
   ui.drawDialogMessage(RED, 1, "Note : All data on the SD card will be lost.");
   ui.drawDialogMessage(RED, 2, "  This operation cannot be undone.");
 
-  if (ui.waitForInputOkCancel(IDLE_SHUTDOWN) == BID_OK) {
+  if (ui.waitForInputOkCancel() == BID_OK) {
     ui.drawDialogMessage(BLACK, 0, "Are you sure to format the SD card? [ OK ]");
   } else {
     ui.drawDialogMessage(BLACK, 0, "Are you sure to format the SD card? [Cancel]");
     ui.drawDialogMessage(BLUE, 4, "The operation is not performed.");
 
-    ui.waitForInputOk(IDLE_SHUTDOWN);
+    ui.waitForInputOk();
     return;
   }
 
@@ -1049,7 +1069,7 @@ void onPerformFormatSelect(cfgitem_t *) {
     return;
   }
 
-  ui.waitForInputOk(IDLE_SHUTDOWN);
+  ui.waitForInputOk();
 
   SDcard.end();
   M5.Power.reset();
@@ -1062,7 +1082,7 @@ void onClearSettingsSelect(cfgitem_t *item) {
   ui.drawDialogMessage(BLACK, 2, "  and the files in the SD card will NOT be");
   ui.drawDialogMessage(BLACK, 3, "  deleted by this operation.");
 
-  if (ui.waitForInputOkCancel(IDLE_SHUTDOWN) == BID_OK) {
+  if (ui.waitForInputOkCancel() == BID_OK) {
     ui.drawDialogMessage(BLACK, 0, "Are you sure to clear all settings? [ OK ]");
     ui.drawDialogMessage(BLUE, 5, "Clear all settings...");
     delay(1000);
@@ -1078,7 +1098,7 @@ void onClearSettingsSelect(cfgitem_t *item) {
     ui.drawDialogMessage(BLACK, 0, "Are you sure to clear all settings? [Cancel]");
     ui.drawDialogMessage(BLUE, 5, "The operation is not performed.");
 
-    ui.waitForInputOk(IDLE_SHUTDOWN);
+    ui.waitForInputOk();
   }
 }
 
@@ -1175,6 +1195,7 @@ void setup() {
   ui.setAppIcon(ICON_APP);
   ui.setAppTitle(APP_NAME);
   ui.drawTitleBar(app.sdcAvail, app.sppActive);
+  ui.setIdleCallback(&onAppInputIdle, IDLE_TIMEOUT);
 
   // if left button is pressed, clear the configuration
   if (firstBoot) {
@@ -1185,7 +1206,7 @@ void setup() {
     ui.drawDialogMessage(BLACK, 3, "This software has been tested and released,");
     ui.drawDialogMessage(BLACK, 4, "but comes with NO WARRANTY. If you find any");
     ui.drawDialogMessage(BLACK, 5, "bugs, please report it to the author.");
-    ui.waitForInputOk(IDLE_SHUTDOWN);
+    ui.waitForInputOk();
 
     // welcome message for Holux M-241 users
     ui.drawDialogFrame("For Holux M-241 users");
@@ -1194,14 +1215,14 @@ void setup() {
     ui.drawDialogMessage(BLACK, 2, "NOT SUPPORTED on this model. It seems to work");
     ui.drawDialogMessage(RED, 2, "NOT SUPPORTED on this model.");
     ui.drawDialogMessage(BLACK, 3, "fine, but will be ignored after restart.");
-    ui.drawDialogMessage(BLACK, 5, "Please use the settings menu on the logger");
-    ui.drawDialogMessage(BLACK, 6, "to configure them.");
-    ui.waitForInputOk(IDLE_SHUTDOWN);
+    ui.drawDialogMessage(RED, 5, "Please use the settings menu on the logger to");
+    ui.drawDialogMessage(RED, 6, "configure them.");
+    ui.waitForInputOk();
   }
 
   // enter the main menu (infinit loop in this function)
   int8_t itemCount = (sizeof(menuMain) / sizeof(menuitem_t));
-  ui.openMainMenu(menuMain, itemCount, IDLE_SHUTDOWN);
+  ui.openMainMenu(menuMain, itemCount);
 }
 
 void loop() {

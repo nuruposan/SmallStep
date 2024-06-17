@@ -376,36 +376,50 @@ void AppUI::setAppHints(const char *hint1, const char *hint2) {
   if (hint2 != NULL) strncpy(appHint[1], hint2, 16);
 }
 
-btnid_t AppUI::waitForButtonInput(navmenu_t *nav, bool idleShutdown) {
+void AppUI::setIdleCallback(void (*callback)(), uint32_t timeout) {
+  idleCallback = callback;
+  idleTimeout = timeout;
+}
+
+btnid_t AppUI::waitForButtonInput(navmenu_t *nav) {
   drawNavBar(nav);
+
+  uint32_t idleStart = millis();
+  uint32_t idleTime = 0;
 
   btnid_t btn = BID_NONE;
   while (btn == BID_NONE) {
+    idleTime = millis() - idleStart;
+    if ((idleTimeout > 0) && (idleTime > idleTimeout)) {
+      if (idleCallback != NULL) idleCallback();
+      idleStart = millis();
+    }
+
     btn = checkButtonInput(nav);
-    delay(50);
+    delay(LOOP_WAIT);
   }
 
   return btn;
 }
 
-btnid_t AppUI::waitForInputOk(bool idleShutdown) {
+btnid_t AppUI::waitForInputOk() {
   navmenu_t nav;
   nav.items[0] = {"", false};
   nav.items[1] = {"", false};
   nav.items[2] = {"OK", true};
 
-  waitForButtonInput(&nav, idleShutdown);
+  waitForButtonInput(&nav);
 
   return BID_OK;
 }
 
-btnid_t AppUI::waitForInputOkCancel(bool idleShutdown) {
+btnid_t AppUI::waitForInputOkCancel() {
   navmenu_t nav;
   nav.items[0] = {"", false};
   nav.items[1] = {"Cancel", true};
   nav.items[2] = {"OK", true};
 
-  btnid_t btn = (waitForButtonInput(&nav, idleShutdown) == BID_BTN_C) ? BID_OK : BID_CANCEL;
+  btnid_t btn = (waitForButtonInput(&nav) == BID_BTN_C) ? BID_OK : BID_CANCEL;
 
   return btn;
 }
@@ -459,7 +473,7 @@ void AppUI::drawConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount,
   sprite.deleteSprite();
 }
 
-void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount, bool idleShutdown) {
+void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount) {
   navmenu_t nav;
   nav.items[0] = {"Prev", true};
   nav.items[1] = {"Next", true};
@@ -480,7 +494,7 @@ void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount,
     drawConfigMenu(title, menu, itemCount, top, select);
 
     // check the button input
-    switch (waitForButtonInput(&nav, idleShutdown)) {
+    switch (waitForButtonInput(&nav)) {
     case BID_BTN_A:  // move the selection to the previous
       select = (select + (itemCount - 1)) % itemCount;
 
@@ -518,7 +532,7 @@ void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount,
   }
 }
 
-void AppUI::openMainMenu(menuitem_t *menu, int8_t itemCount, bool idleShutdown) {
+void AppUI::openMainMenu(menuitem_t *menu, int8_t itemCount) {
   navmenu_t nav;
   nav.items[0] = {"Prev", true};
   nav.items[1] = {"Next", true};
@@ -531,7 +545,7 @@ void AppUI::openMainMenu(menuitem_t *menu, int8_t itemCount, bool idleShutdown) 
   while (true) {
     drawMainMenu(menu, itemCount, top, select);
 
-    switch (waitForButtonInput(&nav, idleShutdown)) {
+    switch (waitForButtonInput(&nav)) {
     case BID_BTN_A:  // move the selection to the previous
       select = (select + (itemCount - 1)) % itemCount;
       top = (itemCount < 4) ? 0 : (((select - 3) / 3) * 3);

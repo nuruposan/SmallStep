@@ -85,6 +85,8 @@ typedef struct _cfgitem {
 
 class AppUI {
  private:
+  const static int16_t LOOP_WAIT = 50;
+
   TFT_eSprite sprite = TFT_eSprite(&M5.Lcd);
   Button *buttons[3];
 
@@ -93,6 +95,9 @@ class AppUI {
   const uint8_t *btFgIcon;
   const char *appTitle;
   char appHint[2][16];
+  void (*idleCallback)();
+  uint32_t idleTimeout;
+  uint32_t idleStart;
 
   int16_t titleBarHeight;
   int16_t titleBarWidth;
@@ -136,9 +141,10 @@ class AppUI {
   void setAppHints(const char *into1, const char *info2);
   void setAppTitle(const char *title);
   void setAppIcon(const uint8_t *icon);
-  btnid_t waitForButtonInput(navmenu_t *nav, bool idleShutdown);
-  btnid_t waitForInputOk(bool idleShutdown);
-  btnid_t waitForInputOkCancel(bool idleShutdown);
-  void openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount, bool idleShutdown);
-  void openMainMenu(menuitem_t *menu, int8_t itemCount, bool idleShutdown);
+  void setIdleCallback(void (*callback)(), uint32_t timeout);
+  btnid_t waitForButtonInput(navmenu_t *nav);
+  btnid_t waitForInputOk();
+  btnid_t waitForInputOkCancel();
+  void openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount);
+  void openMainMenu(menuitem_t *menu, int8_t itemCount);
 };

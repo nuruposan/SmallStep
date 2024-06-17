@@ -187,7 +187,7 @@ bool MtkLogger::waitForNmeaReply(const char *reply, uint16_t timeout) {
     // print the debug message to the serial console
     Serial.printf("Logger.waitForNmeaReply: <- %s\n", buffer->getBuffer());
 
-    // exit loop (and return true) if the expected response is received
+    // exit loop (and return true) if the expected response is detected
     if (buffer->match(reply)) break;
   }
 
@@ -215,18 +215,13 @@ bool MtkLogger::getLastRecordAddress(int32_t *address) {
   case MODE_FULLSTOP:
     if (!sendNmeaCommand("PMTK182,2,8")) return false;
     if (!waitForNmeaReply("$PMTK182,3,8,", TIMEOUT)) return false;
-
     buffer->readColumnAsInt(3, &endAddr, true);
+
+    waitForNmeaReply("$PMTK001,", ACK_WAIT);
     break;
   case MODE_OVERWRITE:
   default:
-    // send PMTK_Q_RELEASE command (query the firmware release info)
-    if (!sendNmeaCommand("PMTK605")) return false;
-    if (!waitForNmeaReply("$PMTK705,", TIMEOUT)) return false;
-
-    int32_t modelId = 0;
-    buffer->readColumnAsInt(2, &modelId, true);  // read modelID
-    endAddr = modelIdToFlashSize(modelId);
+    if (!getFlashSize(&endAddr)) return false;
     break;
   }
 
@@ -241,74 +236,83 @@ bool MtkLogger::getLastRecordAddress(int32_t *address) {
 
 bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
   const int32_t LOG_TIMEOUT = 2000;
-  const int32_t ACK_WAIT = 100;
   const int32_t REQ_SIZE = 0x4000;
 
   bool nextReq = true;
   int32_t recvSize = 0;
   int32_t endAddr = 0;
   int32_t nextAddr = 0;
+  bool dataEnd = false;
 
   // perform the callback to notify the download process is started
   if (rateCallback) rateCallback(PROGRESS_STARTED);
 
-  // get the last address of the log data to be downloaded
-  // to calcurate the download progress rate
+  // get the last address to be downloaded (endAddr).
+  // the address is the address of the last og data (STOP mode) or the flash size (OVERWRAP mode).
+  // this value will be used for calculating the download progress rate.
   if (!getLastRecordAddress(&endAddr)) return false;
+
+  Serial.printf("Logger.download: a download process started [endAddr=0x%06X]\n", endAddr);
 
   while (gpsSerial->connected()) {
     // break if the download process is finished
-    if (nextAddr >= endAddr) break;
+    if (nextAddr >= endAddr) {
+      // print the success message and
+      Serial.printf("Logger.download: the process finished [endAddr=0x%06X]\n", endAddr);
+      break;
+    }
 
     // send the next download request if the flag set
     if (nextReq) {
       // send the download command
-      waitForNmeaReply("$PMTK001,", ACK_WAIT);
       if (!sendDownloadCommand(nextAddr, REQ_SIZE)) return false;
 
+      // reset the flag and the received size
       nextReq = false;
       recvSize = 0;
     }
 
     // wait for the next data responce
-    // abort the process if one of expected responces are NOT received
+    // abort the process if the expected responces are NOT received
     if (!waitForNmeaReply("$PMTK182,8,", LOG_TIMEOUT)) break;
 
     // read the starting address of the received data from the 3rd column of the line
     int32_t startAddr = 0;
     buffer->readColumnAsInt(2, &startAddr, true);
 
+    // print the debug message to the serial console
+    Serial.printf("Logger.download: recv a data block (%d bytes) [startAddr=0x%06X]\n", 0x800, startAddr);
+
     // ignore this line if the starting address is not the expected value
     if (startAddr != nextAddr) continue;
 
-    // call the callback function to notify the progress
+    // perform the callback function to notify the progress
     if (rateCallback) rateCallback(((float)nextAddr / endAddr) * 100);
-
-    // print the debug message to the serial console
-    Serial.printf("Logger.download: recv data [startAddr=0x%06X]\n", startAddr);
-
-    uint8_t b = 0;         // variable to store the next byte
-    uint16_t ffCount = 0;  // counter for how many 0xFFs are continuous
 
     // read the data from the buffer and write it to the output file
     // and count the continuous 0xFFs to detect the end of the log data
+    // (the download data will be ignored if endFlag is set)
+    uint8_t by = 0;           // variable to store the next byte
+    uint16_t ffCount = 0;     // counter for how many 0xFFs are continuous
     buffer->seekToColumn(3);  // move to the 4th column (data column)
-    while (buffer->readHexByteFull(&b)) {
-      output->write(b);
-      ffCount = (b != 0xFF) ? 0 : (ffCount + 1);  // count continuous 0xFF
+    while ((!dataEnd) && (buffer->readHexByteFull(&by))) {
+      output->write(by);
+      ffCount = (by != 0xFF) ? 0 : (ffCount + 1);  // count continuous 0xFF
     }
 
     // update the next address and the received size
     nextAddr += 0x0800;
     recvSize += 0x0800;
     nextReq = (recvSize >= REQ_SIZE);
-    if (ffCount >= 0x200) endAddr = nextAddr + (REQ_SIZE - recvSize);
+    if (ffCount >= 0x200) {
+      endAddr = nextAddr + (REQ_SIZE - recvSize);
+      dataEnd = true;
 
-    // exit loop when download process is finished or timeout occurred
-    if (nextAddr >= endAddr) {
-      Serial.printf("Logger.download: finished [recvSize=0x%06X]\n", endAddr);
-      break;
+      Serial.printf("Logger.download: found the end of data. update endAddr [endAddr = 0x%06X]\n", endAddr);
     }
+
+    // wait for the next ACK responce if the size received is enough to send the next request
+    if (recvSize >= REQ_SIZE) waitForNmeaReply("$PMTK001,", ACK_WAIT);
   }  // while (gpsSerial.connected())
 
   // close the output file, then clear the buffer
@@ -346,6 +350,7 @@ bool MtkLogger::getFlashSize(int32_t *size) {
   // print debug message
   Serial.printf("Logger.getFlashSize: flash size = 0x%08X\n", *size);
 
+  waitForNmeaReply("$PMTK001,", ACK_WAIT);
   return true;
 }
 
@@ -361,6 +366,7 @@ bool MtkLogger::getLogFormat(uint32_t *format) {
   // print debug message
   Serial.printf("Logger.getLogFormat: log format = 0x%08X\n", *format);
 
+  waitForNmeaReply("$PMTK001,", ACK_WAIT);
   return true;
 }
 
@@ -380,10 +386,10 @@ bool MtkLogger::getLogRecordMode(recordmode_t *recmode) {
 
   int32_t value = 0;
   buffer->readColumnAsInt(3, &value, true);
-  Serial.printf("Logger.getLogFullAction: action = %02d (2=STOP, 1=OVERWRAP)\n", value);
-
   *recmode = (recordmode_t)value;
+  Serial.printf("Logger.getLogFullAction: %2d (2=STOP, 1=OVERWRAP)\n", value);
 
+  waitForNmeaReply("$PMTK001,", ACK_WAIT);
   return (*recmode != MODE_NONE);
 }
 
@@ -421,8 +427,9 @@ bool MtkLogger::getLogByDistance(int16_t *dist) {
   buffer->readColumnAsInt(3, &value, false);
   *dist = value;
 
-  Serial.printf("Logger.getLogByDistance: %d\n", *dist);
+  Serial.printf("Logger.getLogByDistance: %d\n", (*dist / 10));
 
+  waitForNmeaReply("$PMTK001,", ACK_WAIT);
   return true;
 }
 
@@ -446,8 +453,9 @@ bool MtkLogger::getLogByTime(int16_t *time) {
   buffer->readColumnAsInt(3, &value, false);
   *time = value;
 
-  Serial.printf("Logger.getLogByTime: %d\n", *time);
+  Serial.printf("Logger.getLogByTime: %d.%d sec\n", (*time / 10), (*time % 10));
 
+  waitForNmeaReply("$PMTK001,", ACK_WAIT);
   return true;
 }
 bool MtkLogger::setLogBySpeed(int16_t speed) {
@@ -459,6 +467,7 @@ bool MtkLogger::setLogBySpeed(int16_t speed) {
   if (!sendNmeaCommand(buf)) return false;
   if (!waitForNmeaReply("$PMTK001,182,1,", TIMEOUT)) return false;
 
+  waitForNmeaReply("$PMTK001,", ACK_WAIT);
   return true;
 }
 
@@ -470,8 +479,9 @@ bool MtkLogger::getLogBySpeed(int16_t *speed) {
   buffer->readColumnAsInt(3, &value, false);
   *speed = value;
 
-  Serial.printf("Logger.getLogBySpeed: %d\n", *speed);
+  Serial.printf("Logger.getLogBySpeed: %d km/h\n", (*speed / 10));
 
+  waitForNmeaReply("$PMTK001,", ACK_WAIT);
   return true;
 }
 
@@ -538,11 +548,11 @@ void MtkLogger::setEventCallback(esp_spp_cb_t cbfunc) {
 }
 
 bool MtkLogger::reloadDevice() {
-  const int32_t TIMEOUT = 3000;
+  const int32_t RESET_TIMEOUT = 3000;
 
   // send PMTK_CMD_HOT_START command (reload request)
   if (!sendNmeaCommand("PMTK101")) return false;
-  if (!waitForNmeaReply("$PMTK010,", TIMEOUT)) return false;
+  if (!waitForNmeaReply("$PMTK010,", RESET_TIMEOUT)) return false;
 
   return true;
 }
