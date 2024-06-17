@@ -6,38 +6,52 @@
 #include "GpxFileWriter.h"
 #include "MtkFileReader.h"
 
-typedef enum _btnid {
-  DSP_CHANGE_FORMAT = 2,
-  DSP_AUTOLOG_SECOND = 3,
-  DSP_AUTOLOG_METER = 4,
-  DSP_AUTOLOG_SPEED = 5,
-  DSP_CHANGE_METHOD = 6,
-  DSP_LOG_STARTSTOP = 7
+typedef enum _dspid {
+  DST_CHANGE_FORMAT = 2,
+  DST_AUTOLOG_TIME = 3,
+  DST_AUTOLOG_DIST = 4,
+  DST_AUTOLOG_SPEED = 5,
+  DST_CHANGE_METHOD = 6,
+  DST_LOG_STARTSTOP = 7
 } dspid_t;
+
+typedef enum _dsvlog {
+  DSV_LOG_START = 0x0106,
+  DSV_LOG_STOP = 0x0104,
+} dsvlog_t;
+
+typedef enum _rcrval {
+  RCR_LOG_BY_TIME = 0b0001,   //
+  RCR_LOG_BY_DIST = 0b0010,   //
+  RCR_LOG_BY_SPEED = 0b0100,  //
+  RCR_LOG_BY_USER = 0b1000,   //
+} rcrval_t;
 
 typedef enum _trkopt {
   TRK_ONE_DAY = 0,  // divide trasks by local date (default)
-  TRK_AS_IS = 1,    // put tracks as recorded
+  TRK_AS_IS = 1,    // divide tracks by start/stop logging
   TRK_SINGLE = 2    // put all trkpts into a single track
 } trackmode_t;
 
 typedef struct _parseopt {
   trackmode_t trackMode;
   float timeOffset;
+  bool putWaypts;
 } parseopt_t;
 
 typedef struct _parsest {
   uint16_t sectorPos;
   uint32_t logFormat;
-  uint8_t ignoreLen1;
-  uint8_t ignoreLen2;
-  uint8_t ignoreLen3;
-  uint8_t ignoreLen4;
+  uint8_t seekOffset1;
+  uint8_t seekOffset2;
+  uint8_t seekOffset3;
+  uint8_t seekOffset4;
   bool m241Mode;
   gpsrecord_t firstTrkpt;
   gpsrecord_t lastTrkpt;
-  uint32_t trackCount;
-  uint32_t trkptCount;
+  int32_t trackCount;
+  int32_t trkptCount;
+  int32_t wayptCount;
 } parsestatus_t;
 
 class MtkParser {
@@ -50,8 +64,7 @@ class MtkParser {
 
   const char PTN_DSET_AA[7] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
   const char PTN_DSET_BB[4] = {0xBB, 0xBB, 0xBB, 0xBB};
-  const char PTN_M241[16] = {'H', 'O', 'L', 'U', 'X', 'G', 'R', '2',
-                             '4', '1', 'L', 'O', 'G', 'G', 'E', 'R'};
+  const char PTN_M241[16] = {'H', 'O', 'L', 'U', 'X', 'G', 'R', '2', '4', '1', 'L', 'O', 'G', 'G', 'E', 'R'};
   const char PTN_M241_SP[4] = {' ', ' ', ' ', ' '};
   const char PTN_SCT_END[16] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
                                 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
@@ -73,6 +86,7 @@ class MtkParser {
   bool convert(File32 *input, File32 *output, void (*rateCallback)(int8_t));
   gpsrecord_t getFirstTrkpt();
   gpsrecord_t getLastTrkpt();
-  uint32_t getTrackCount();
-  uint32_t getTrkptCount();
+  int32_t getTrackCount();
+  int32_t getTrkptCount();
+  int32_t getWayptCount();
 };
