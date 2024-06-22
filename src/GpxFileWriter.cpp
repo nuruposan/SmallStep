@@ -93,6 +93,7 @@ void GpxFileWriter::endXml() {
 
   out->write("</gpx>\n");
 
+  inXml = false;
   inTrack = false;
   inSegment = false;
 }

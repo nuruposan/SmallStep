@@ -2,48 +2,7 @@
 
 #include <M5Stack.h>
 
-const uint8_t ICON_BT_BG[] = {16,         19,          // Width, Height
-                              0,          0,           // Color
-                              0b00001111, 0b11110000,  //
-                              0b00111111, 0b11111100,  //
-                              0b01111111, 0b11111110,  //
-                              0b01111111, 0b11111110,  //
-                              0b01111111, 0b11111110,  //
-                              0b11111111, 0b11111111,  //
-                              0b11111111, 0b11111111,  //
-                              0b11111111, 0b11111111,  //
-                              0b11111111, 0b11111111,  //
-                              0b11111111, 0b11111111,  //
-                              0b11111111, 0b11111111,  //
-                              0b11111111, 0b11111111,  //
-                              0b11111111, 0b11111111,  //
-                              0b11111111, 0b11111111,  //
-                              0b01111111, 0b11111110,  //
-                              0b01111111, 0b11111110,  //
-                              0b01111111, 0b11111110,  //
-                              0b00111111, 0b11111100,  //
-                              0b00001111, 0b11110000};
-const uint8_t ICON_BT_FG[] = {16,         19,          // Width, Height
-                              0,          0,           // Color
-                              0b00000001, 0b10000000,  //
-                              0b00000001, 0b11000000,  //
-                              0b00000001, 0b11100000,  //
-                              0b00000001, 0b10110000,  //
-                              0b00100001, 0b10011000,  //
-                              0b00110001, 0b10001100,  //
-                              0b00011001, 0b10011000,  //
-                              0b00001101, 0b10110000,  //
-                              0b00000111, 0b11100000,  //
-                              0b00000011, 0b11000000,  //
-                              0b00000111, 0b11100000,  //
-                              0b00001101, 0b10110000,  //
-                              0b00011001, 0b10011000,  //
-                              0b00110001, 0b10001100,  //
-                              0b00100001, 0b10011000,  //
-                              0b00000001, 0b10110000,  //
-                              0b00000001, 0b11100000,  //
-                              0b00000001, 0b11000000,  //
-                              0b00000001, 0b10000000};
+#define APP_HINT_LEN 24
 
 #define COLOR16(r, g, b) (int16_t)((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
 
@@ -58,14 +17,14 @@ typedef enum {
   BID_NO = 13
 } btnid_t;
 
-typedef struct {
+typedef struct _navitem {
   const char *caption;
   bool enabled;
 } navitem_t;
 
-typedef struct {
+typedef struct _navmenu {
   navitem_t items[3];
-  void (*onButtonPress)(btnid_t);
+  void (*onSelect)(_navmenu *);
 } navmenu_t;
 
 typedef struct _menuitem {
@@ -85,19 +44,21 @@ typedef struct _cfgitem {
 
 class AppUI {
  private:
-  const static int16_t LOOP_WAIT = 50;
+  const static int16_t LOOP_WAIT = 70;
 
   TFT_eSprite sprite = TFT_eSprite(&M5.Lcd);
   Button *buttons[3];
 
   const uint8_t *appIcon;
-  const uint8_t *btBgIcon;
-  const uint8_t *btFgIcon;
   const char *appTitle;
-  char appHint[2][16];
+  char appHint[2][APP_HINT_LEN];
   void (*idleCallback)();
   uint32_t idleTimeout;
   uint32_t idleStart;
+  bool sdcardVisible;
+  bool sdcardMounted;
+  bool bluetoothVisible;
+  bool bluetoothActive;
 
   int16_t titleBarHeight;
   int16_t titleBarWidth;
@@ -136,10 +97,12 @@ class AppUI {
   void drawDialogFrame(const char *title);
   void drawDialogMessage(int16_t color, int8_t line, String msg);
   void drawDialogProgress(int32_t progress);
-  void drawTitleBar(bool sdAvail, bool btActive);
+  void drawTitleBar();
   void drawNavBar(navmenu_t *nav);
   void setAppHints(const char *into1, const char *info2);
   void setAppTitle(const char *title);
+  void setSDcardStatus(bool iconVisible, bool mounted);
+  void setBluetoothStatus(bool iconVisible, bool active);
   void setAppIcon(const uint8_t *icon);
   void setIdleCallback(void (*callback)(), uint32_t timeout);
   btnid_t waitForButtonInput(navmenu_t *nav);

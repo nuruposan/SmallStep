@@ -15,12 +15,6 @@
 #define BT_ADDR_LEN 6
 #define DEV_NAME_LEN 20
 
-typedef struct appstatus {
-  bool sdcAvail;
-  bool sppActive;
-  uint8_t loggerAddr[BT_ADDR_LEN];
-} appstatus_t;
-
 typedef struct _appconfig {
   uint16_t length;                  // must be sizeof(appconfig_t)
   uint8_t loggerAddr[BT_ADDR_LEN];  // app - address of paired logger
@@ -153,9 +147,8 @@ cfgitem_t cfgOutput[] = {
     {"Back", "Exit this menu", "<<", NULL, NULL},
     {"Track mode", "How to divide tracks in GPX file", "", &onTrackModeSelect, &onTrackModeUpdate},
     {"Timezone offset", "UTC offset for 'a track per day' mode", "", &onTimezoneSelect, &onTimezoneUpdate},
-    {"Put WAYPTs", "Treat points recorded by button press as WAYPTs", "", &onPutWayptSelect, &onPutWayptUpdate},
-    {"Leave BIN file", "Save BIN file with the same name as GPX file", "", &onLeaveBinFileSelect,
-     &onLeaveBinFileUpdate},
+    {"Put WAYPTs", "Treat manulally recorded points as WAYPTs (POIs)", "", &onPutWayptSelect, &onPutWayptUpdate},
+    {"Save BIN file", "Leave the downloaded data as BIN file", "", &onLeaveBinFileSelect, &onLeaveBinFileUpdate},
 };
 
 cfgitem_t cfgLogMode[] = {
@@ -179,9 +172,10 @@ cfgitem_t cfgLogFormat[] = {
     {"LAT, LON (required fields)", "Latitude and longitude data", "Enabled", &onReadOnlyItemSelect, NULL},
     {"SPEED", "Moving speed data", "", &onRecordSpeedSelect, &onRecordSpeedUpdate},
     {"ALT", "Altitude data", "", &onRecordAltitudeSelect, &onRecordAltitudeUpdate},
-    {"RCR", "Record reason (needed to record WAYPTs)", "", &onRecordRCRSelect, &onRecordRCRUpdate},
+    {"RCR", "Record reason (needed to put WAYPTs)", "", &onRecordRCRSelect, &onRecordRCRUpdate},
+    {"------", "The fields below are not used by SmallStep", "", &onReadOnlyItemSelect, NULL},
     {"TRACK", "Track angle data", "", &onRecordHeadingSelect, &onRecordHeadingUpdate},
-    {"VALID", "Positioning status", "", &onRecordValidSelect, &onRecordValidUpdate},
+    {"VALID", "Positioning status data (valid/invalid)", "", &onRecordValidSelect, &onRecordValidUpdate},
     {"DIST", "Moving distance data", "", &onRecordDistanceSelect, &onRecordDistanceUpdate},
     {"MSEC", "Time data in millisecond", "", &onRecordMillisSelect, &onRecordMillisUpdate},
     {"DSTA, DAGE", "Differencial GPS data", "Disabled", &onRecordDgpsSelect, &onRecordDgpsUpdate},
@@ -206,7 +200,6 @@ cfgitem_t cfgMain[] = {
 AppUI ui = AppUI();
 SdFat SDcard;
 MtkLogger logger = MtkLogger(APP_NAME);
-appstatus_t app;
 appconfig_t cfg;
 uint32_t idleTimer;
 
@@ -221,21 +214,21 @@ void updateAppHint() {
 
 void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   switch (event) {
-  case ESP_SPP_INIT_EVT:
-    if (param == NULL) {  // SPP started
-      app.sppActive = true;
-      ui.drawTitleBar(app.sdcAvail, app.sppActive);
+  case ESP_SPP_INIT_EVT:  // SPP started
+    if (param == NULL) {
+      ui.setBluetoothStatus(true, true);
+      ui.drawTitleBar();
     }
     break;
 
   case ESP_SPP_OPEN_EVT:  // SPP connection established
-    memcpy(app.loggerAddr, param->open.rem_bda, BT_ADDR_LEN);
+    memcpy(cfg.loggerAddr, param->open.rem_bda, BT_ADDR_LEN);
     break;
 
   case ESP_SPP_UNINIT_EVT:  // SPP closed
     if (param == NULL) {
-      app.sppActive = false;
-      ui.drawTitleBar(app.sdcAvail, app.sppActive);
+      ui.setBluetoothStatus(true, false);
+      ui.drawTitleBar();
     }
     break;
   }
@@ -319,8 +312,8 @@ bool runDownloadLog() {
   } else {
     ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
     ui.drawDialogMessage(RED, 1, "- Make sure BT is enabled on the GPS logger");
-    ui.drawDialogMessage(RED, 2, "- Is this occurs repeatly, please restart");
-    ui.drawDialogMessage(RED, 3, "  the logger and SmallStep");
+    ui.drawDialogMessage(RED, 2, "- If this problem occurs repeatly, please re-");
+    ui.drawDialogMessage(RED, 3, "  start the logger and SmallStep");
     return false;
   }
 
@@ -463,8 +456,8 @@ bool runFixRTCtime() {
   } else {
     ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
     ui.drawDialogMessage(RED, 1, "- Make sure BT is enabled on the logger");
-    ui.drawDialogMessage(RED, 2, "- Is this occurs repeatly, please restart");
-    ui.drawDialogMessage(RED, 3, "  the logger and SmallStep");
+    ui.drawDialogMessage(RED, 2, "- If this problem occurs repeatly, please re-");
+    ui.drawDialogMessage(RED, 3, "  start the logger and SmallStep");
     return false;
   }
 
@@ -519,26 +512,24 @@ bool runPairWithLogger() {
     if (logger.connect(DEVICE_NAMES[i])) {  // successfully connected
       logger.disconnect();                  // disconnect
 
-      // get the address of the connected device
-      uint8_t addr[BT_ADDR_LEN];
-      memcpy(addr, app.loggerAddr, BT_ADDR_LEN);
+      // Note: bluetoothCallback is called when the device is connected
+      // and the logger address is set to the configuration before running below code
+
+      // set the logger model name to the configuration
+      strncpy(cfg.loggerName, DEVICE_NAMES[i].c_str(), (DEV_NAME_LEN - 1));
 
       // print the success message
       sprintf(msgbuf1, "- %s : found.", DEVICE_NAMES[i].c_str());
-      sprintf(msgbuf2, "Logger address : %02X%02X-%02X%02X-%02X%02X", addr[0], addr[1], addr[2], addr[3], addr[4],
-              addr[5]);
+      sprintf(msgbuf2, "Logger address : %02X%02X-%02X%02X-%02X%02X", cfg.loggerAddr[0], cfg.loggerAddr[1],
+              cfg.loggerAddr[2], cfg.loggerAddr[3], cfg.loggerAddr[4], cfg.loggerAddr[5]);
       ui.drawDialogMessage(BLACK, 0, "Discovering GPS logger... done");
       ui.drawDialogMessage(BLACK, (1 + i), msgbuf1);
       ui.drawDialogMessage(BLUE, (2 + i), "Successfully paired with the discovered logger.");
       ui.drawDialogMessage(BLUE, (3 + i), msgbuf2);
 
-      // copy the address and model name to the configuration
-      memcpy(cfg.loggerAddr, addr, BT_ADDR_LEN);
-      strncpy(cfg.loggerName, DEVICE_NAMES[i].c_str(), (DEV_NAME_LEN - 1));
-
       // update GUI
       updateAppHint();
-      ui.drawTitleBar(app.sdcAvail, app.sppActive);
+      ui.drawTitleBar();
 
       // save the app configuration
       saveAppConfig();
@@ -554,8 +545,8 @@ bool runPairWithLogger() {
   ui.drawDialogMessage(BLACK, 0, "Discovering GPS logger... failed.");
   ui.drawDialogMessage(RED, (1 + DEVICE_COUNT), "Cannot discover any supported logger.");
   ui.drawDialogMessage(RED, (2 + DEVICE_COUNT), "- Make sure BT is enabled on the logger");
-  ui.drawDialogMessage(RED, (3 + DEVICE_COUNT), "- Is this occurs repeatly, please restart");
-  ui.drawDialogMessage(RED, (4 + DEVICE_COUNT), "  the logger and SmallStep");
+  ui.drawDialogMessage(RED, (3 + DEVICE_COUNT), "- If this problem occurs repeatly, please re-");
+  ui.drawDialogMessage(RED, (4 + DEVICE_COUNT), "  start the logger and SmallStep");
 
   return false;
 }
@@ -594,8 +585,8 @@ bool runClearFlash() {
   } else {
     ui.drawDialogMessage(RED, 1, "Connecting to GPS logger... failed.");
     ui.drawDialogMessage(RED, 2, "- Make sure BT is enabled on the logger");
-    ui.drawDialogMessage(RED, 3, "- Is this occurs repeatly, please restart");
-    ui.drawDialogMessage(RED, 4, "  the logger and SmallStep");
+    ui.drawDialogMessage(RED, 3, "- If this problem occurs repeatly, please re-");
+    ui.drawDialogMessage(RED, 4, "  start the logger and SmallStep");
     return false;
   }
 
@@ -634,8 +625,8 @@ bool runSetLogFormat() {
   } else {
     ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
     ui.drawDialogMessage(RED, 1, "- Make sure BT is enabled on the logger");
-    ui.drawDialogMessage(RED, 2, "- Is this occurs repeatly, please restart");
-    ui.drawDialogMessage(RED, 3, "  the logger and SmallStep");
+    ui.drawDialogMessage(RED, 2, "- If this problem occurs repeatly, please re-");
+    ui.drawDialogMessage(RED, 3, "  start the logger and SmallStep");
     return false;
   }
 
@@ -695,8 +686,8 @@ bool runSetLogMode() {
   } else {
     ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
     ui.drawDialogMessage(RED, 1, "- Make sure BT is enabled on the GPS logger");
-    ui.drawDialogMessage(RED, 2, "- This problem occurs repeatly, please restart");
-    ui.drawDialogMessage(RED, 3, "  the logger and SmallStep");
+    ui.drawDialogMessage(RED, 2, "- If this problem occurs repeatly, please re-");
+    ui.drawDialogMessage(RED, 3, "  start the logger and SmallStep");
     return false;
   }
 
@@ -1171,9 +1162,8 @@ void setup() {
   // start the serial
   Serial.begin(115200);
 
-  // clear the global variables (app status & config)
-  memset(&app, 0, sizeof(app));
-  memset(&cfg, 0, sizeof(cfg));
+  // initialize the configuration variable
+  memcpy(&cfg, &DEFAULT_CONFIG, sizeof(appconfig_t));
 
   // initialize the M5Stack
   M5.begin();
@@ -1182,8 +1172,8 @@ void setup() {
   EEPROM.begin(sizeof(appconfig_t) + 1);
   SDcard.begin(GPIO_NUM_4, SD_ACCESS_SPEED);
 
+  // set the bluetooth event handler
   logger.setEventCallback(bluetoothCallback);
-  app.sdcAvail = (SDcard.card()->sectorCount() > 0);
 
   // load the configuration data
   M5.update();
@@ -1194,7 +1184,9 @@ void setup() {
   updateAppHint();
   ui.setAppIcon(ICON_APP);
   ui.setAppTitle(APP_NAME);
-  ui.drawTitleBar(app.sdcAvail, app.sppActive);
+  ui.setBluetoothStatus(true, false);
+  ui.setSDcardStatus(true, SDcard.card()->sectorCount());
+  ui.drawTitleBar();
   ui.setIdleCallback(&onAppInputIdle, IDLE_TIMEOUT);
 
   // if left button is pressed, clear the configuration
@@ -1215,8 +1207,8 @@ void setup() {
     ui.drawDialogMessage(BLACK, 2, "NOT SUPPORTED on this model. It seems to work");
     ui.drawDialogMessage(RED, 2, "NOT SUPPORTED on this model.");
     ui.drawDialogMessage(BLACK, 3, "fine, but will be ignored after restart.");
-    ui.drawDialogMessage(RED, 5, "Please use the settings menu on the logger to");
-    ui.drawDialogMessage(RED, 6, "configure them.");
+    ui.drawDialogMessage(BLUE, 5, "Please use the settings menu on the logger to");
+    ui.drawDialogMessage(BLUE, 6, "configure them.");
     ui.waitForInputOk();
   }
 
