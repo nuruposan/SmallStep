@@ -3,13 +3,10 @@
 AppUI::AppUI() {
   sprite.setColorDepth(8);
 
-  appTitle = "MyApp";
-  memset(appHint[0], 0, sizeof(appHint[0]));
-  memset(appHint[1], 0, sizeof(appHint[1]));
-
   appIcon = NULL;
-  btBgIcon = ICON_BT_BG;
-  btFgIcon = ICON_BT_FG;
+  appTitle = "MyApp";
+  strncpy(appHint[0], "", APP_HINT_LEN);
+  strncpy(appHint[1], "", APP_HINT_LEN);
 
   buttons[0] = &M5.BtnA;
   buttons[1] = &M5.BtnB;
@@ -196,10 +193,9 @@ void AppUI::drawNavBar(navmenu_t *nav) {
 
   if (nav == NULL) {
     navmenu_t nm;
-    memset(&nm, 0, sizeof(navmenu_t));
-    nm.items[0].caption = "";
-    nm.items[1].caption = "";
-    nm.items[2].caption = "";
+    nm.items[0] = {"", false};
+    nm.items[1] = {"", false};
+    nm.items[2] = {"", false};
     drawNavBar(&nm);
     return;
   }
@@ -234,13 +230,13 @@ void AppUI::drawNavBar(navmenu_t *nav) {
   sprite.deleteSprite();
 }
 
-void AppUI::drawTitleBar(bool sdAvail, bool btActive) {
+void AppUI::drawTitleBar() {
   const int16_t TITLE_X = (appIcon == NULL) ? 2 : 32;
   const int16_t TITLE_Y = 2;
   const int16_t APP_ICON_X = 2;
   const int16_t BAT_ICON_X = (titleBarWidth - 24);
-  const int16_t SD_ICON_X = (BAT_ICON_X - 20);
-  const int16_t BT_ICON_X = (SD_ICON_X - 19);
+  const int16_t SD_ICON_X = (sdcardVisible) ? (BAT_ICON_X - 20) : BAT_ICON_X;
+  const int16_t BT_ICON_X = (SD_ICON_X - 18);
   const int16_t ICON_Y = 2;
 
   // スプライト領域の初期化
@@ -255,14 +251,14 @@ void AppUI::drawTitleBar(bool sdAvail, bool btActive) {
   // draw the icons
   if (appIcon != NULL) putAppIcon(&sprite, APP_ICON_X, ICON_Y);
   putBatteryIcon(&sprite, BAT_ICON_X, ICON_Y, M5.Power.getBatteryLevel());
-  putSDcardIcon(&sprite, SD_ICON_X, ICON_Y, sdAvail);
-  putBluetoothIcon(&sprite, BT_ICON_X, ICON_Y, btActive);
+  if (sdcardVisible) putSDcardIcon(&sprite, SD_ICON_X, ICON_Y, sdcardMounted);
+  if (bluetoothVisible) putBluetoothIcon(&sprite, BT_ICON_X, ICON_Y, bluetoothActive);
 
   // draw the hint text
   sprite.setTextSize(1);
   sprite.setTextColor(BLACK);
-  sprite.drawString(appHint[0], 168, 4, 1);
-  sprite.drawString(appHint[1], 168, 14, 1);
+  sprite.drawString(appHint[0], 170, 4, 1);
+  sprite.drawString(appHint[1], 170, 14, 1);
 
   // transfer the sprite to the LCD
   sprite.pushSprite(titleBarLeft, titleBarTop);
@@ -278,12 +274,29 @@ void AppUI::putAppIcon(TFT_eSprite *spr, int16_t x, int16_t y) {
 }
 
 void AppUI::putBluetoothIcon(TFT_eSprite *spr, int16_t x, int16_t y, bool connected) {
-  // 描画色の決定。Bluetoothが未接続の場合はアイコンを灰色背景にする
-  int16_t colorBg = (connected) ? BLUE : DARKGREY;
+  const int16_t ICON_W = 15;
+  const int16_t ICON_H = 20;
 
-  // アイコンの背景・前景を指定位置に描画
-  putBitmap(spr, btBgIcon, x, y, colorBg);
-  putBitmap(spr, btFgIcon, x, y, WHITE);
+  // drawing color for the Bluetooth icon
+  uint16_t colorBg = (connected) ? BLUE : DARKGREY;
+  uint16_t colorFg = WHITE;
+
+  // draw the Bluetooth icon
+  spr->fillRoundRect(x, y, ICON_W, ICON_H, 5, colorBg);           // background circle
+  spr->drawLine(x + 6, y + 1, x + 6, y + (ICON_H - 1), colorFg);  // vertical bar
+  spr->drawLine(x + 7, y + 1, x + 7, y + (ICON_H - 1), colorFg);
+  spr->drawLine(x + 2, y + 5, x + 7, y + 10, colorFg);  // left side
+  spr->drawLine(x + 2, y + 6, x + 7, y + 11, colorFg);
+  spr->drawLine(x + 2, y + 13, x + 7, y + 8, colorFg);
+  spr->drawLine(x + 2, y + 14, x + 7, y + 9, colorFg);
+  spr->drawLine(x + 6, y + 1, x + 11, y + 6, colorFg);  // upper right side
+  spr->drawLine(x + 7, y + 1, x + 12, y + 6, colorFg);
+  spr->drawLine(x + 11, y + 6, x + 6, y + 11, colorFg);
+  spr->drawLine(x + 12, y + 6, x + 6, y + 12, colorFg);
+  spr->drawLine(x + 6, y + 8, x + 11, y + 13, colorFg);  // lower right side
+  spr->drawLine(x + 6, y + 7, x + 12, y + 13, colorFg);
+  spr->drawLine(x + 11, y + 13, x + 6, y + 18, colorFg);
+  spr->drawLine(x + 12, y + 13, x + 7, y + 18, colorFg);
 }
 
 /**
@@ -369,16 +382,26 @@ void AppUI::setAppIcon(const uint8_t *icon) {
 }
 
 void AppUI::setAppHints(const char *hint1, const char *hint2) {
-  memset(appHint[0], 0, sizeof(appHint[0]));
-  memset(appHint[1], 0, sizeof(appHint[1]));
+  strncpy(appHint[0], "", APP_HINT_LEN);
+  strncpy(appHint[1], "", APP_HINT_LEN);
 
-  if (hint1 != NULL) strncpy(appHint[0], hint1, 16);
-  if (hint2 != NULL) strncpy(appHint[1], hint2, 16);
+  if (hint1 != NULL) strncpy(appHint[0], hint1, APP_HINT_LEN);
+  if (hint2 != NULL) strncpy(appHint[1], hint2, APP_HINT_LEN);
 }
 
 void AppUI::setIdleCallback(void (*callback)(), uint32_t timeout) {
   idleCallback = callback;
   idleTimeout = timeout;
+}
+
+void AppUI::setBluetoothStatus(bool iconVisible, bool active) {
+  bluetoothVisible = iconVisible;
+  bluetoothActive = active;
+}
+
+void AppUI::setSDcardStatus(bool iconVisible, bool mounted) {
+  sdcardVisible = iconVisible;
+  sdcardMounted = mounted;
 }
 
 btnid_t AppUI::waitForButtonInput(navmenu_t *nav) {
@@ -392,7 +415,6 @@ btnid_t AppUI::waitForButtonInput(navmenu_t *nav) {
     idleTime = millis() - idleStart;
     if ((idleTimeout > 0) && (idleTime > idleTimeout)) {
       if (idleCallback != NULL) idleCallback();
-      idleStart = millis();
     }
 
     btn = checkButtonInput(nav);
@@ -491,6 +513,7 @@ void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount)
   bool endFlag = false;
   bool needSave = false;
   while (!endFlag) {
+    drawTitleBar();
     drawConfigMenu(title, menu, itemCount, top, select);
 
     // check the button input
