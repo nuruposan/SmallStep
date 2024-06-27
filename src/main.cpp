@@ -137,7 +137,7 @@ menuitem_t menuMain[] = {
     {"Erase Log Data", ICON_ERASE_LOG, true, &onClearFlashSelect},
     {"Set Log Mode", ICON_LOG_MODE, true, &onSetLogModeSelect},
     {"Set Log Format", ICON_LOG_FORMAT, true, &onSetLogFormatSelect},
-    //    {"Show Location", ICON_NAVIGATION, true, &onShowLocationSelect},
+    //  {"Show Location", ICON_NAVIGATION, true, &onShowLocationSelect},
     {"Pair w/ Logger", ICON_PAIR_LOGGER, true, &onPairWithLoggerSelect},
     {"App Settings", ICON_APP_SETTINGS, true, &onAppSettingSelect},
 };
@@ -216,7 +216,7 @@ void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   switch (event) {
   case ESP_SPP_INIT_EVT:  // SPP started
     if (param == NULL) {
-      ui.setBluetoothStatus(true, true);
+      ui.setBluetoothIconStatus(true, true);
       ui.drawTitleBar();
     }
     break;
@@ -227,7 +227,7 @@ void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
 
   case ESP_SPP_UNINIT_EVT:  // SPP closed
     if (param == NULL) {
-      ui.setBluetoothStatus(true, false);
+      ui.setBluetoothIconStatus(true, false);
       ui.drawTitleBar();
     }
     break;
@@ -1184,8 +1184,8 @@ void setup() {
   updateAppHint();
   ui.setAppIcon(ICON_APP);
   ui.setAppTitle(APP_NAME);
-  ui.setBluetoothStatus(true, false);
-  ui.setSDcardStatus(true, SDcard.card()->sectorCount());
+  ui.setBluetoothIconStatus(true, false);
+  ui.setSDcardIconStatus(true, SDcard.card()->sectorCount());
   ui.drawTitleBar();
   ui.setIdleCallback(&onAppInputIdle, IDLE_TIMEOUT);
 

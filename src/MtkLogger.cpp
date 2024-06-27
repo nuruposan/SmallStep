@@ -236,7 +236,7 @@ bool MtkLogger::getLastRecordAddress(int32_t *address) {
 
 bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
   const int32_t LOG_TIMEOUT = 2000;
-  const int32_t REQ_SIZE = 0x4000;
+  const int32_t REQ_SIZE = 0x2000;
 
   bool nextReq = true;
   int32_t recvSize = 0;
@@ -251,6 +251,7 @@ bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
   // the address is the address of the last og data (STOP mode) or the flash size (OVERWRAP mode).
   // this value will be used for calculating the download progress rate.
   if (!getLastRecordAddress(&endAddr)) return false;
+  endAddr = REQ_SIZE * ((endAddr / REQ_SIZE) + 1);
 
   Serial.printf("Logger.download: a download process started [endAddr=0x%06X]\n", endAddr);
 

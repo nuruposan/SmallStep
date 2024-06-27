@@ -42,6 +42,28 @@ typedef struct _cfgitem {
   void (*updateValueDescr)(_cfgitem *);
 } cfgitem_t;
 
+typedef struct _uiarea {
+  int16_t w;
+  int16_t h;
+  int16_t x;
+  int16_t y;
+} uiarea_t;
+
+typedef struct _uisize {
+  int16_t w;
+  int16_t h;
+} uisize_t;
+
+typedef struct _uipos {
+  int16_t x;
+  int16_t y;
+} uipos_t;
+
+typedef struct _iconstate {
+  bool visible;
+  bool active;
+} iconstate_t;
+
 class AppUI {
  private:
   const static int16_t LOOP_WAIT = 70;
@@ -55,44 +77,30 @@ class AppUI {
   void (*idleCallback)();
   uint32_t idleTimeout;
   uint32_t idleStart;
-  bool sdcardVisible;
-  bool sdcardMounted;
-  bool bluetoothVisible;
-  bool bluetoothActive;
+  iconstate_t btIcon;
+  iconstate_t sdIcon;
 
-  int16_t titleBarHeight;
-  int16_t titleBarWidth;
-  int16_t titleBarTop;
-  int16_t titleBarLeft;
-  int16_t menuAreaWidth;
-  int16_t menuAreaHeight;
-  int16_t menuAreaTop;
-  int16_t menuAreaLeft;
-  int16_t dlgFrameWidth;
-  int16_t dlgFrameHeight;
-  int16_t dlgTitleHeight;
-  int16_t dlgFrameTop;
-  int16_t dlgFrameLeft;
-  int16_t dlgClientWidth;
-  int16_t dlgClientHeight;
-  int16_t dlgClientTop;
-  int16_t dlgClientLeft;
-  int16_t navBarHeight;
-  int16_t navBarWidth;
-  int16_t navBarTop;
-  int16_t navBarLeft;
+  const uiarea_t TITLE_AREA = {320, 24, 0, 0};
+  const uiarea_t NAV_AREA = {320, 24, 0, (240 - 24)};
+  const uiarea_t CLIENT_AREA = {320, (240 - 48), 0, 24};
+  const uiarea_t DIALOG_AREA = {(int16_t)(CLIENT_AREA.w - 8), (int16_t)(CLIENT_AREA.h - 8),
+                                (int16_t)(CLIENT_AREA.x + 4), (int16_t)(CLIENT_AREA.y + 4)};
 
   btnid_t checkButtonInput(navmenu_t *nav);
   void drawConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount, int8_t top, int8_t select);
   void drawMainMenu(menuitem_t *menu, int8_t itemCount, int8_t top, int8_t select);
-  void putAppIcon(TFT_eSprite *spr, int16_t x, int16_t y);
-  void putBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x, int16_t y, int16_t color);
-  void putBatteryIcon(TFT_eSprite *spr, int16_t x, int16_t y, int8_t level);
-  void putBluetoothIcon(TFT_eSprite *spr, int16_t x, int16_t y, bool connected);
-  void putSDcardIcon(TFT_eSprite *spr, int16_t x, int16_t y, bool mounted);
+  void drawAppIcon(int16_t x, int16_t y);
+  void drawBatteryIcon(int16_t x, int16_t y);
+  void drawBitmap(const uint8_t *iconData, int16_t x, int16_t y, int16_t color);
+  void drawBitmap(const uint8_t *iconData, int16_t x, int16_t y);
+  void drawBluetoothIcon(int16_t x, int16_t y);
+  void drawSDcardIcon(int16_t x, int16_t y);
+  uisize_t getBitmapSize(const uint8_t *iconData);
+  uint16_t getBitmapColor(const uint8_t *iconData);
 
  public:
   AppUI();
+  ~AppUI();
 
   void drawDialogFrame(const char *title);
   void drawDialogMessage(int16_t color, int8_t line, String msg);
@@ -101,8 +109,8 @@ class AppUI {
   void drawNavBar(navmenu_t *nav);
   void setAppHints(const char *into1, const char *info2);
   void setAppTitle(const char *title);
-  void setSDcardStatus(bool iconVisible, bool mounted);
-  void setBluetoothStatus(bool iconVisible, bool active);
+  void setSDcardIconStatus(bool iconVisible, bool mounted);
+  void setBluetoothIconStatus(bool iconVisible, bool active);
   void setAppIcon(const uint8_t *icon);
   void setIdleCallback(void (*callback)(), uint32_t timeout);
   btnid_t waitForButtonInput(navmenu_t *nav);
