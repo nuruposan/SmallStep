@@ -1,7 +1,9 @@
 #include "AppUI.h"
 
 AppUI::AppUI() {
-  sprite.setColorDepth(8);
+  sprite.setColorDepth(8);        // 8 bit/pixel
+  sprite.createSprite(320, 240);  // 8 bit/pixel x (320 x 240) pixels = 76KB
+  sprite.fillScreen(BLACK);
 
   appIcon = NULL;
   appTitle = "MyApp";
@@ -11,34 +13,26 @@ AppUI::AppUI() {
   buttons[0] = &M5.BtnA;
   buttons[1] = &M5.BtnB;
   buttons[2] = &M5.BtnC;
-
-  int16_t screenWidth = 320;   // M5.Lcd.width returns 240??
-  int16_t screenHeight = 240;  // M5.Lcd.width returns 320??
-
-  titleBarWidth = screenWidth;
-  titleBarHeight = 24;
-  titleBarLeft = 0;
-  titleBarTop = 0;
-  navBarWidth = screenWidth;
-  navBarHeight = 24;
-  navBarLeft = 0;
-  navBarTop = screenHeight - navBarHeight;
-  menuAreaWidth = screenWidth;
-  menuAreaHeight = screenHeight - (titleBarHeight + navBarHeight);
-  menuAreaLeft = 0;
-  menuAreaTop = titleBarHeight;
-  dlgFrameWidth = menuAreaWidth - 8;
-  dlgFrameHeight = menuAreaHeight - 8;
-  dlgTitleHeight = 26;
-  dlgClientHeight = dlgFrameHeight - dlgTitleHeight - 8;
-  dlgClientHeight = dlgFrameWidth - 8;
-  dlgFrameLeft = 4;
-  dlgFrameTop = titleBarHeight + 4;
-  dlgClientTop = dlgFrameTop + dlgTitleHeight + 4;
-  dlgClientLeft = dlgFrameLeft + 4;
 }
 
-void AppUI::putBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x, int16_t y, int16_t color) {
+AppUI::~AppUI() {
+  sprite.deleteSprite();
+}
+
+void AppUI::drawBitmap(const uint8_t *iconData, int16_t x, int16_t y) {
+  // icon data format:
+  // - 1st byte: uint8_t width
+  // - 2nd byte: uint8_t height
+  // - 3rd-4th byte: uint16_t color
+  // - 5th byte to the end: uint8_t pixelBits[]
+
+  if (iconData == NULL) return;
+
+  uint16_t iconColor = getBitmapColor(iconData);
+  drawBitmap(iconData, x, y, iconColor);
+}
+
+void AppUI::drawBitmap(const uint8_t *iconData, int16_t x, int16_t y, int16_t color) {
   // icon data format:
   // - 1st byte: uint8_t width
   // - 2nd byte: uint8_t height
@@ -58,7 +52,7 @@ void AppUI::putBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x, int1
     if (*iconData & (0b10000000 >> (i % 8))) {
       int px = x + (i % iconW);
       int py = y + (i / iconW);
-      spr->drawPixel(px, py, color);
+      sprite.drawPixel(px, py, color);
     }
 
     // move to the next byte if the current byte is processed
@@ -67,118 +61,117 @@ void AppUI::putBitmap(TFT_eSprite *spr, const uint8_t *iconData, int16_t x, int1
 }
 
 void AppUI::drawDialogProgress(int32_t progRate) {
-  const int16_t BAR_X = 10;
-  const int16_t BAR_Y = 180;
-  const int16_t BAR_W = 300;
-  const int16_t BAR_H = 18;
-
   // limit the progress value to 0-100
   if (progRate < 0) progRate = 0;
   if (progRate > 100) progRate = 100;
 
-  M5.Lcd.drawRect(BAR_X, BAR_Y, BAR_W, BAR_H, NAVY);
-  if (progRate == 0) {
-    M5.Lcd.fillRect((BAR_X + 1), (BAR_Y + 1), (BAR_W - 2), (BAR_H - 2), LIGHTGREY);
-  } else {
-    M5.Lcd.fillRect(BAR_X, BAR_Y, (BAR_W * (progRate / 100.0)), BAR_H, NAVY);
-  }
+  uint8_t barHeight = 18;
+  uiarea_t barArea = {(int16_t)(DIALOG_AREA.w - 20), barHeight,  //
+                      (int16_t)(DIALOG_AREA.x + 10), (int16_t)(DIALOG_AREA.y + CLIENT_AREA.h - (barHeight * 2.2))};
+  uint16_t colorBg = COLOR16(160, 160, 160);
+  uint16_t colorFg = NAVY;
+  uint16_t fgWidth = (barArea.w * (progRate / 100.0));
+
+  // draw the progress bar
+  sprite.fillRect(barArea.x, barArea.y, fgWidth, barArea.h, colorFg);
+  sprite.fillRect((barArea.x + fgWidth), barArea.y, (barArea.w - fgWidth), barArea.h, colorBg);
+  sprite.drawRect(barArea.x, barArea.y, barArea.w, barArea.h, colorFg);
+
+  // transfer the sprite to the LCD (update the screen)
+  sprite.pushSprite(0, 0);
 }
 
 void AppUI::drawDialogMessage(int16_t color, int8_t line, String msg) {
-  const int16_t MSG_LEFT = 10;
-  const int16_t MSG_TOP = 60;
-  const int16_t LINE_HEIGHT = 18;
+  uipos_t msgPos0 = {(int16_t)(DIALOG_AREA.x + 6), (int16_t)(DIALOG_AREA.y + 36)};
+  int16_t lineHeight = 18;
 
   // set the text font and size (16px ASCII)
-  M5.Lcd.setTextFont(2);
-  M5.Lcd.setTextSize(1);
+  sprite.setTextFont(2);
+  sprite.setTextSize(1);
 
   // print the message text
-  M5.Lcd.setTextColor(color);
-  M5.Lcd.setCursor(MSG_LEFT, (MSG_TOP + (LINE_HEIGHT * line)));
-  M5.Lcd.print(msg);
+  sprite.setTextColor(color);
+  sprite.setCursor(msgPos0.x, (msgPos0.y + (lineHeight * line)));
+  sprite.print(msg);
+
+  // transfer the sprite to the LCD (update the screen)
+  sprite.pushSprite(0, 0);
 }
 
 void AppUI::drawDialogFrame(const char *title) {
-  const int16_t MARGIN = 4;
-  const int16_t DIALOG_X = MARGIN;
-  const int16_t DIALOG_Y = 24 + MARGIN;
-  const int16_t DIALOG_W = M5.Lcd.width() - (MARGIN * 2);
-  const int16_t DIALOG_H = (M5.Lcd.height() - 48) - (MARGIN * 2);
-  const int16_t TITLE_X = 2;
-  const int16_t TITLE_Y = 2;
+  uisize_t titleBarSize = {DIALOG_AREA.w, 30};
+  uipos_t titlePos = {(int16_t)(DIALOG_AREA.x + 4), (int16_t)(DIALOG_AREA.y + 4)};
 
   // initialize the sprite
-  sprite.createSprite(dlgFrameWidth, dlgFrameHeight);
-  sprite.fillScreen(LIGHTGREY);
+  sprite.fillRect(CLIENT_AREA.x, CLIENT_AREA.y, CLIENT_AREA.w, CLIENT_AREA.h, BLACK);
 
-  // draw the dialog frame
-  sprite.fillRect(0, 0, sprite.width(), dlgTitleHeight, COLOR16(0, 128, 255));
-  sprite.drawRect(0, 0, sprite.width(), sprite.height(), DARKGREY);
+  // draw a dialog frame with a title bar
+  sprite.fillRect(DIALOG_AREA.x, DIALOG_AREA.y, DIALOG_AREA.w, DIALOG_AREA.h, LIGHTGREY);
+  sprite.fillRect(DIALOG_AREA.x, DIALOG_AREA.y, DIALOG_AREA.w, titleBarSize.h, COLOR16(0, 128, 255));
+  sprite.drawRect(DIALOG_AREA.x, DIALOG_AREA.y, DIALOG_AREA.w, DIALOG_AREA.h, DARKGREY);
 
-  // print the title
+  // draw the title on the title bar
   sprite.setTextSize(1);
   sprite.setTextColor(BLACK);
-  sprite.drawString(title, TITLE_X, TITLE_Y, 4);
+  sprite.drawString(title, titlePos.x, titlePos.y, 4);
 
   // transfer the sprite to the LCD
-  sprite.pushSprite(dlgFrameLeft, dlgFrameTop);
-  sprite.deleteSprite();
+  sprite.pushSprite(0, 0);
 }
 
 /**
  * Draw the main menu to the client area of the screen.
  * @param menu menu data (array of menuitem_t)
+ * @param itemCount number of menu items
  * @param top top item index
  * @param select selected item index
  */
 void AppUI::drawMainMenu(menuitem_t *menu, int8_t itemCount, int8_t top, int8_t select) {
-  const int16_t MENUAREA_W = M5.Lcd.width();
-  const int16_t MENUAREA_H = M5.Lcd.height() - (24 + 24);
-  const int16_t MENUAREA_X = 0;
-  const int16_t MENUAREA_Y = 24;
-  const int16_t MENUBTN_W = 98;  // ボタンのサイズ指定
-  const int16_t MENUBTN_H = 83;
-  const int16_t MENUBTN1_X = 5;  // 配置の基準とする左上ボタンの位置
-  const int16_t MENUBTN1_Y = 9;
-  const int16_t MARGIN_X = 8;
-  const int16_t MARGIN_Y = 7;
+  uisize_t border = {8, 8};
+  uisize_t margin = {6, 8};
+  uipos_t btnPos0 = {(int16_t)(CLIENT_AREA.x + border.w), (int16_t)(CLIENT_AREA.y + border.h)};
+  uisize_t btnSize = {(int16_t)((CLIENT_AREA.w - (border.w * 2) - (margin.w * 2)) / 3),
+                      (int16_t)((CLIENT_AREA.h - (border.h * 2) - (margin.h)) / 2)};
+  int16_t textOffset = 12;
 
   // メニュー項目の表示位置を補正
   top = (top < 0) ? 0 : (top < itemCount) ? top : itemCount;
   select = (select < top) ? top : (select < itemCount) ? select : itemCount;
 
   // スプライト領域の初期化
-  sprite.createSprite(menuAreaWidth, menuAreaHeight);
-  sprite.fillScreen(BLACK);
+  sprite.fillRect(CLIENT_AREA.x, CLIENT_AREA.y, CLIENT_AREA.w, CLIENT_AREA.h, BLACK);
 
   for (int8_t i = 0; i < 6; i++) {
     int8_t idx = top + i;
     if (idx >= itemCount) break;
 
     menuitem_t *mi = menu + idx;
-
-    int16_t x = MENUBTN1_X + ((MENUBTN_W + MARGIN_X) * (i % 3));
-    int16_t y = MENUBTN1_Y + ((MENUBTN_H + MARGIN_Y) * (i / 3));
-    int16_t color = (idx == select) ? LIGHTGREY : DARKGREY;
+    uipos_t btnPos = {(int16_t)(btnPos0.x + ((btnSize.w + margin.w) * (i % 3))),
+                      (int16_t)(btnPos0.y + ((btnSize.h + margin.h) * (i / 3)))};
+    uipos_t btnTextPos = {(int16_t)(btnPos.x + (btnSize.w / 2)), (int16_t)(btnPos.y + (btnSize.h - textOffset))};
 
     // ボタンの背景を描画
-    sprite.fillRoundRect(x, y, MENUBTN_W, MENUBTN_H, 4, color);
+    uint16_t colorBg = (idx == select) ? LIGHTGREY : DARKGREY;
+    sprite.fillRoundRect(btnPos.x, btnPos.y, btnSize.w, btnSize.h, 4, colorBg);
 
     // ボタンのアイコンを描画
     if (mi->iconData != NULL) {
-      putBitmap(&sprite, mi->iconData, (x + (MENUBTN_W / 2) - (48 / 2)), (y + 12), COLOR16(0, 32, 32));
+      //      putBitmap( mi->iconData, (btnPos.x + (btnSize.w / 2)), (btnPos.y + (btnSize.h / 2)), COLOR16(0,
+      //      32, 32));
+      uisize_t iconSize = getBitmapSize(mi->iconData);
+      uint16_t iconColor = COLOR16(0, 32, 32);
+      drawBitmap(mi->iconData, (btnPos.x + ((btnSize.w - iconSize.w) / 2)),
+                 (btnPos.y + ((btnSize.h - iconSize.h - textOffset) / 2)), iconColor);
     }
 
     // ボタンのキャプションを描画
     sprite.setTextSize(1);
     sprite.setTextColor(BLACK);
-    sprite.drawCentreString(mi->caption, x + (MENUBTN_W / 2), y + (MENUBTN_H - 12), 1);
+    sprite.drawCentreString(mi->caption, btnTextPos.x, btnTextPos.y, 1);
   }
 
-  // transfer the sprite to the LCD and release the sprite
-  sprite.pushSprite(menuAreaLeft, menuAreaTop);
-  sprite.deleteSprite();
+  // transfer the sprite to the LCD
+  sprite.pushSprite(0, 0);
 }
 
 /**
@@ -186,26 +179,22 @@ void AppUI::drawMainMenu(menuitem_t *menu, int8_t itemCount, int8_t top, int8_t 
  * @param navi Navigation menu data
  */
 void AppUI::drawNavBar(navmenu_t *nav) {
-  const int16_t NAVIBTN_W = 86;
-  const int16_t NAVIBTN_H = navBarHeight;
-  const int16_t NAVIBTN1_X = 65 - (NAVIBTN_W / 2);
-  const int16_t MARGIN_X = 8;
+  int16_t marginX = 8;
+  uisize_t navSize = {88, NAV_AREA.h};
+  uipos_t navPos0 = {(int16_t)((NAV_AREA.w / 2) - ((navSize.w * 1.5) + marginX)), NAV_AREA.y};
 
   if (nav == NULL) {
     navmenu_t nm;
     nm.items[0] = {"", false};
     nm.items[1] = {"", false};
     nm.items[2] = {"", false};
+
     drawNavBar(&nm);
     return;
   }
 
   // create a sprite area for the navigation bar
-  sprite.createSprite(navBarWidth, navBarHeight);
-  sprite.fillScreen(BLACK);
-
-  sprite.setTextFont(2);
-  sprite.setTextSize(1);
+  sprite.fillRect(NAV_AREA.x, NAV_AREA.y, NAV_AREA.w, NAV_AREA.h, BLACK);
 
   // 物理ボタンに対応する操作ナビゲーションボタンを3つ左から描画
   for (int16_t i = 0; i < 3; i++) {
@@ -213,151 +202,166 @@ void AppUI::drawNavBar(navmenu_t *nav) {
     navitem_t *ni = &(nav->items[i]);
 
     // ボタンの描画位置を計算
-    int16_t x = NAVIBTN1_X + ((NAVIBTN_W + MARGIN_X) * i);
-    int16_t y = 0;
-    int16_t color = (ni->enabled) ? LIGHTGREY : DARKGREY;
+    uipos_t navPos = {(int16_t)(navPos0.x + ((marginX + navSize.w) * i)), navPos0.y};
+    uipos_t textPos = {(int16_t)(navPos.x + (navSize.w / 2)), (int16_t)(navPos.y + 2)};
+    int16_t colorBg = (ni->enabled) ? LIGHTGREY : DARKGREY;
+    int16_t colorFg = BLACK;
 
-    // draw the button frame
-    sprite.fillRoundRect(x, y, NAVIBTN_W, NAVIBTN_H, 2, color);
+    // draw a nav button
+    sprite.fillRoundRect(navPos.x, navPos.y, navSize.w, navSize.h, 2, colorBg);
 
     // draw the button caption
-    sprite.setTextColor(BLACK);
-    sprite.drawCentreString(ni->caption, (x + (NAVIBTN_W / 2)), (y + 2), 4);
+    sprite.setTextSize(1);
+    sprite.setTextColor(colorFg);
+    sprite.drawCentreString(ni->caption, textPos.x, textPos.y, 4);
   }
 
-  // transfer the sprite to the LCD and release the sprite
-  sprite.pushSprite(navBarLeft, navBarTop);
-  sprite.deleteSprite();
+  // transfer the sprite to the LCD
+  sprite.pushSprite(0, 0);
+}
+
+uint16_t AppUI::getBitmapColor(const uint8_t *iconData) {
+  if (iconData == NULL) return 0;
+
+  iconData += 2;  // skip the icon size
+  uint16_t iconColor = (iconData[0] << 8) | iconData[1];
+
+  return iconColor;
+}
+
+uisize_t AppUI::getBitmapSize(const uint8_t *iconData) {
+  uisize_t iconSize = {0, 0};
+
+  if (iconData == NULL) return iconSize;
+
+  iconSize.w = *iconData++;
+  iconSize.h = *iconData++;
+
+  return iconSize;
 }
 
 void AppUI::drawTitleBar() {
-  const int16_t TITLE_X = (appIcon == NULL) ? 2 : 32;
-  const int16_t TITLE_Y = 2;
-  const int16_t APP_ICON_X = 2;
-  const int16_t BAT_ICON_X = (titleBarWidth - 24);
-  const int16_t SD_ICON_X = (sdcardVisible) ? (BAT_ICON_X - 20) : BAT_ICON_X;
-  const int16_t BT_ICON_X = (SD_ICON_X - 18);
-  const int16_t ICON_Y = 2;
+  int8_t iconTop = TITLE_AREA.y + 2;
+  uipos_t titlePos = {(int16_t)((appIcon == NULL) ? 2 : 32), iconTop};
+  uipos_t appIconPos = {2, iconTop};
+  uipos_t batIconPos = {(int16_t)(TITLE_AREA.w - 24), iconTop};
+  uipos_t sdIconPos = {(int16_t)((sdIcon.visible) ? (batIconPos.x - 20) : batIconPos.x), iconTop};
+  uipos_t btIconPos = {(int16_t)(sdIconPos.x - 18), iconTop};
+  uipos_t hintPos = {170, 4};
 
-  // スプライト領域の初期化
-  sprite.createSprite(titleBarWidth, titleBarHeight);
-  sprite.fillScreen(LIGHTGREY);
+  // draw a title bar
+  sprite.fillRect(TITLE_AREA.x, TITLE_AREA.y, TITLE_AREA.w, TITLE_AREA.h, LIGHTGREY);
 
   // draw the title text
   sprite.setTextSize(1);
   sprite.setTextColor(BLACK);
-  sprite.drawString(appTitle, TITLE_X, TITLE_Y, 4);
+  sprite.drawString(appTitle, titlePos.x, titlePos.y, 4);
 
   // draw the icons
-  if (appIcon != NULL) putAppIcon(&sprite, APP_ICON_X, ICON_Y);
-  putBatteryIcon(&sprite, BAT_ICON_X, ICON_Y, M5.Power.getBatteryLevel());
-  if (sdcardVisible) putSDcardIcon(&sprite, SD_ICON_X, ICON_Y, sdcardMounted);
-  if (bluetoothVisible) putBluetoothIcon(&sprite, BT_ICON_X, ICON_Y, bluetoothActive);
+  if (appIcon != NULL) drawAppIcon(appIconPos.x, appIconPos.y);
+  drawBatteryIcon(batIconPos.x, batIconPos.y);
+  if (sdIcon.visible) drawSDcardIcon(sdIconPos.x, sdIconPos.y);
+  if (btIcon.visible) drawBluetoothIcon(btIconPos.x, btIconPos.y);
 
   // draw the hint text
   sprite.setTextSize(1);
   sprite.setTextColor(BLACK);
-  sprite.drawString(appHint[0], 170, 4, 1);
-  sprite.drawString(appHint[1], 170, 14, 1);
+  sprite.drawString(appHint[0], hintPos.x, hintPos.y, 1);
+  sprite.drawString(appHint[1], hintPos.x, (hintPos.y + 10), 1);
 
   // transfer the sprite to the LCD
-  sprite.pushSprite(titleBarLeft, titleBarTop);
-  sprite.deleteSprite();
+  sprite.pushSprite(0, 0);
 }
 
-void AppUI::putAppIcon(TFT_eSprite *spr, int16_t x, int16_t y) {
-  // アイコンのデータの描画色を決定
-  uint16_t color = COLOR16(0, 64, 255);
+void AppUI::drawAppIcon(int16_t x, int16_t y) {
+  // define the drawing color for the app icon
+  uint16_t colorIc = COLOR16(0, 64, 255);
 
-  // アイコンを描画 (2つセット)
-  putBitmap(spr, appIcon, x, y, color);
+  // draw the app icon
+  drawBitmap(appIcon, x, y, colorIc);
 }
 
-void AppUI::putBluetoothIcon(TFT_eSprite *spr, int16_t x, int16_t y, bool connected) {
-  const int16_t ICON_W = 15;
-  const int16_t ICON_H = 20;
-
-  // drawing color for the Bluetooth icon
-  uint16_t colorBg = (connected) ? BLUE : DARKGREY;
+void AppUI::drawBluetoothIcon(int16_t x, int16_t y) {
+  // define the drawing color for the Bluetooth icon
+  uint16_t colorBg = (btIcon.active) ? BLUE : DARKGREY;
   uint16_t colorFg = WHITE;
 
+  uipos_t pt[][2] = {
+      {{(int16_t)(x + 6), (int16_t)(y + 1)}, {(int16_t)(x + 6), (int16_t)(y + 18)}},  // vertical bar
+      {{(int16_t)(x + 7), (int16_t)(y + 1)}, {(int16_t)(x + 7), (int16_t)(y + 18)}},
+      {{(int16_t)(x + 2), (int16_t)(y + 5)}, {(int16_t)(x + 7), (int16_t)(y + 10)}},  // left side
+      {{(int16_t)(x + 2), (int16_t)(y + 6)}, {(int16_t)(x + 7), (int16_t)(y + 11)}},
+      {{(int16_t)(x + 2), (int16_t)(y + 13)}, {(int16_t)(x + 7), (int16_t)(y + 8)}},
+      {{(int16_t)(x + 2), (int16_t)(y + 14)}, {(int16_t)(x + 7), (int16_t)(y + 9)}},
+      {{(int16_t)(x + 6), (int16_t)(y + 1)}, {(int16_t)(x + 11), (int16_t)(y + 6)}},  // upper right side
+      {{(int16_t)(x + 7), (int16_t)(y + 1)}, {(int16_t)(x + 12), (int16_t)(y + 6)}},
+      {{(int16_t)(x + 11), (int16_t)(y + 6)}, {(int16_t)(x + 6), (int16_t)(y + 11)}},
+      {{(int16_t)(x + 12), (int16_t)(y + 6)}, {(int16_t)(x + 6), (int16_t)(y + 12)}},
+      {{(int16_t)(x + 6), (int16_t)(y + 8)}, {(int16_t)(x + 11), (int16_t)(y + 13)}},  // lower right side
+      {{(int16_t)(x + 6), (int16_t)(y + 7)}, {(int16_t)(x + 12), (int16_t)(y + 13)}},
+      {{(int16_t)(x + 11), (int16_t)(y + 13)}, {(int16_t)(x + 6), (int16_t)(y + 18)}},
+      {{(int16_t)(x + 12), (int16_t)(y + 13)}, {(int16_t)(x + 7), (int16_t)(y + 18)}},
+  };
+
   // draw the Bluetooth icon
-  spr->fillRoundRect(x, y, ICON_W, ICON_H, 5, colorBg);           // background circle
-  spr->drawLine(x + 6, y + 1, x + 6, y + (ICON_H - 1), colorFg);  // vertical bar
-  spr->drawLine(x + 7, y + 1, x + 7, y + (ICON_H - 1), colorFg);
-  spr->drawLine(x + 2, y + 5, x + 7, y + 10, colorFg);  // left side
-  spr->drawLine(x + 2, y + 6, x + 7, y + 11, colorFg);
-  spr->drawLine(x + 2, y + 13, x + 7, y + 8, colorFg);
-  spr->drawLine(x + 2, y + 14, x + 7, y + 9, colorFg);
-  spr->drawLine(x + 6, y + 1, x + 11, y + 6, colorFg);  // upper right side
-  spr->drawLine(x + 7, y + 1, x + 12, y + 6, colorFg);
-  spr->drawLine(x + 11, y + 6, x + 6, y + 11, colorFg);
-  spr->drawLine(x + 12, y + 6, x + 6, y + 12, colorFg);
-  spr->drawLine(x + 6, y + 8, x + 11, y + 13, colorFg);  // lower right side
-  spr->drawLine(x + 6, y + 7, x + 12, y + 13, colorFg);
-  spr->drawLine(x + 11, y + 13, x + 6, y + 18, colorFg);
-  spr->drawLine(x + 12, y + 13, x + 7, y + 18, colorFg);
+  sprite.fillRoundRect(x, y, 15, 20, 5, colorBg);  // background circle
+  for (int8_t i = 0; i < (sizeof(pt) / sizeof(pt[0])); i++) {
+    sprite.drawLine(pt[i][0].x, pt[i][0].y, pt[i][1].x, pt[i][1].y, colorFg);
+    Serial.printf("LINE %d,%d -> %d,%d\n", pt[i][0].x, pt[i][0].y, pt[i][1].x, pt[i][1].y);
+  }
 }
 
 /**
  * SDカードの状態表示アイコンの描画
  */
-void AppUI::putSDcardIcon(TFT_eSprite *spr, int16_t x, int16_t y, bool mounted) {
-  const int16_t ICON_W = 17;
-  const int16_t ICON_H = 20;
-  const int16_t PIN_W = 2;
-  const int16_t PIN_H = 4;
+void AppUI::drawSDcardIcon(int16_t x, int16_t y) {
+  uisize_t iconSize = {17, 20};
+  uisize_t pinSize = {2, 4};
 
   // draw the outer frame of the SD card symbol
-  spr->fillRoundRect((x + 2), y, (ICON_W - 2), 8, 2, BLACK);
-  spr->fillRoundRect(x, (y + 6), ICON_W, (ICON_H - 6), 2, BLACK);
+  sprite.fillRoundRect((x + 2), y, (iconSize.w - 2), (iconSize.h - 12), 2, BLACK);
+  sprite.fillRoundRect(x, (y + 6), iconSize.w, (iconSize.h - 6), 2, BLACK);
   for (int16_t i = 0; i < 4; i++) {
-    spr->fillRect((x + 4) + ((PIN_W + 1) * i), (y + 1), PIN_W, PIN_H, YELLOW);
+    sprite.fillRect((x + 4) + ((pinSize.w + 1) * i), (y + 1), pinSize.w, pinSize.h, YELLOW);
   }
 
   // draw "SD" or "**" mark
-  if (mounted) {  // mounted
+  if (sdIcon.active) {  // mounted
     // put "SD" text
-    spr->setTextSize(1);
-    spr->setTextColor(LIGHTGREY);
-    spr->drawCentreString("SD", (x + 9), (y + 9), 1);
+    sprite.setTextSize(1);
+    sprite.setTextColor(LIGHTGREY);
+    sprite.drawCentreString("SD", (x + (iconSize.w / 2) + 1), (y + (iconSize.h / 2) - 1), 1);
   } else {  // not mounted
-    spr->drawEllipse((x + 8), (y + 12), 5, 5, RED);
-    spr->drawLine((x + 11), (y + 9), (x + 5), (y + 15), RED);
+    sprite.drawEllipse((x + 8), (y + 12), 5, 5, RED);
+    sprite.drawLine((x + 5), (y + 9), (x + 11), (y + 15), RED);
   }
 }
 
 /**
  * バッテリーアイコンの描画
  */
-void AppUI::putBatteryIcon(TFT_eSprite *spr, int16_t x, int16_t y, int8_t level) {
+void AppUI::drawBatteryIcon(int16_t x, int16_t y) {
   const int16_t ICON_W = 21;
   const int16_t ICON_H = 20;
-  const int16_t BAR_W = 3;
-  const int16_t BAR_H = 12;
+  uisize_t iconSize = {21, 20};
+  uisize_t barSize = {3, 12};
+  int8_t lowBatLevel = 20;
 
   // draw the outer frame of the battery symbol
-  spr->fillRoundRect(x, y, (ICON_W - 2), ICON_H, 2, BLACK);
-  spr->fillRect((x + (ICON_W - 2)), (y + 6), 2, 8, BLACK);
-
-  // draw "?" mark if the battery level is unknown
-  if (level < 0) {
-    spr->setTextSize(2);
-    spr->setTextColor(RED);
-    spr->drawCentreString("?", x + (ICON_W / 2), y + 3, 1);
-    return;
-  }
+  sprite.fillRoundRect(x, y, (iconSize.w - 2), iconSize.h, 2, BLACK);
+  sprite.fillRect((x + (iconSize.w - 2)), (y + 6), 2, 8, BLACK);
 
   // calculate the battery level (0-100) to the bar count (0-4)
-  if (level > 100) level = 100;
-  int8_t barCount = ((level + 15) / 25);
+  int8_t batLevel = M5.Power.getBatteryLevel();
+  int8_t barCount = (batLevel + lowBatLevel) / (100 / 4);
+  uipos_t barPos0 = {(int16_t)(x + 2), (int16_t)(y + 4)};
 
   // draw the battery level meter
   for (int16_t i = 0; i < barCount; i++) {
-    spr->fillRect((x + 2) + ((BAR_W + 1) * i), (y + 4), BAR_W, BAR_H, LIGHTGREY);
+    sprite.fillRect(barPos0.x + ((barSize.w + 1) * i), barPos0.y, barSize.w, barSize.h, LIGHTGREY);
   }
   if (barCount == 0) {
-    spr->fillRect((x + 2), (y + 4), BAR_W, BAR_H, RED);
+    sprite.fillRect(barPos0.x, barPos0.y, barSize.w, barSize.h, RED);
   }
 }
 
@@ -394,14 +398,14 @@ void AppUI::setIdleCallback(void (*callback)(), uint32_t timeout) {
   idleTimeout = timeout;
 }
 
-void AppUI::setBluetoothStatus(bool iconVisible, bool active) {
-  bluetoothVisible = iconVisible;
-  bluetoothActive = active;
+void AppUI::setBluetoothIconStatus(bool visible, bool active) {
+  btIcon.visible = visible;
+  btIcon.active = active;
 }
 
-void AppUI::setSDcardStatus(bool iconVisible, bool mounted) {
-  sdcardVisible = iconVisible;
-  sdcardMounted = mounted;
+void AppUI::setSDcardIconStatus(bool visible, bool mounted) {
+  sdIcon.visible = visible;
+  sdIcon.active = mounted;
 }
 
 btnid_t AppUI::waitForButtonInput(navmenu_t *nav) {
@@ -447,27 +451,26 @@ btnid_t AppUI::waitForInputOkCancel() {
 }
 
 void AppUI::drawConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount, int8_t top, int8_t select) {
-  const int16_t MENUAREA_W = M5.Lcd.width();
-  const int16_t BTN_MGN_X = 8;
-  const int16_t BTN_MGN_T = 8;
-  const int16_t BTN_MGN_Y = 4;
-  const int16_t BTN_W = MENUAREA_W - (BTN_MGN_X * 2);  // ボタンのサイズ指定
-  const int16_t BTN_H = 35;
+  uisize_t border = {6, 6};
+  uisize_t margin = {0, 4};
+  uiarea_t titleArea = {(int16_t)(CLIENT_AREA.w - (border.w * 2)), 18,  //
+                        (int16_t)(CLIENT_AREA.x + border.w), (int16_t)(CLIENT_AREA.y + border.h)};
+  uipos_t titlePos = {(int16_t)(titleArea.x + 4), (int16_t)(titleArea.y + 1)};
+  uisize_t menuSize = {(int16_t)(CLIENT_AREA.w - (border.w * 2)),
+                       (int16_t)(((CLIENT_AREA.h - (border.h * 2) - 18 - (margin.h * 4)) / 4))};
+  uipos_t menuPos0 = {(int16_t)(CLIENT_AREA.x + border.w), (int16_t)(CLIENT_AREA.y + 18 + border.h + margin.h)};
 
   top = (top < 0) ? 0 : (top < itemCount) ? top : itemCount;
   select = (select < top) ? top : (select < itemCount) ? select : itemCount;
 
   // スプライト領域の初期化
-  sprite.createSprite(menuAreaWidth, menuAreaHeight);
-  sprite.fillScreen(BLACK);
+  sprite.fillRect(CLIENT_AREA.x, CLIENT_AREA.y, CLIENT_AREA.w, CLIENT_AREA.h, BLACK);
 
-  sprite.setTextSize(1);
   sprite.setTextColor(BLACK);
   sprite.setTextSize(1);
 
-  sprite.fillRect(BTN_MGN_X, BTN_MGN_T, BTN_W, 18, COLOR16(0, 128, 255));
-  sprite.setTextColor(BLACK);
-  sprite.drawString(title, (BTN_MGN_X + 4), (BTN_MGN_T + 1), 2);
+  sprite.fillRect(titleArea.x, titleArea.y, titleArea.w, titleArea.h, COLOR16(0, 128, 255));
+  sprite.drawString(title, titlePos.x, titlePos.y, 2);
 
   for (int i = 0; i < 4; i++) {
     int8_t idx = top + i;
@@ -475,24 +478,25 @@ void AppUI::drawConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount,
 
     cfgitem_t *mi = menu + idx;
 
-    int16_t x = BTN_MGN_X;
-    int16_t y = (BTN_MGN_T + 18) + (BTN_MGN_Y * (i + 1)) + (BTN_H * i);
-    int16_t color = (idx == select) ? LIGHTGREY : DARKGREY;
+    uipos_t menuPos = {menuPos0.x, (int16_t)(menuPos0.y + ((menuSize.h + margin.h) * i))};
+    uipos_t captionPos = {(int16_t)(menuPos.x + 4), (int16_t)(menuPos.y + 4)};
+    uipos_t descrPos = {(int16_t)(menuPos.x + 4), (int16_t)(menuPos.y + 25)};
+    uipos_t valuePos = {(int16_t)(menuPos.x + (menuSize.w - 4)), (int16_t)(menuPos.y + 4)};
 
-    sprite.fillRect(x, y, BTN_W, BTN_H, color);
+    uint16_t colorBg = (idx == select) ? LIGHTGREY : DARKGREY;
+    sprite.fillRect(menuPos.x, menuPos.y, menuSize.w, menuSize.h, colorBg);
 
     sprite.setTextColor(BLACK);
-    sprite.drawString(mi->caption, (x + 4), (y + 3), 2);
-    sprite.drawString(mi->description, (x + 4), (y + 23), 1);
+    sprite.drawString(mi->caption, captionPos.x, captionPos.y, 2);
+    sprite.drawString(mi->description, descrPos.x, descrPos.y, 1);
     if (mi->valueDescr != NULL) {
       sprite.setTextColor(BLUE);
-      sprite.drawRightString(mi->valueDescr, (x + (BTN_W - 4)), (y + 3), 2);
+      sprite.drawRightString(mi->valueDescr, valuePos.x, valuePos.y, 2);
     }
   }
 
   // transfer the sprite to the LCD
-  sprite.pushSprite(menuAreaLeft, menuAreaTop);
-  sprite.deleteSprite();
+  sprite.pushSprite(0, 0);
 }
 
 void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount) {
