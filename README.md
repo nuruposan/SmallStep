@@ -1,6 +1,6 @@
 # SmallStep
 
-A data downloading and configuration utility for classic MTK GPS Loggers.
+A data downloading and configuration utility for classic MTK GPS Loggers runs on M5Stack Basic.
 
 ## Overview
 
