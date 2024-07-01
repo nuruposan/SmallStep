@@ -108,10 +108,11 @@ class AppUI {
   void drawTitleBar();
   void drawNavBar(navmenu_t *nav);
   void setAppHints(const char *into1, const char *info2);
-  void setAppTitle(const char *title);
-  void setSDcardIconStatus(bool iconVisible, bool mounted);
-  void setBluetoothIconStatus(bool iconVisible, bool active);
   void setAppIcon(const uint8_t *icon);
+  void setAppTitle(const char *title);
+  void setIconVisible(bool btVisible, bool sdVisible);
+  void setSDcardStatus(bool mounted);
+  void setBluetoothStatus(bool active);
   void setIdleCallback(void (*callback)(), uint32_t timeout);
   btnid_t waitForButtonInput(navmenu_t *nav);
   btnid_t waitForInputOk();

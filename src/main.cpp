@@ -190,7 +190,7 @@ cfgitem_t cfgMain[] = {
     {"Save and exit", "Return to the main menu", "", NULL, NULL},
     {"Pairing with a GPS logger", "Discover a supported GPS logger", ">>", &onPairWithLoggerCfgSelect,
      &onPairWithLoggerCfgUpdate},
-    {"Output settings", "Output options", ">>", &onOutputSubMenuSelect, NULL},
+    {"Output settings", "GPX log output options", ">>", &onOutputSubMenuSelect, NULL},
     {"Log mode settings", "Logging behavior of the logger", ">>", &onLogModeSubMenuSelect, NULL},
     {"Log format settings", "Contents to be stored on the logger", ">>", &onLogFormatSubMenuSelect, NULL},
     {"Format SD card", "Perform a format for the SD card", "", &onPerformFormatSelect, NULL},
@@ -216,7 +216,7 @@ void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   switch (event) {
   case ESP_SPP_INIT_EVT:  // SPP started
     if (param == NULL) {
-      ui.setBluetoothIconStatus(true, true);
+      ui.setBluetoothStatus(true);
       ui.drawTitleBar();
     }
     break;
@@ -227,7 +227,7 @@ void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
 
   case ESP_SPP_UNINIT_EVT:  // SPP closed
     if (param == NULL) {
-      ui.setBluetoothIconStatus(true, false);
+      ui.setBluetoothStatus(false);
       ui.drawTitleBar();
     }
     break;
@@ -291,6 +291,23 @@ void setValueDescrByBool(char *descr, bool value) {
   }
 }
 
+bool connectLogger(uint8_t msgLine) {
+  // connect to the logger
+  ui.drawDialogMessage(BLUE, (msgLine + 0), "Connecting to GPS logger...");
+
+  if (!logger.connect(cfg.loggerAddr)) {
+    ui.drawDialogMessage(RED, (msgLine + 0), "Connecting to GPS logger... failed.");
+    ui.drawDialogMessage(RED, (msgLine + 1), "- Make sure BT is enabled on the GPS logger");
+    ui.drawDialogMessage(RED, (msgLine + 2), "- If this problem occurs repeatly, please re-");
+    ui.drawDialogMessage(RED, (msgLine + 3), "  start the logger and SmallStep");
+    return false;
+  }
+
+  ui.drawDialogMessage(BLACK, (msgLine), "Connecting to GPS logger... done.");
+
+  return true;
+}
+
 bool runDownloadLog() {
   const char TEMP_BIN[] = "download.bin";
   const char TEMP_GPX[] = "download.gpx";
@@ -305,17 +322,7 @@ bool runDownloadLog() {
   ui.drawDialogFrame("Download Log");
   ui.drawNavBar(NULL);
 
-  // connect to the logger
-  ui.drawDialogMessage(BLUE, 0, "Connecting to GPS logger...");
-  if (logger.connect(cfg.loggerAddr)) {
-    ui.drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
-  } else {
-    ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
-    ui.drawDialogMessage(RED, 1, "- Make sure BT is enabled on the GPS logger");
-    ui.drawDialogMessage(RED, 2, "- If this problem occurs repeatly, please re-");
-    ui.drawDialogMessage(RED, 3, "  start the logger and SmallStep");
-    return false;
-  }
+  if (!connectLogger(0)) return false;
 
   File32 binFileW = SDcard.open(TEMP_BIN, (O_CREAT | O_WRITE | O_TRUNC));
   if (!binFileW) {
@@ -407,6 +414,7 @@ bool runDownloadLog() {
       } else {
         sprintf(summarystr, "Summary : %d TRKs, %d TRKPTs", trackCnt, trkptCnt);
       }
+
       // print the result message
       ui.drawDialogMessage(BLACK, 2, "Converting data to GPX file... done.");
       ui.drawDialogMessage(BLUE, 3, outputstr);
@@ -450,23 +458,13 @@ bool runFixRTCtime() {
   ui.drawNavBar(NULL);
 
   // connect to the logger
-  ui.drawDialogMessage(BLUE, 0, "Connecting to GPS logger...");
-  if (logger.connect(cfg.loggerAddr)) {
-    ui.drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
-  } else {
-    ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
-    ui.drawDialogMessage(RED, 1, "- Make sure BT is enabled on the logger");
-    ui.drawDialogMessage(RED, 2, "- If this problem occurs repeatly, please re-");
-    ui.drawDialogMessage(RED, 3, "  start the logger and SmallStep");
-    return false;
-  }
+  if (!connectLogger(0)) return false;
 
   ui.drawDialogMessage(BLUE, 1, "Setting RTC datetime...");
   {
     if (!logger.fixRTCdatetime()) {
       ui.drawDialogMessage(RED, 1, "Setting RTC datetime... failed.");
       ui.drawDialogMessage(RED, 2, "- Keep GPS logger close to this device");
-
       return false;
     }
   }
@@ -474,7 +472,6 @@ bool runFixRTCtime() {
   ui.drawDialogMessage(BLACK, 1, "Setting RTC datetime... done.");
   ui.drawDialogMessage(BLUE, 2, "The logger has been restarted to apply the fix.");
   ui.drawDialogMessage(BLUE, 3, "Please check the logging status.");
-
   return true;
 }
 
@@ -544,9 +541,8 @@ bool runPairWithLogger() {
   // print the failure message
   ui.drawDialogMessage(BLACK, 0, "Discovering GPS logger... failed.");
   ui.drawDialogMessage(RED, (1 + DEVICE_COUNT), "Cannot discover any supported logger.");
-  ui.drawDialogMessage(RED, (2 + DEVICE_COUNT), "- Make sure BT is enabled on the logger");
-  ui.drawDialogMessage(RED, (3 + DEVICE_COUNT), "- If this problem occurs repeatly, please re-");
-  ui.drawDialogMessage(RED, (4 + DEVICE_COUNT), "  start the logger and SmallStep");
+  ui.drawDialogMessage(RED, (2 + DEVICE_COUNT), "- If this problem occurs repeatly, please re-");
+  ui.drawDialogMessage(RED, (3 + DEVICE_COUNT), "  start the logger and SmallStep");
 
   return false;
 }
@@ -579,22 +575,12 @@ bool runClearFlash() {
   }
 
   // connect to the logger
-  ui.drawDialogMessage(BLUE, 1, "Connecting to GPS logger...");
-  if (logger.connect(cfg.loggerAddr)) {
-    ui.drawDialogMessage(BLACK, 1, "Connecting to GPS logger... done.");
-  } else {
-    ui.drawDialogMessage(RED, 1, "Connecting to GPS logger... failed.");
-    ui.drawDialogMessage(RED, 2, "- Make sure BT is enabled on the logger");
-    ui.drawDialogMessage(RED, 3, "- If this problem occurs repeatly, please re-");
-    ui.drawDialogMessage(RED, 4, "  start the logger and SmallStep");
-    return false;
-  }
+  if (!connectLogger(1)) return false;
 
   ui.drawDialogMessage(BLUE, 2, "Erasing log data...");
   if (!logger.clearFlash(&progressCallback)) {
-    ui.drawDialogMessage(RED, 2, "Erasing log data... failed.");
-    ui.drawDialogMessage(RED, 3, "");
-    ui.drawDialogMessage(RED, 4, "- Power cycling may fix this problem");
+    ui.drawDialogMessage(RED, 2, "Erasing log data... timeout.");
+    ui.drawDialogMessage(RED, 3, "Please retry the erase operation");
     return false;
   }
 
@@ -619,16 +605,7 @@ bool runSetLogFormat() {
   ui.drawNavBar(NULL);
 
   // connect to the logger
-  ui.drawDialogMessage(BLUE, 0, "Connecting to GPS logger...");
-  if (logger.connect(cfg.loggerAddr)) {
-    ui.drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
-  } else {
-    ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
-    ui.drawDialogMessage(RED, 1, "- Make sure BT is enabled on the logger");
-    ui.drawDialogMessage(RED, 2, "- If this problem occurs repeatly, please re-");
-    ui.drawDialogMessage(RED, 3, "  start the logger and SmallStep");
-    return false;
-  }
+  if (!connectLogger(0)) return false;
 
   uint32_t curLogFormat = 0;
   uint32_t newLogFormat = cfg.logFormat;
@@ -680,16 +657,7 @@ bool runSetLogMode() {
   ui.drawNavBar(NULL);
 
   // connect to the logger
-  ui.drawDialogMessage(BLUE, 0, "Connecting to GPS logger...");
-  if (logger.connect(cfg.loggerAddr)) {
-    ui.drawDialogMessage(BLACK, 0, "Connecting to GPS logger... done.");
-  } else {
-    ui.drawDialogMessage(RED, 0, "Connecting to GPS logger... failed.");
-    ui.drawDialogMessage(RED, 1, "- Make sure BT is enabled on the GPS logger");
-    ui.drawDialogMessage(RED, 2, "- If this problem occurs repeatly, please re-");
-    ui.drawDialogMessage(RED, 3, "  start the logger and SmallStep");
-    return false;
-  }
+  if (!connectLogger(0)) return false;
 
   recordmode_t curRecMode = MODE_FULLSTOP;
   logcriteria_t curLogCri = {0, 0, 0};
@@ -1169,6 +1137,7 @@ void setup() {
   M5.begin();
   M5.Power.begin();
   M5.Lcd.setBrightness(LCD_BRIGHTNESS);
+  M5.Lcd.fillScreen(BLACK);
   EEPROM.begin(sizeof(appconfig_t) + 1);
   SDcard.begin(GPIO_NUM_4, SD_ACCESS_SPEED);
 
@@ -1184,8 +1153,8 @@ void setup() {
   updateAppHint();
   ui.setAppIcon(ICON_APP);
   ui.setAppTitle(APP_NAME);
-  ui.setBluetoothIconStatus(true, false);
-  ui.setSDcardIconStatus(true, SDcard.card()->sectorCount());
+  ui.setBluetoothStatus(false);
+  ui.setSDcardStatus((bool)SDcard.card()->sectorCount());
   ui.drawTitleBar();
   ui.setIdleCallback(&onAppInputIdle, IDLE_TIMEOUT);
 
@@ -1201,14 +1170,12 @@ void setup() {
     ui.waitForInputOk();
 
     // welcome message for Holux M-241 users
-    ui.drawDialogFrame("For Holux M-241 users");
+    ui.drawDialogFrame("For Holux m-241 users");
     ui.drawDialogMessage(BLACK, 0, "Smallstep can be used with Holux M-241.");
-    ui.drawDialogMessage(RED, 1, "However, changing the log mode and format are");
-    ui.drawDialogMessage(BLACK, 2, "NOT SUPPORTED on this model. It seems to work");
-    ui.drawDialogMessage(RED, 2, "NOT SUPPORTED on this model.");
-    ui.drawDialogMessage(BLACK, 3, "fine, but will be ignored after restart.");
-    ui.drawDialogMessage(BLUE, 5, "Please use the settings menu on the logger to");
-    ui.drawDialogMessage(BLUE, 6, "configure them.");
+    ui.drawDialogMessage(RED, 1, "However, changing the log mode and log format");
+    ui.drawDialogMessage(RED, 2, "are NOT SUPPORTED on this model.");
+    ui.drawDialogMessage(BLACK, 3, "Please use the settings menu on the logger to");
+    ui.drawDialogMessage(BLACK, 4, "configure them.");
     ui.waitForInputOk();
   }
 
