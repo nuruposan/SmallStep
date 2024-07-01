@@ -32,7 +32,7 @@ SmallStep supports following GPS loggers in the current release.
 
 - Transystem 747PRO GPS
 - Holux M-241 (all fw ver.)
-  - Changing the log mode (by distance or time) and the log format (enable additional data to record) is not supported Holux M-241
+  - Changing the log mode (by distance or time) and the log format (enable additional data to record) is not supported on Holux M-241
 
 **Request to the users:**<br>
 If you have one of MTK GPS loggers below, please let the author its the Bluetooth device name.
@@ -61,7 +61,7 @@ SmallStep provides following features works with your GPS logger.
 - Bluetooth connection between SmallStep(M5Stack) and GPS logger may be unstable or become impossible temporarily.
 - Even if the connection is successful, sending and receiving data may not work properly.
 
-**Workaround**
+**Workaround:**<br>
 In that case, please restart the logger and M5Stack.
 
 ## Author
@@ -71,4 +71,5 @@ nuruposan [Twittter/X](https://x.com/yaeh77)
 ## License
 
 SmallSteps is licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).
+
 
