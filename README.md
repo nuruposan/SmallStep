@@ -1,6 +1,6 @@
 # SmallStep
 
-A data downloading and configuration utility for classic MTK GPS Loggers runs on M5Stack Basic.
+A portable data downloading and configuration utility for classic MTK GPS Loggers runs on M5Stack Basic.
 
 ## Overview
 
@@ -31,7 +31,7 @@ You can find `BluetoothSerial.h` in `$HOME/.platformio/packages/framework-arduin
 SmallStep supports following GPS loggers in the current release.
 
 - Transystem 747PRO GPS
-- Holux M-241 (fw 1.13 or above)
+- Holux M-241 (all fw ver.)
   - Changing the log mode (by distance or time) and the log format (enable additional data to record) is not supported Holux M-241
 
 **Request to the users:**<br>
