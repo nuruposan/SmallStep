@@ -40,4 +40,6 @@ c_cpp_properties.json
 .piolibdeps
 .clang_complete
 .gcc-flags.json
-.pio
+launch.json
+.pio/
+
