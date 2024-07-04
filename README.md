@@ -16,7 +16,7 @@ You also need to have a M5Stack Basic that have a SD card run SmallStep. No expa
 ### Installation
 
 1. Install required software to your PC
-2. Clot [SmallStep repositoly](https://github.com/nuruposan/SmallStep) to a local directory
+2. Clone [SmallStep repositoly](https://github.com/nuruposan/SmallStep) to a local directory
 3. Open the directory using VScode
 4. Edit `BluetoothSerial.h` and increase `RX_QUEUE_SIZE` from 512 to 4094 (bytes)
 5. Connect a M5Stack Basic to the PC
