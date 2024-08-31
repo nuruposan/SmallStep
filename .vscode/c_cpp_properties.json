@@ -8,12 +8,12 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "C:/Users/nurupo/Documents/PlatformIO/SmallStepM5S/include",
-                "C:/Users/nurupo/Documents/PlatformIO/SmallStepM5S/src",
+                "C:/Users/nurupo/Documents/PlatformIO/SmallStep/include",
+                "C:/Users/nurupo/Documents/PlatformIO/SmallStep/src",
                 "C:/Users/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                 "C:/Users/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/BluetoothSerial/src",
-                "C:/Users/nurupo/Documents/PlatformIO/SmallStepM5S/.pio/libdeps/m5stack-core-esp32/SdFat - Adafruit Fork/src",
-                "C:/Users/nurupo/Documents/PlatformIO/SmallStepM5S/.pio/libdeps/m5stack-core-esp32/M5Stack/src",
+                "C:/Users/nurupo/Documents/PlatformIO/SmallStep/.pio/libdeps/m5stack-core-esp32/SdFat - Adafruit Fork/src",
+                "C:/Users/nurupo/Documents/PlatformIO/SmallStep/.pio/libdeps/m5stack-core-esp32/M5Stack/src",
                 "C:/Users/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/SPIFFS/src",
                 "C:/Users/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/Wire/src",
                 "C:/Users/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/SD/src",
@@ -246,12 +246,12 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "C:/Users/nurupo/Documents/PlatformIO/SmallStepM5S/include",
-                    "C:/Users/nurupo/Documents/PlatformIO/SmallStepM5S/src",
+                    "C:/Users/nurupo/Documents/PlatformIO/SmallStep/include",
+                    "C:/Users/nurupo/Documents/PlatformIO/SmallStep/src",
                     "C:/Users/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/EEPROM/src",
                     "C:/Users/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/BluetoothSerial/src",
-                    "C:/Users/nurupo/Documents/PlatformIO/SmallStepM5S/.pio/libdeps/m5stack-core-esp32/SdFat - Adafruit Fork/src",
-                    "C:/Users/nurupo/Documents/PlatformIO/SmallStepM5S/.pio/libdeps/m5stack-core-esp32/M5Stack/src",
+                    "C:/Users/nurupo/Documents/PlatformIO/SmallStep/.pio/libdeps/m5stack-core-esp32/SdFat - Adafruit Fork/src",
+                    "C:/Users/nurupo/Documents/PlatformIO/SmallStep/.pio/libdeps/m5stack-core-esp32/M5Stack/src",
                     "C:/Users/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/SPIFFS/src",
                     "C:/Users/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/Wire/src",
                     "C:/Users/nurupo/.platformio/packages/framework-arduinoespressif32/libraries/SD/src",
