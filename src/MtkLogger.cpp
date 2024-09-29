@@ -180,7 +180,7 @@ bool MtkLogger::waitForNmeaReply(const char *reply, uint16_t timeout) {
     // exit loop if the timeout reached
     uint32_t timeElapsed = millis() - timeStartAt;
     if (timeElapsed > timeout) {
-      Serial.printf("Logger.waitForNmeaReply: timeout occured\n");
+      Serial.printf("Logger.waitReply: timeout occured\n");
       return false;
     }
 
@@ -189,7 +189,7 @@ bool MtkLogger::waitForNmeaReply(const char *reply, uint16_t timeout) {
     if (!buffer->put(gpsSerial->read())) continue;
 
     // print the debug message to the serial console
-    Serial.printf("Logger.waitForNmeaReply: <- %.80s\n", buffer->getBuffer());
+    Serial.printf("Logger.waitReply: <- %.80s\n", buffer->getBuffer());
 
     // exit loop (and return true) if the expected response is detected
     if (buffer->match(reply)) break;
@@ -238,22 +238,71 @@ bool MtkLogger::getLastRecordAddress(int32_t *address) {
   return (endAddr > 0);
 }
 
-bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
-  const int8_t MAX_RETRIES = 5;
+int32_t MtkLogger::canResumeDownload(File32 *cache) {
+  uint32_t binFileSize = cache->fileSize();
+
+  Serial.printf("Logger.canResume: binFileSize %d bytes\n", binFileSize);
+  if (binFileSize < SIZE_SECTOR) return 0;
+
+  if (!sendDownloadCommand(0, SIZE_REPLY)) return -1;
+  if (!waitForNmeaReply("$PMTK182,8,", 3000)) return -1;
+
+  cache->seekCur(SIZE_HEADER);
+  buffer->seekToColumn(3);  // move to the 4th column (data column)
+  buffer->seek(SIZE_HEADER * 2);
+
+  // 最初のデータフィールドの先頭0x80バイト(0x200-0x2FF)が同一なら前回の続きと見なす
+  char fbuf[0x100];
+  cache->readBytes(fbuf, sizeof(fbuf));
+
+  bool canResume = true;
+  for (int16_t i = 0; i < sizeof(fbuf) - 1; i++) {
+    byte dlby;
+    buffer->readHexByteFull(&dlby);
+    canResume &= (fbuf[i] == (char)dlby);
+  }
+
+  // ACKメッセージを待つ (間に合わない場合が多いが問題ないため無視する
+  waitForNmeaReply("$PMTK001,", ACK_WAIT);
+
+  // キャッシュが以前のものではない場合0を返す
+  if (!canResume) {
+    cache->seek(0);
+    return 0;
+  }
+
+  // レジューム開始位置を決定
+  // * 後ろから2つ目のセクターの先頭2バイトが0xFFFF(セクタ内のレコード数が未確定)であればそのセクターを再開位置とする
+  // * 0xFFFF以外(そのセクターのレコード数が確定済み)であれば次の最終セクターをダウンロード再開位置とする
+  // (0x00, 0x00, ... 0x00, 0x00 がセンター境界にきている場合、最終の一つ手前のセクターの末尾はまだ更新される)
+  int16_t sectors = cache->fileSize() / SIZE_SECTOR;  //
+  int32_t resumeAddr = (sectors - 1) * SIZE_SECTOR;
+  cache->seek(resumeAddr);
+  uint16_t records = (cache->read() << 8) + (cache->read());
+  if (records != 0xFFFF) resumeAddr += SIZE_SECTOR;
+
+  Serial.printf("Logger.canResume: resume position is 0x%06X\n", resumeAddr);
+
+  // finally seek to the potision to resume
+  cache->seek(resumeAddr);
+
+  return resumeAddr;
+}
+
+bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int32_t, int32_t), int32_t startPos) {
+  const int8_t MAX_RETRIES = 3;
   const int32_t REQ_SIZE = 0x4000;
   const int32_t LOG_TIMEOUT1 = 3000;
   const int32_t LOG_TIMEOUT2 = 1000;
 
+  int8_t progRate = 0;
   bool nextReq = true;
   bool dataEnd = false;
-  int32_t nextAddr = 0;  // the address of next data block to receive
-  int32_t recvSize = 0;  // received data size for the last request
-  int32_t endAddr = 0;   // the last address to download
-  int8_t retries = 0;    // retry count
+  int32_t nextAddr = (startPos > 0) ? startPos : 0;  // the address of next data block to receive
+  int32_t recvSize = 0;                              // received data size for the last request
+  int32_t endAddr = 0;                               // the last address to download
+  int8_t retries = 0;                                // retry count
   int16_t timeout = LOG_TIMEOUT1;
-
-  // perform the callback to notify the download process is started
-  if (rateCallback) rateCallback(PROGRESS_STARTED);
 
   // get the last address to be downloaded (endAddr).
   // the address is the address of the last og data (STOP mode) or the flash size (OVERWRAP mode).
@@ -261,13 +310,18 @@ bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
   if (!getLastRecordAddress(&endAddr)) return false;
   endAddr = REQ_SIZE * ((endAddr / REQ_SIZE) + 1);
 
-  Serial.printf("Logger.download: a download process started [endAddr=0x%06X]\n", endAddr);
+  // perform the callback to notify the download process is started
+  if (rateCallback) rateCallback(0, endAddr);
 
+  output->seek(nextAddr);
+
+  Serial.printf("Logger.download: download started [nextAddr=0x%06X, endAddr=0x%06X, resume=%d]\n", nextAddr, endAddr,
+                (nextAddr != 0));
   while (gpsSerial->connected()) {
     // break if the download process is finished
     if (nextAddr >= endAddr) {
       // print the success message and
-      Serial.printf("Logger.download: the process finished [endAddr=0x%06X]\n", endAddr);
+      Serial.printf("Logger.download: process finished [endAddr=0x%06X]\n", endAddr);
       break;
     }
 
@@ -287,7 +341,7 @@ bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
     if (!waitForNmeaReply("$PMTK182,8,", timeout)) {
       Serial.printf("Logger.download: waiting for complete the request\n");
 
-      uint16_t remainBlocks = ((REQ_SIZE - recvSize) / 0x800) - 1;
+      uint16_t remainBlocks = ((REQ_SIZE - recvSize) / SIZE_REPLY) - 1;
       uint16_t waitTime = remainBlocks * LOG_TIMEOUT2;
       waitForNmeaReply("$PMTK001,", waitTime);
 
@@ -307,13 +361,19 @@ bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
     buffer->readColumnAsInt(2, &startAddr, true);
 
     // print the debug message to the serial console
-    Serial.printf("Logger.download: recv a data block (%d bytes) [startAddr=0x%06X]\n", 0x800, startAddr);
+    Serial.printf("Logger.download: recv a data block [startAddr=0x%06X]\n", startAddr);
 
     // ignore this line if the starting address is not the expected value
     if (startAddr != nextAddr) continue;
 
     // perform the callback function to notify the progress
-    if (rateCallback) rateCallback(((float)nextAddr / endAddr) * 100);
+    if (rateCallback) {
+      int32_t cpr = 100 * ((float)nextAddr / endAddr);
+      if (cpr > progRate) {
+        rateCallback(nextAddr, endAddr);
+        progRate = cpr;
+      }
+    }
 
     // read the data from the buffer and write it to the output file
     // and count the continuous 0xFFs to detect the end of the log data
@@ -324,16 +384,15 @@ bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
     while ((!dataEnd) && (buffer->readHexByteFull(&by))) {
       output->write(by);
       ffCount = (by != 0xFF) ? 0 : (ffCount + 1);  // count continuous 0xFF
+      dataEnd = (ffCount >= SIZE_HEADER);
     }  // while ((!dataEnd) ...)
 
     // update the next address and the received size
-    nextAddr += 0x0800;
-    recvSize += 0x0800;
+    nextAddr += SIZE_REPLY;
+    recvSize += SIZE_REPLY;
     nextReq = (recvSize >= REQ_SIZE);
-    if (ffCount >= 0x200) {
+    if (dataEnd) {
       endAddr = nextAddr + (REQ_SIZE - recvSize);
-      dataEnd = true;
-
       Serial.printf("Logger.download: found the end of data. update endAddr [endAddr = 0x%06X]\n", endAddr);
     }
 
@@ -346,7 +405,7 @@ bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int8_t)) {
   buffer->clear();
 
   // finally perform the callback to notify the progress is completed
-  if (rateCallback) rateCallback(PROGRESS_FINISHED);
+  if (rateCallback) rateCallback(endAddr, endAddr);
 
   // return true if the download process is finished successfully
   return ((dataEnd) || (nextAddr >= endAddr));
@@ -544,45 +603,46 @@ bool MtkLogger::setLogByTime(int16_t time) {
  * This function takes some time and calls a callback function periodically during the process.
  * @param rateCallback a function pointer to a callback function
  */
-bool MtkLogger::clearFlash(void (*rateCallback)(int8_t)) {
+bool MtkLogger::clearFlash(void (*rateCallback)(int32_t, int32_t)) {
   const uint32_t CALLBACK_INTERVAL = 500;
   const uint32_t TIME_PER_8MBIT = 8000;  // uint: msec
 
   // return false if the GPS logger is not connected
   if (!connected()) return false;
 
-  // perform the callback to notify the process is started
-  if (rateCallback) rateCallback(PROGRESS_STARTED);
-
   int32_t flashSize = 0;
   if (!getFlashSize(&flashSize)) return false;
 
-  int32_t progRate = 0;
   uint32_t timeStartAt = millis();
+  uint32_t timeElapsed = 0;
   uint32_t timeEstimated = (flashSize / SIZE_8MBIT) * TIME_PER_8MBIT;
+
+  // perform the callback to notify the process is started
+  if (rateCallback) rateCallback(0, (timeEstimated / 1000));
 
   // send clear command to the loggger
   if (!sendNmeaCommand("PMTK182,6,1")) return false;
 
   while (gpsSerial->connected()) {
     if (waitForNmeaReply("$PMTK001,182,6,3", CALLBACK_INTERVAL)) {  // successfully finished
-      // reload the logger and break
-      if (!reloadDevice()) return false;
       break;
     }
 
-    uint32_t timeElapsed = millis() - timeStartAt;
+    timeElapsed = millis() - timeStartAt;
     if (timeElapsed > timeEstimated) {
       Serial.println("Logger.clearFlash: timeout occurred");
       break;
     }
 
     // perform the callback to notify the current progress rate
-    if (rateCallback) rateCallback(((float)timeElapsed / timeEstimated) * 100);
+    if (rateCallback) rateCallback((timeElapsed / 1000), (timeEstimated / 1000));
   }
 
   // perform the callback to notify the process is finiched
-  if (rateCallback) rateCallback(PROGRESS_FINISHED);
+  if (rateCallback) {
+    timeElapsed = millis() - timeStartAt;
+    rateCallback((timeElapsed / 1000), (timeElapsed / 1000));
+  }
 
   return true;
 }

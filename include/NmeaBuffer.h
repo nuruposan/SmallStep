@@ -38,5 +38,6 @@ class NmeaBuffer {
   bool readHexByteHalf(byte *by);
   bool readColumnAsInt(uint8_t clm, int32_t *value, bool hex);
   bool seekToColumn(uint8_t clm);
+  bool seek(uint32_t sk);
   bool match(const char *str);
 };

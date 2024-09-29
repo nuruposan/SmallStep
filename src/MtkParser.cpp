@@ -168,15 +168,16 @@ bool MtkParser::readBinMarkers() {
       // do action according to the DSP type
       switch (dsType) {
       case DST_CHANGE_FORMAT:  // change format register
-        Serial.printf("Parser.readMarker: Change log format at 0x%05X [t=%d, v=0x%08X]\n", startPos, dsType, dsVal);
+        // Serial.printf("Parser.readMarker: Change log format by DSP at 0x%05X [t=%d, v=0x%08X]\n", startPos,
+        // dsType, dsVal);
 
         setRecordFormat(dsVal);
         break;
       case DST_LOG_STARTSTOP:  // log start(0x106), stop(0x0104)
-        Serial.printf("Parser.readMarker: LOG start/stop at 0x%05X [t=%d, v=0x%04X]\n", startPos, dsType, dsVal);
-
         if ((dsVal == DSV_LOG_START) && (options.trackMode == TRK_AS_IS)) {
           out->endTrack();
+          // Serial.printf("Parser.readMarker: Start a new track by DSP at 0x%05X [t=%d, v=0x%04X]\n",
+          // startPos, dsType, dsVal);
         }
         break;
       case DST_CHANGE_METHOD:
@@ -208,17 +209,15 @@ bool MtkParser::readBinMarkers() {
   return match;
 }
 
-bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int8_t)) {
+bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int32_t, int32_t)) {
   // clear all of the status variables before use
   memset(&status, 0, sizeof(parsestatus_t));
 
   in = new MtkFileReader(input);
   out = new GpxFileWriter(output);
 
-  int32_t progRate = 0;
+  int8_t progRate = 0;
   bool fileend = false;
-
-  //  out->startXml();
 
   uint32_t startPos = 0;
   uint32_t currentPos = 0;
@@ -226,7 +225,7 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int8
   uint32_t dataStart = 0;
   uint32_t sectorEnd = 0;
 
-  if (rateCallback != NULL) rateCallback(0);
+  if (rateCallback != NULL) rateCallback(0, in->filesize());
 
   while (true) {
     if (sectorStart != (SIZE_SECTOR * status.sectorPos)) {
@@ -241,10 +240,10 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int8
     }
 
     if (rateCallback != NULL) {
-      int32_t _pr = 100 * ((float)in->position() / in->filesize());
-      if (_pr > progRate) {
-        rateCallback(_pr);
-        progRate = _pr;
+      int8_t cpr = 100 * ((float)in->position() / in->filesize());
+      if (cpr > progRate) {
+        rateCallback(in->position(), in->filesize());
+        progRate = cpr;
       }
     }
 
@@ -288,7 +287,7 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int8
     }
   }
 
-  if (rateCallback != NULL) rateCallback(100);
+  if (rateCallback != NULL) rateCallback(in->filesize(), in->filesize());
 
   out->endXml();
   out->flush();

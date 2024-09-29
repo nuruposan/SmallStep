@@ -42,18 +42,26 @@ void GpxFileWriter::startTrack(char *trkname) {
   inTrack = true;
   inSegment = false;
   trackCount += 1;
+
+  if (trkname != NULL) {
+    Serial.printf("GpxFileWriter.startTrack [trkCount=%d, trkName=\"%s\"]\n", trackCount, trkname);
+  } else {
+    Serial.printf("GpxFileWriter.startTrack [trkCount=%d]\n", trackCount);
+  }
 }
 
 void GpxFileWriter::startTrackSegment() {
   out->write("<trkseg>\n");
   inSegment = true;
+
+  Serial.printf("GpxFileWriter.startSegment\n");
 }
 
 void GpxFileWriter::startXml() {
   out->write(
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-      "<gpx version=\"1.1\" creator=\"" PARSER_DESCR
-      "\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema xmlns=\"https://www.topografix.com/GPX/1/1/gpx.xsd\">\n");
+      "<gpx version=\"1.1\" creator=\"" PARSER_DESCR "\""
+      "xmlns:xsi=\"http://www.w3.org/2001/XMLSchema xmlns=\"https://www.topografix.com/GPX/1/1/gpx.xsd\">\n");
 
   inTrack = false;
   inSegment = false;

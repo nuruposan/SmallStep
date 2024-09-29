@@ -104,7 +104,7 @@ class AppUI {
 
   void drawDialogFrame(const char *title);
   void drawDialogMessage(int16_t color, int8_t line, String msg);
-  void drawDialogProgress(int32_t progress);
+  void drawDialogProgress(int32_t current, int32_t max);
   void drawTitleBar();
   void drawNavBar(navmenu_t *nav);
   void setAppHints(const char *into1, const char *info2);

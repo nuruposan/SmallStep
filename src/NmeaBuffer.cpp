@@ -225,3 +225,11 @@ bool NmeaBuffer::seekToColumn(uint8_t clm) {
 
   return (cc == clm);
 }
+
+bool NmeaBuffer::seek(uint32_t sk) {
+  for (int i = 0; i < sk; i++) {
+    if (get() == 0) return false;
+  }
+
+  return true;
+}
