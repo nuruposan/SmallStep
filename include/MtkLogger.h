@@ -2,6 +2,7 @@
 
 #include <BluetoothSerial.h>
 #include <EEPROM.h>
+#include <MtkParser.h>
 #include <SdFat.h>
 
 #include "NmeaBuffer.h"
@@ -48,12 +49,13 @@ class MtkLogger {
   MtkLogger(const char *devname);
   ~MtkLogger();
 
-  bool clearFlash(void (*rateCallback)(int8_t));
+  bool clearFlash(void (*rateCallback)(int32_t, int32_t));
   bool connect(String name);
   bool connect(uint8_t *address);
   bool connected();
   void disconnect();
-  bool downloadLogData(File32 *output, void (*rateCallback)(int8_t));
+  int32_t canResumeDownload(File32 *cache);
+  bool downloadLogData(File32 *rwCache, void (*rateCallback)(int32_t, int32_t), int32_t startPos);
   bool fixRTCdatetime();
   bool getFlashSize(int32_t *size);
   bool getLogByDistance(int16_t *dist);

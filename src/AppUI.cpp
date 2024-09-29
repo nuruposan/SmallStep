@@ -56,24 +56,42 @@ void AppUI::drawBitmap(const uint8_t *iconData, int16_t x, int16_t y, int16_t co
   }
 }
 
-void AppUI::drawDialogProgress(int32_t progRate) {
+void AppUI::drawDialogProgress(int32_t current, int32_t max) {
+  // calculate the progress rate
+  int32_t progRate = (max == 0) ? 0 : ((float)current / max) * 100;
+
   // limit the progress value to 0-100
   if (progRate < 0) progRate = 0;
   if (progRate > 100) progRate = 100;
 
   uint8_t barHeight = 16;
   uisize_t border = {8, 8};
-  uiarea_t barArea = {(int16_t)(DIALOG_AREA.w - (border.w * 2)), barHeight, (int16_t)(DIALOG_AREA.x + border.w),
+  uiarea_t barArea = {(int16_t)(DIALOG_AREA.w - (border.w * 2)),  //
+                      barHeight,                                  //
+                      (int16_t)(DIALOG_AREA.x + border.w),        //
                       (int16_t)(DIALOG_AREA.y + CLIENT_AREA.h - (barHeight * 2.2))};
   uint16_t colorBg = COLOR16(160, 160, 160);
   uint16_t colorFg = NAVY;
   uint16_t fgWidth = (barArea.w * (progRate / 100.0));
 
   sprite.createSprite(barArea.w, barArea.h);
-  sprite.fillSprite(colorBg);
 
+  // draw a progress bar
+  sprite.fillSprite(colorBg);
   sprite.fillRect(0, 0, fgWidth, barArea.h, colorFg);
   sprite.drawRect(0, 0, barArea.w, barArea.h, colorFg);
+
+  // draw text (format: "current/max (rate%)")
+  char buf[32];
+  sprintf(buf, "%d/%d(%d%%)", current, max, progRate);
+  sprite.setTextSize(1);
+  if (progRate < 50) {
+    sprite.setTextColor(colorFg);
+    sprite.drawString(buf, (fgWidth + 2), 5, 1);
+  } else {
+    sprite.setTextColor(colorBg);
+    sprite.drawRightString(buf, (fgWidth - 2), 5, 1);
+  }
 
   sprite.pushSprite(barArea.x, barArea.y);
   sprite.deleteSprite();

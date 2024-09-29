@@ -38,7 +38,7 @@ bool isDifferent(const void *, const void *, uint16_t);
 void saveAppConfig();
 bool loadAppConfig(bool);
 void bluetoothCallback(esp_spp_cb_event_t, esp_spp_cb_param_t *);
-void progressCallback(int8_t);
+void progressCallback(int32_t, int32_t);
 void setValueDescrByBool(char *, bool);
 bool runDownloadLog();
 bool runFixRTCtime();
@@ -234,8 +234,8 @@ void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   }
 }
 
-void progressCallback(int8_t progRate) {
-  ui.drawDialogProgress(progRate);
+void progressCallback(int32_t current, int32_t max) {
+  ui.drawDialogProgress(current, max);
 }
 
 bool isZeroFilled(void *p, uint16_t size) {
@@ -310,6 +310,7 @@ bool connectLogger(uint8_t msgLine) {
 
 bool runDownloadLog() {
   const char TEMP_BIN[] = "download.bin";
+  const char TEMP_BIN2[] = "download.bin2";
   const char TEMP_GPX[] = "download.gpx";
   const char GPX_PREFIX[] = "gps_";
   const char DATETIME_FMT[] = "%04d%02d%02d-%02d%02d%02d";
@@ -324,16 +325,40 @@ bool runDownloadLog() {
 
   if (!connectLogger(0)) return false;
 
-  File32 binFileW = SDcard.open(TEMP_BIN, (O_CREAT | O_WRITE | O_TRUNC));
-  if (!binFileW) {
-    ui.drawDialogMessage(RED, 1, "Cannot create a temporaly BIN file.");
+  File32 tempBin1 = SDcard.open(TEMP_BIN, (O_CREAT | O_RDWR));
+  File32 tempBin2 = SDcard.open(TEMP_GPX, (O_CREAT | O_WRITE | O_TRUNC));
+  File32 tempGpx = SDcard.open(TEMP_GPX, (O_CREAT | O_RDWR | O_TRUNC));
+  if ((!tempBin1) || (!tempGpx) || (!tempBin2)) {
+    ui.drawDialogMessage(RED, 1, "Cannot open a temporally BIN file.");
+
+    if (tempBin1) tempBin1.close();
+    if (tempBin2) tempGpx.close();
+    if (tempGpx) tempGpx.close();
+
     return false;
   }
 
   ui.drawDialogMessage(BLUE, 1, "Downloading log data...");
   {
-    if (!logger.downloadLogData(&binFileW, &progressCallback)) {
-      binFileW.close();
+    int32_t resumePos = logger.canResumeDownload(&tempBin1);
+    if (resumePos == -1) {
+      if (tempBin1) tempBin1.close();
+      if (tempBin2) tempGpx.close();
+      if (tempGpx) tempGpx.close();
+
+      ui.drawDialogMessage(RED, 1, "Downloading log data... failed.");
+      ui.drawDialogMessage(RED, 2, "- Keep your logger close to this device");
+      ui.drawDialogMessage(RED, 3, "- Power cycling may fix this problem");
+      return false;
+    } else if (resumePos == 0) {
+      tempBin1.close();
+      tempBin1 = SDcard.open(TEMP_BIN, (O_CREAT | O_WRITE | O_TRUNC));
+    }
+
+    if (!logger.downloadLogData(&tempBin1, &progressCallback, resumePos)) {
+      if (tempBin1) tempBin1.close();
+      if (tempBin2) tempGpx.close();
+      if (tempGpx) tempGpx.close();
 
       ui.drawDialogMessage(RED, 1, "Downloading log data... failed.");
       ui.drawDialogMessage(RED, 2, "- Keep your logger close to this device");
@@ -341,94 +366,87 @@ bool runDownloadLog() {
       return false;
     }
 
-    // disconnect from the logger and close the downloaded file
+    // disconnect from the logger and close the downloaded data file
     logger.disconnect();
-    binFileW.flush();
-    binFileW.close();
+    tempBin1.flush();
+
+    // copy the downloaded data file (TEMP_BIN) to the another name (TEMP_BIN2)
+    tempBin1.seek(0);
+    while (true) {
+      int8_t i = 0;
+      char buf[128];
+      memset(buf, 0, sizeof(buf));
+
+      tempBin1.readBytes(buf, sizeof(buf));
+      for (i = 0; i < sizeof(buf); i++) {
+        if (buf[i] == 0) break;
+        tempBin2.write(buf[i]);
+      }
+      if (buf[i] == 0) break;
+    }
+    tempBin2.flush();
   }
   ui.drawDialogMessage(BLACK, 1, "Downloading log data... done.");
 
-  // open the downloaded binary file for reading and
-  // create a new GPS file for writing
-  File32 binFileR = SDcard.open(TEMP_BIN, (O_READ));
-  File32 gpxFileW = SDcard.open(TEMP_GPX, (O_CREAT | O_WRITE | O_TRUNC));
-  if ((!binFileR) || (!gpxFileW)) {  // BIN or GPX file open failed
-    if (binFileR) binFileR.close();
-    if (gpxFileW) gpxFileW.close();
-
-    // print the error message
-    ui.drawDialogMessage(RED, 2, "Cannot open the temporaly BIN file");
-    ui.drawDialogMessage(RED, 3, "or create a GPX file for output.");
-    return false;
-  }
-
   ui.drawDialogMessage(BLUE, 2, "Converting data to GPX file...");
   {
-    parseopt_t parseopt = {cfg.trackMode, TIME_OFFSET_VALUES[cfg.timeOffsetIdx], cfg.putWaypt};
-
     // convert the binary file to GPX file and get the summary
     MtkParser *parser = new MtkParser();
+    parseopt_t parseopt = {cfg.trackMode, TIME_OFFSET_VALUES[cfg.timeOffsetIdx], cfg.putWaypt};
     parser->setOptions(parseopt);
-    parser->convert(&binFileR, &gpxFileW, &progressCallback);
+    parser->convert(&tempBin1, &tempGpx, &progressCallback);
     uint32_t trackCnt = parser->getTrackCount();
     uint32_t trkptCnt = parser->getTrkptCount();
     uint32_t wayptCnt = parser->getWayptCount();
     time_t time1st = parser->getFirstTrkpt().time;
     delete parser;
 
-    // close the binary and GPX files
-    binFileR.close();
-    gpxFileW.close();
+    // make a unique name for the GPX file
+    struct tm *ltime = localtime(&time1st);
+    char timestr[16];
+    char gpxName[32];
+    char binName[32];
+    sprintf(timestr, DATETIME_FMT,
+            (ltime->tm_year + 1900),  // year (4 digits)
+            (ltime->tm_mon + 1),      // month (1-12)
+            ltime->tm_mday,           // day of month (1-31)
+            ltime->tm_hour, ltime->tm_min, ltime->tm_sec);
+
+    // 最初のtrkptの時刻を使ってGPXファイルとBINファイルの保存名を決める
+    for (uint16_t i = 1; i <= 65535; i++) {
+      sprintf(gpxName, "%s%s_%02d.gpx", GPX_PREFIX, timestr, i);
+      sprintf(binName, "%s%s_%02d.bin", GPX_PREFIX, timestr, i);
+
+      if (!SDcard.exists(gpxName)) break;
+    }
+
+    // close the GPX file before rename and rename to the output file name
+    tempGpx.close();
+    tempBin1.close();
+    tempBin2.close();
 
     if (trkptCnt > 0) {
-      // make a unique name for the GPX file
-      struct tm *ltime = localtime(&time1st);
-      char timestr[16], gpxName[32], binName[32];
-      sprintf(timestr, DATETIME_FMT,
-              (ltime->tm_year + 1900),  // year (4 digits)
-              (ltime->tm_mon + 1),      // month (1-12)
-              ltime->tm_mday,           // day of month (1-31)
-              ltime->tm_hour, ltime->tm_min, ltime->tm_sec);
-
-      uint16_t i = 1;
-      do {
-        sprintf(gpxName, "%s%s_%02d.gpx", GPX_PREFIX, timestr, i);
-        sprintf(binName, "%s%s_%02d.bin", GPX_PREFIX, timestr, i);
-        i++;
-      } while (SDcard.exists(gpxName) && (i > 0));
-
-      // rename the GPX file (download.gpx -> gpslog_YYYYMMDD-HHMMSS.gpx) and
-      // the BIN file (download.bin -> gpslog_YYYYMMDD-HHMMSS.bin) if needed
       SDcard.rename(TEMP_GPX, gpxName);
-      if (cfg.leaveBinFile) {
-        SDcard.rename(TEMP_BIN, binName);
-      } else {
-        SDcard.remove(TEMP_BIN);
-      }
+      if (cfg.leaveBinFile) SDcard.rename(TEMP_BIN2, binName);
 
       // make the output message strings
       char outputstr[48], summarystr[48];
       sprintf(outputstr, "Output file : %s", gpxName);
-      if (cfg.putWaypt) {
-        sprintf(summarystr, "Summary : %d TRKs, %d TRKPTs, %d WPTs", trackCnt, trkptCnt, wayptCnt);
-      } else {
-        sprintf(summarystr, "Summary : %d TRKs, %d TRKPTs", trackCnt, trkptCnt);
-      }
+      sprintf(summarystr, "Summary : %d TRKs, %d TRKPTs, %d WPTs", trackCnt, trkptCnt, wayptCnt);
 
       // print the result message
       ui.drawDialogMessage(BLACK, 2, "Converting data to GPX file... done.");
       ui.drawDialogMessage(BLUE, 3, outputstr);
       ui.drawDialogMessage(BLUE, 4, summarystr);
     } else {
-      // remove the GPX file that has no valid record
-      SD.remove(TEMP_GPX);
-      SD.remove(TEMP_BIN);
-
       // print the result message
       ui.drawDialogMessage(BLACK, 2, "Converting data to GPX file... done.");
       ui.drawDialogMessage(BLUE, 3, "No output file is saved because of there is");
       ui.drawDialogMessage(BLUE, 4, "no valid record in the log data.");
     }
+
+    //    if (SDcard.exists(TEMP_GPX)) SDcard.remove(TEMP_GPX);
+    //    if (SDcard.exists(TEMP_BIN2)) SDcard.remove(TEMP_BIN2);
   }
 
   return true;
@@ -578,14 +596,26 @@ bool runClearFlash() {
   if (!connectLogger(1)) return false;
 
   ui.drawDialogMessage(BLUE, 2, "Erasing log data...");
-  if (!logger.clearFlash(&progressCallback)) {
+  if (logger.clearFlash(&progressCallback)) {
+    ui.drawDialogMessage(BLACK, 2, "Erasing log data... done.");
+  } else {
     ui.drawDialogMessage(RED, 2, "Erasing log data... timeout.");
     ui.drawDialogMessage(RED, 3, "Please retry the erase operation");
     return false;
   }
 
-  ui.drawDialogMessage(BLACK, 2, "Erasing log data... done.");
-  ui.drawDialogMessage(BLUE, 3, "Hope you have a nice trip next time!");
+  // reload the logger and break
+  ui.drawDialogMessage(BLUE, 3, "Reloading logger... ");
+
+  if (logger.reloadDevice()) {
+    ui.drawDialogMessage(BLACK, 3, "Reloading logger... done.");
+    ui.drawDialogMessage(BLUE, 4, "Hope you have a nice trip next time :)");
+  } else {
+    ui.drawDialogMessage(RED, 3, "Reloading logger... failed.");
+    ui.drawDialogMessage(RED, 4, "Please restart GPS logger manually");
+    ui.drawDialogMessage(RED, 4, "before use it.");
+    return false;
+  }
 
   return true;
 }

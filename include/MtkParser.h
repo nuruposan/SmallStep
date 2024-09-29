@@ -6,6 +6,12 @@
 #include "GpxFileWriter.h"
 #include "MtkFileReader.h"
 
+#define SIZE_SECTOR 0x010000  // 65536 bytes
+#define SIZE_HEADER 0x000200  // 512 bytes
+ 
+#define ROLLOVER_TIME 1554595200    // 2019-04-07
+#define ROLLOVER_CORRECT 619315200  // 1024 weeks
+
 typedef enum _dspid {
   DST_CHANGE_FORMAT = 2,
   DST_AUTOLOG_TIME = 3,
@@ -56,12 +62,6 @@ typedef struct _parsest {
 
 class MtkParser {
  private:
-  const uint32_t SIZE_SECTOR = 0x010000;  // 65536 bytes
-  const uint32_t SIZE_HEADER = 0x000200;  // 512 bytes
-
-  const uint32_t ROLLOVER_TIME = 1554595200;    // 2019-04-07
-  const uint32_t ROLLOVER_CORRECT = 619315200;  // 1024 weeks
-
   const char PTN_DSET_AA[7] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
   const char PTN_DSET_BB[4] = {0xBB, 0xBB, 0xBB, 0xBB};
   const char PTN_M241[16] = {'H', 'O', 'L', 'U', 'X', 'G', 'R', '2', '4', '1', 'L', 'O', 'G', 'G', 'E', 'R'};
@@ -83,7 +83,7 @@ class MtkParser {
  public:
   MtkParser();
   void setOptions(parseopt_t);
-  bool convert(File32 *input, File32 *output, void (*rateCallback)(int8_t));
+  bool convert(File32 *input, File32 *output, void (*rateCallback)(int32_t, int32_t));
   gpsrecord_t getFirstTrkpt();
   gpsrecord_t getLastTrkpt();
   int32_t getTrackCount();
