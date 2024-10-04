@@ -22,7 +22,6 @@ typedef struct _appconfig {
   trackmode_t trackMode;            // parser - how to divide/put tracks
   uint8_t timeOffsetIdx;            // parser - timezone offset in hours
   bool putWaypt;                    // parser - treat points recorded by button as WPTs
-  bool leaveBinFile;                // parser - leave the BIN file after conversion
   uint8_t logDistIdx;               // log mode - auto log by distance (meter, 0: disable)
   uint8_t logTimeIdx;               // log mode - auto log by time (seconds, 0: disable)
   uint8_t logSpeedIdx;              // log mode - auto log by speed (meter/sec, 0:disabled)
@@ -61,8 +60,6 @@ void onTrackModeSelect(cfgitem_t *);
 void onTrackModeUpdate(cfgitem_t *);
 void onPutWayptSelect(cfgitem_t *);
 void onPutWayptUpdate(cfgitem_t *);
-void onLeaveBinFileSelect(cfgitem_t *);
-void onLeaveBinFileUpdate(cfgitem_t *);
 void onLogByDistanceSelect(cfgitem_t *);
 void onLogByDistanceUpdate(cfgitem_t *);
 void onLogByTimeSelect(cfgitem_t *);
@@ -122,7 +119,6 @@ const appconfig_t DEFAULT_CONFIG = {
     TRK_ONE_DAY,                                                                     // trackMode
     14,                                                                              // timeOffsetIdx (14: UTC+0)
     true,                                                                            // putWaypt
-    false,                                                                           // leaveBinFile
     0,                                                                               // logDistIdx (0: disabled)
     4,                                                                               // logTimeIdx (7: 10 seconds)
     0,                                                                               // logSpeedIdx (0: disabled)
@@ -148,7 +144,6 @@ cfgitem_t cfgOutput[] = {
     {"Track mode", "How to divide tracks in GPX file", "", &onTrackModeSelect, &onTrackModeUpdate},
     {"Timezone offset", "UTC offset for 'a track per day' mode", "", &onTimezoneSelect, &onTimezoneUpdate},
     {"Put WAYPTs", "Treat manulally recorded points as WAYPTs (POIs)", "", &onPutWayptSelect, &onPutWayptUpdate},
-    {"Save BIN file", "Leave the downloaded data as BIN file", "", &onLeaveBinFileSelect, &onLeaveBinFileUpdate},
 };
 
 cfgitem_t cfgLogMode[] = {
@@ -309,8 +304,8 @@ bool connectLogger(uint8_t msgLine) {
 }
 
 bool runDownloadLog() {
+  const char PREV_BIN[] = "download.prev";
   const char TEMP_BIN[] = "download.bin";
-  const char TEMP_BIN2[] = "download.bin2";
   const char TEMP_GPX[] = "download.gpx";
   const char GPX_PREFIX[] = "gps_";
   const char DATETIME_FMT[] = "%04d%02d%02d-%02d%02d%02d";
@@ -323,42 +318,58 @@ bool runDownloadLog() {
   ui.drawDialogFrame("Download Log");
   ui.drawNavBar(NULL);
 
-  if (!connectLogger(0)) return false;
-
-  File32 tempBin1 = SDcard.open(TEMP_BIN, (O_CREAT | O_RDWR));
-  File32 tempBin2 = SDcard.open(TEMP_GPX, (O_CREAT | O_WRITE | O_TRUNC));
+  File32 prevBin = SDcard.open(PREV_BIN, (O_CREAT | O_READ));
+  File32 tempBin = SDcard.open(TEMP_BIN, (O_CREAT | O_RDWR | O_TRUNC));
   File32 tempGpx = SDcard.open(TEMP_GPX, (O_CREAT | O_RDWR | O_TRUNC));
-  if ((!tempBin1) || (!tempGpx) || (!tempBin2)) {
-    ui.drawDialogMessage(RED, 1, "Cannot open a temporally BIN file.");
+  if ((!tempBin) || (!tempGpx)) {
+    ui.drawDialogMessage(RED, 0, "Could not open temporally files.");
 
-    if (tempBin1) tempBin1.close();
-    if (tempBin2) tempGpx.close();
+    if (prevBin) prevBin.close();
+    if (tempBin) tempBin.close();
     if (tempGpx) tempGpx.close();
 
     return false;
   }
 
+  if (!connectLogger(0)) return false;
+
   ui.drawDialogMessage(BLUE, 1, "Downloading log data...");
   {
-    int32_t resumePos = logger.canResumeDownload(&tempBin1);
+    int32_t resumePos = logger.canResumeDownload(&prevBin);
     if (resumePos == -1) {
-      if (tempBin1) tempBin1.close();
-      if (tempBin2) tempGpx.close();
-      if (tempGpx) tempGpx.close();
+      prevBin.close();
+      tempBin.close();
+      tempGpx.close();
 
       ui.drawDialogMessage(RED, 1, "Downloading log data... failed.");
-      ui.drawDialogMessage(RED, 2, "- Keep your logger close to this device");
-      ui.drawDialogMessage(RED, 3, "- Power cycling may fix this problem");
-      return false;
-    } else if (resumePos == 0) {
-      tempBin1.close();
-      tempBin1 = SDcard.open(TEMP_BIN, (O_CREAT | O_WRITE | O_TRUNC));
-    }
+      ui.drawDialogMessage(RED, 2, "- Initial communiaction failed");
+      ui.drawDialogMessage(RED, 3, "- Cannot determine ");
 
-    if (!logger.downloadLogData(&tempBin1, &progressCallback, resumePos)) {
-      if (tempBin1) tempBin1.close();
-      if (tempBin2) tempGpx.close();
-      if (tempGpx) tempGpx.close();
+      return false;
+    } else if (resumePos > 0) {
+      char buf[512];
+      prevBin.seek(0);
+      tempBin.seek(0);
+      for (int32_t i = 0; i < resumePos; i += sizeof(buf)) {
+        memset(buf, 0, sizeof(buf));
+        prevBin.readBytes(buf, sizeof(buf));
+        for (int16_t j = 0; j < sizeof(buf); j++) {
+          tempBin.write(buf[j]);
+        }
+      }
+      prevBin.close();
+      tempBin.flush();
+    }
+  }
+
+  {
+    if (!logger.downloadLogData(&tempBin, &progressCallback, tempBin.position())) {
+      tempBin.close();
+      tempGpx.close();
+
+      SDcard.remove(PREV_BIN);
+      SDcard.rename(TEMP_BIN, PREV_BIN);
+      SDcard.remove(TEMP_GPX);
 
       ui.drawDialogMessage(RED, 1, "Downloading log data... failed.");
       ui.drawDialogMessage(RED, 2, "- Keep your logger close to this device");
@@ -368,23 +379,7 @@ bool runDownloadLog() {
 
     // disconnect from the logger and close the downloaded data file
     logger.disconnect();
-    tempBin1.flush();
-
-    // copy the downloaded data file (TEMP_BIN) to the another name (TEMP_BIN2)
-    tempBin1.seek(0);
-    while (true) {
-      int8_t i = 0;
-      char buf[128];
-      memset(buf, 0, sizeof(buf));
-
-      tempBin1.readBytes(buf, sizeof(buf));
-      for (i = 0; i < sizeof(buf); i++) {
-        if (buf[i] == 0) break;
-        tempBin2.write(buf[i]);
-      }
-      if (buf[i] == 0) break;
-    }
-    tempBin2.flush();
+    tempBin.flush();
   }
   ui.drawDialogMessage(BLACK, 1, "Downloading log data... done.");
 
@@ -394,7 +389,7 @@ bool runDownloadLog() {
     MtkParser *parser = new MtkParser();
     parseopt_t parseopt = {cfg.trackMode, TIME_OFFSET_VALUES[cfg.timeOffsetIdx], cfg.putWaypt};
     parser->setOptions(parseopt);
-    parser->convert(&tempBin1, &tempGpx, &progressCallback);
+    parser->convert(&tempBin, &tempGpx, &progressCallback);
     uint32_t trackCnt = parser->getTrackCount();
     uint32_t trkptCnt = parser->getTrkptCount();
     uint32_t wayptCnt = parser->getWayptCount();
@@ -422,12 +417,12 @@ bool runDownloadLog() {
 
     // close the GPX file before rename and rename to the output file name
     tempGpx.close();
-    tempBin1.close();
-    tempBin2.close();
+    tempBin.close();
 
     if (trkptCnt > 0) {
+      SDcard.remove(PREV_BIN);
+      SDcard.rename(TEMP_BIN, PREV_BIN);
       SDcard.rename(TEMP_GPX, gpxName);
-      if (cfg.leaveBinFile) SDcard.rename(TEMP_BIN2, binName);
 
       // make the output message strings
       char outputstr[48], summarystr[48];
@@ -444,9 +439,6 @@ bool runDownloadLog() {
       ui.drawDialogMessage(BLUE, 3, "No output file is saved because of there is");
       ui.drawDialogMessage(BLUE, 4, "no valid record in the log data.");
     }
-
-    //    if (SDcard.exists(TEMP_GPX)) SDcard.remove(TEMP_GPX);
-    //    if (SDcard.exists(TEMP_BIN2)) SDcard.remove(TEMP_BIN2);
   }
 
   return true;
@@ -789,14 +781,6 @@ void onPutWayptSelect(cfgitem_t *item) {
 
 void onPutWayptUpdate(cfgitem_t *item) {
   setValueDescrByBool(item->valueDescr, cfg.putWaypt);
-}
-
-void onLeaveBinFileSelect(cfgitem_t *item) {
-  cfg.leaveBinFile = (!cfg.leaveBinFile);
-}
-
-void onLeaveBinFileUpdate(cfgitem_t *item) {
-  setValueDescrByBool(item->valueDescr, cfg.leaveBinFile);
 }
 
 void onLogByDistanceSelect(cfgitem_t *item) {
