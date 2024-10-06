@@ -209,14 +209,14 @@ bool MtkParser::readBinMarkers() {
   return match;
 }
 
-bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int32_t, int32_t)) {
+bool MtkParser::convert(File32 *input, File32 *output, void (*progressCallback)(int32_t, int32_t)) {
   // clear all of the status variables before use
   memset(&status, 0, sizeof(parsestatus_t));
 
   in = new MtkFileReader(input);
   out = new GpxFileWriter(output);
 
-  int8_t progRate = 0;
+  uint8_t progRate = 0;
   bool fileend = false;
 
   uint32_t startPos = 0;
@@ -225,7 +225,7 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int3
   uint32_t dataStart = 0;
   uint32_t sectorEnd = 0;
 
-  if (rateCallback != NULL) rateCallback(0, in->filesize());
+  if (progressCallback != NULL) progressCallback(0, in->filesize());
 
   while (true) {
     if (sectorStart != (SIZE_SECTOR * status.sectorPos)) {
@@ -239,10 +239,10 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int3
       break;
     }
 
-    if (rateCallback != NULL) {
-      int8_t cpr = 100 * ((float)in->position() / in->filesize());
+    if (progressCallback != NULL) {
+      uint8_t cpr = 200 * ((float)in->position() / in->filesize());
       if (cpr > progRate) {
-        rateCallback(in->position(), in->filesize());
+        progressCallback(in->position(), in->filesize());
         progRate = cpr;
       }
     }
@@ -287,7 +287,7 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*rateCallback)(int3
     }
   }
 
-  if (rateCallback != NULL) rateCallback(in->filesize(), in->filesize());
+  if (progressCallback != NULL) progressCallback(in->filesize(), in->filesize());
 
   out->endXml();
   out->flush();

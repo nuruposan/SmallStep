@@ -238,7 +238,7 @@ bool MtkLogger::getLastRecordAddress(int32_t *address) {
   return (endAddr > 0);
 }
 
-int32_t MtkLogger::canResumeDownload(File32 *cache) {
+int32_t MtkLogger::resetResumeFile(File32 *cache) {
   uint32_t binFileSize = cache->fileSize();
 
   Serial.printf("Logger.canResume: binFileSize %d bytes\n", binFileSize);
@@ -251,7 +251,7 @@ int32_t MtkLogger::canResumeDownload(File32 *cache) {
   buffer->seekToColumn(3);  // move to the 4th column (data column)
   buffer->seek(SIZE_HEADER * 2);
 
-  // 最初のデータフィールドの先頭0x80バイト(0x200-0x2FF)が同一なら前回の続きと見なす
+  // 最初のデータフィールドの先頭0x100バイト(0x200-0x2FF)が同一なら前回の続きと見なす
   char fbuf[0x100];
   cache->readBytes(fbuf, sizeof(fbuf));
 
@@ -267,7 +267,7 @@ int32_t MtkLogger::canResumeDownload(File32 *cache) {
 
   // キャッシュが以前のものではない場合0を返す
   if (!canResume) {
-    cache->seek(0);
+    cache->truncate(0);
     return 0;
   }
 
@@ -275,7 +275,7 @@ int32_t MtkLogger::canResumeDownload(File32 *cache) {
   // * 後ろから2つ目のセクターの先頭2バイトが0xFFFF(セクタ内のレコード数が未確定)であればそのセクターを再開位置とする
   // * 0xFFFF以外(そのセクターのレコード数が確定済み)であれば次の最終セクターをダウンロード再開位置とする
   // (0x00, 0x00, ... 0x00, 0x00 がセンター境界にきている場合、最終の一つ手前のセクターの末尾はまだ更新される)
-  int16_t sectors = cache->fileSize() / SIZE_SECTOR;  //
+  int16_t sectors = cache->fileSize() / SIZE_SECTOR;
   int32_t resumeAddr = (sectors - 1) * SIZE_SECTOR;
   cache->seek(resumeAddr);
   uint16_t records = (cache->read() << 8) + (cache->read());
@@ -284,24 +284,22 @@ int32_t MtkLogger::canResumeDownload(File32 *cache) {
   Serial.printf("Logger.canResume: resume position is 0x%06X\n", resumeAddr);
 
   // finally seek to the potision to resume
-  cache->seek(resumeAddr);
-
+  cache->truncate(resumeAddr);
   return resumeAddr;
 }
 
-bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int32_t, int32_t), int32_t startPos) {
+bool MtkLogger::downloadLogData(File32 *output, void (*progressCallback)(int32_t, int32_t)) {
   const int8_t MAX_RETRIES = 3;
   const int32_t REQ_SIZE = 0x4000;
   const int32_t LOG_TIMEOUT1 = 3000;
   const int32_t LOG_TIMEOUT2 = 1000;
 
-  int8_t progRate = 0;
   bool nextReq = true;
   bool dataEnd = false;
-  int32_t nextAddr = (startPos > 0) ? startPos : 0;  // the address of next data block to receive
-  int32_t recvSize = 0;                              // received data size for the last request
-  int32_t endAddr = 0;                               // the last address to download
-  int8_t retries = 0;                                // retry count
+  int32_t nextAddr = 0;  // the address of next data block to receive
+  int32_t recvSize = 0;  // received data size for the last request
+  int32_t endAddr = 0;   // the last address to download
+  int8_t retries = 0;    // retry count
   int16_t timeout = LOG_TIMEOUT1;
 
   // get the last address to be downloaded (endAddr).
@@ -311,9 +309,13 @@ bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int32_t, in
   endAddr = REQ_SIZE * ((endAddr / REQ_SIZE) + 1);
 
   // perform the callback to notify the download process is started
-  if (rateCallback) rateCallback(0, endAddr);
+  if (progressCallback) progressCallback(nextAddr, endAddr);
 
-  output->seek(nextAddr);
+  if ((nextAddr = resetResumeFile(output)) == -1) return false;
+  output->truncate(nextAddr);
+
+  // perform the callback to notify the download process is started
+  if (progressCallback) progressCallback(0, endAddr);
 
   Serial.printf("Logger.download: download started [nextAddr=0x%06X, endAddr=0x%06X, resume=%d]\n", nextAddr, endAddr,
                 (nextAddr != 0));
@@ -367,13 +369,7 @@ bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int32_t, in
     if (startAddr != nextAddr) continue;
 
     // perform the callback function to notify the progress
-    if (rateCallback) {
-      int32_t cpr = 100 * ((float)nextAddr / endAddr);
-      if (cpr > progRate) {
-        rateCallback(nextAddr, endAddr);
-        progRate = cpr;
-      }
-    }
+    if (progressCallback) progressCallback(nextAddr, endAddr);
 
     // read the data from the buffer and write it to the output file
     // and count the continuous 0xFFs to detect the end of the log data
@@ -405,7 +401,7 @@ bool MtkLogger::downloadLogData(File32 *output, void (*rateCallback)(int32_t, in
   buffer->clear();
 
   // finally perform the callback to notify the progress is completed
-  if (rateCallback) rateCallback(endAddr, endAddr);
+  if ((dataEnd) && (progressCallback)) progressCallback(endAddr, endAddr);
 
   // return true if the download process is finished successfully
   return ((dataEnd) || (nextAddr >= endAddr));

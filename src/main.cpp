@@ -304,11 +304,9 @@ bool connectLogger(uint8_t msgLine) {
 }
 
 bool runDownloadLog() {
-  const char PREV_BIN[] = "download.prev";
-  const char TEMP_BIN[] = "download.bin";
-  const char TEMP_GPX[] = "download.gpx";
-  const char GPX_PREFIX[] = "gps_";
-  const char DATETIME_FMT[] = "%04d%02d%02d-%02d%02d%02d";
+  const char TEMP_BIN[] = "_download.bin";
+  const char TEMP_GPX[] = "_download.gpx";
+  const char FILENAME_FMT[] = "gps_%04d%02d%02d-%02d%02d%02d";
 
   // return false if the logger is not paired yet
   if (!isLoggerPaired()) return false;
@@ -318,16 +316,13 @@ bool runDownloadLog() {
   ui.drawDialogFrame("Download Log");
   ui.drawNavBar(NULL);
 
-  File32 prevBin = SDcard.open(PREV_BIN, (O_CREAT | O_READ));
-  File32 tempBin = SDcard.open(TEMP_BIN, (O_CREAT | O_RDWR | O_TRUNC));
-  File32 tempGpx = SDcard.open(TEMP_GPX, (O_CREAT | O_RDWR | O_TRUNC));
-  if ((!tempBin) || (!tempGpx)) {
+  File32 binFile = SDcard.open(TEMP_BIN, (O_CREAT | O_RDWR));
+  File32 gpxFile = SDcard.open(TEMP_GPX, (O_CREAT | O_RDWR | O_TRUNC));
+  if ((!binFile) || (!gpxFile)) {
+    if (binFile) binFile.close();
+    if (gpxFile) gpxFile.close();
+
     ui.drawDialogMessage(RED, 0, "Could not open temporally files.");
-
-    if (prevBin) prevBin.close();
-    if (tempBin) tempBin.close();
-    if (tempGpx) tempGpx.close();
-
     return false;
   }
 
@@ -335,41 +330,9 @@ bool runDownloadLog() {
 
   ui.drawDialogMessage(BLUE, 1, "Downloading log data...");
   {
-    int32_t resumePos = logger.canResumeDownload(&prevBin);
-    if (resumePos == -1) {
-      prevBin.close();
-      tempBin.close();
-      tempGpx.close();
-
-      ui.drawDialogMessage(RED, 1, "Downloading log data... failed.");
-      ui.drawDialogMessage(RED, 2, "- Initial communiaction failed");
-      ui.drawDialogMessage(RED, 3, "- Cannot determine ");
-
-      return false;
-    } else if (resumePos > 0) {
-      char buf[512];
-      prevBin.seek(0);
-      tempBin.seek(0);
-      for (int32_t i = 0; i < resumePos; i += sizeof(buf)) {
-        memset(buf, 0, sizeof(buf));
-        prevBin.readBytes(buf, sizeof(buf));
-        for (int16_t j = 0; j < sizeof(buf); j++) {
-          tempBin.write(buf[j]);
-        }
-      }
-      prevBin.close();
-      tempBin.flush();
-    }
-  }
-
-  {
-    if (!logger.downloadLogData(&tempBin, &progressCallback, tempBin.position())) {
-      tempBin.close();
-      tempGpx.close();
-
-      SDcard.remove(PREV_BIN);
-      SDcard.rename(TEMP_BIN, PREV_BIN);
-      SDcard.remove(TEMP_GPX);
+    if (!logger.downloadLogData(&binFile, &progressCallback)) {
+      binFile.close();
+      gpxFile.close();
 
       ui.drawDialogMessage(RED, 1, "Downloading log data... failed.");
       ui.drawDialogMessage(RED, 2, "- Keep your logger close to this device");
@@ -379,7 +342,6 @@ bool runDownloadLog() {
 
     // disconnect from the logger and close the downloaded data file
     logger.disconnect();
-    tempBin.flush();
   }
   ui.drawDialogMessage(BLACK, 1, "Downloading log data... done.");
 
@@ -389,19 +351,23 @@ bool runDownloadLog() {
     MtkParser *parser = new MtkParser();
     parseopt_t parseopt = {cfg.trackMode, TIME_OFFSET_VALUES[cfg.timeOffsetIdx], cfg.putWaypt};
     parser->setOptions(parseopt);
-    parser->convert(&tempBin, &tempGpx, &progressCallback);
+    parser->convert(&binFile, &gpxFile, &progressCallback);
     uint32_t trackCnt = parser->getTrackCount();
     uint32_t trkptCnt = parser->getTrkptCount();
     uint32_t wayptCnt = parser->getWayptCount();
     time_t time1st = parser->getFirstTrkpt().time;
     delete parser;
 
+    // close the GPX file before rename and rename to the output file name
+    binFile.close();
+    gpxFile.close();
+
     // make a unique name for the GPX file
     struct tm *ltime = localtime(&time1st);
-    char timestr[16];
+    char baseName[24];
     char gpxName[32];
     char binName[32];
-    sprintf(timestr, DATETIME_FMT,
+    sprintf(baseName, FILENAME_FMT,
             (ltime->tm_year + 1900),  // year (4 digits)
             (ltime->tm_mon + 1),      // month (1-12)
             ltime->tm_mday,           // day of month (1-31)
@@ -409,19 +375,13 @@ bool runDownloadLog() {
 
     // 最初のtrkptの時刻を使ってGPXファイルとBINファイルの保存名を決める
     for (uint16_t i = 1; i <= 65535; i++) {
-      sprintf(gpxName, "%s%s_%02d.gpx", GPX_PREFIX, timestr, i);
-      sprintf(binName, "%s%s_%02d.bin", GPX_PREFIX, timestr, i);
+      sprintf(gpxName, "%s_%02d.gpx", baseName, i);
+      sprintf(binName, "%s_%02d.bin", baseName, i);
 
       if (!SDcard.exists(gpxName)) break;
     }
 
-    // close the GPX file before rename and rename to the output file name
-    tempGpx.close();
-    tempBin.close();
-
     if (trkptCnt > 0) {
-      SDcard.remove(PREV_BIN);
-      SDcard.rename(TEMP_BIN, PREV_BIN);
       SDcard.rename(TEMP_GPX, gpxName);
 
       // make the output message strings
