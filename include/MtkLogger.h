@@ -39,6 +39,7 @@ class MtkLogger {
   esp_spp_cb_t eventCallback;
 
   uint8_t calcNmeaChecksum(const char *cmd);
+  int32_t resetResumeFile(File32 *cache);
   bool sendNmeaCommand(const char *cmd);
   bool waitForNmeaReply(const char *reply, uint16_t timeout);
   bool sendDownloadCommand(int startPos, int reqSize);
@@ -54,8 +55,7 @@ class MtkLogger {
   bool connect(uint8_t *address);
   bool connected();
   void disconnect();
-  int32_t canResumeDownload(File32 *cache);
-  bool downloadLogData(File32 *rwCache, void (*rateCallback)(int32_t, int32_t), int32_t startPos);
+  bool downloadLogData(File32 *output, void (*rateCallback)(int32_t, int32_t));
   bool fixRTCdatetime();
   bool getFlashSize(int32_t *size);
   bool getLogByDistance(int16_t *dist);
