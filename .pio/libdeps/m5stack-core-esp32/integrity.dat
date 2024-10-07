@@ -1,2 +1,3 @@
-m5stack/M5Stack@^0.4.6
 adafruit/SdFat - Adafruit Fork@^2.2.3
+m5stack/M5Stack@^0.4.6
+haratta27/M5Stack_SimpleBeep@^1.2.0

@@ -1,5 +1,6 @@
 #include <M5Stack.h>
 #include <SdFat.h>
+#include <SimpleBeep.h>
 
 #include "AppUI.h"
 #include "MtkLogger.h"
@@ -11,31 +12,39 @@
 /* Otherwise, the BluetoothSerial library will not work properly. */
 /* ################################################## */
 
-#define SD_ACCESS_SPEED 15000000  // 20MHz may cause SD card error
+#define SD_ACCESS_SPEED 15000000  // settins 20MHz should cause SD card error
 #define BT_ADDR_LEN 6
 #define DEV_NAME_LEN 20
 
+#define BEEP_VOLUME 4
+#define BEEP_FREQ_SUCCESS 4186  // C8
+#define BEEP_FREQ_FAILURE 65    // C2
+#define BEEP_DURATION_SHORT 100
+#define BEEP_DURATION_LONG 500
+
 typedef struct _appconfig {
   uint16_t length;                  // must be sizeof(appconfig_t)
-  uint8_t loggerAddr[BT_ADDR_LEN];  // app - address of paired logger
-  char loggerName[DEV_NAME_LEN];    // app - name of pairded logger
-  trackmode_t trackMode;            // parser - how to divide/put tracks
-  uint8_t timeOffsetIdx;            // parser - timezone offset in hours
-  bool putWaypt;                    // parser - treat points recorded by button as WPTs
-  uint8_t logDistIdx;               // log mode - auto log by distance (meter, 0: disable)
-  uint8_t logTimeIdx;               // log mode - auto log by time (seconds, 0: disable)
-  uint8_t logSpeedIdx;              // log mode - auto log by speed (meter/sec, 0:disabled)
-  bool logFullStop;                 // log mode - stop logging when flash is full
-  uint32_t logFormat;               // log format - fields to be recorded
+  uint8_t loggerAddr[BT_ADDR_LEN];  // app / address of paired logger
+  char loggerName[DEV_NAME_LEN];    // app / name of pairded logger
+  bool playBeep;                    // app / play beep sound
+  trackmode_t trackMode;            // parser / how to divide/put tracks
+  uint8_t timeOffsetIdx;            // parser / timezone offset in hours
+  bool putWaypt;                    // parser / treat points recorded by button as WPTs
+  uint8_t logDistIdx;               // log mode / auto log by distance (meter, 0: disable)
+  uint8_t logTimeIdx;               // log mode / auto log by time (seconds, 0: disable)
+  uint8_t logSpeedIdx;              // log mode / auto log by speed (meter/sec, 0:disabled)
+  bool logFullStop;                 // log mode / stop logging when flash is full
+  uint32_t logFormat;               // log format / fields to be recorded
 } appconfig_t;
 
 // ******** function prototypes ********
-bool isZeroFilled(void *, uint16_t);
+bool isZeroedBytes(void *, uint16_t);
 bool isLoggerPaired();
 bool isSDcardAvailable();
-bool isDifferent(const void *, const void *, uint16_t);
+bool isSameBytes(const void *, const void *, uint16_t);
 void saveAppConfig();
 bool loadAppConfig(bool);
+void playBeep(bool success, uint16_t duration);
 void bluetoothCallback(esp_spp_cb_event_t, esp_spp_cb_param_t *);
 void progressCallback(int32_t, int32_t);
 void setValueDescrByBool(char *, bool);
@@ -96,6 +105,8 @@ void onPairWithLoggerCfgUpdate(cfgitem_t *);
 void onOutputSubMenuSelect(cfgitem_t *);
 void onLogModeSubMenuSelect(cfgitem_t *);
 void onLogFormatSubMenuSelect(cfgitem_t *);
+void onEnableBeepCfgSelect(cfgitem_t *);
+void onEnableBeepCfgUpdate(cfgitem_t *);
 void onPerformFormatSelect(cfgitem_t *);
 void onClearSettingsSelect(cfgitem_t *);
 void updateAppHint();
@@ -106,16 +117,16 @@ const uint32_t IDLE_TIMEOUT = 120000;
 
 const float TIME_OFFSET_VALUES[] = {
     -12, -11, -10, -9, -8,  -7, -6,  -5, -4.5, -4, -3.5, -3, -2,  -1, 0,  1,
-    2,   3,   3.5, 4,  4.5, 5,  5.5, 6,  6.5,  7,  8,    9,  9.5, 10, 12, 13};            // uint: hours
-const int16_t LOG_DIST_VALUES[] = {0, 100, 300, 500, 1000, 2000, 3000, 5000};             // uint: .1 meters
-const int16_t LOG_TIME_VALUES[] = {0, 10, 30, 50, 100, 150, 300, 600, 1200, 1800, 3000};  // unit: .1 seconds
-const int16_t LOG_SPEED_VALUES[] = {0,   100,  200,  300,  400,  500,  600,  700,  800,
-                                    900, 1000, 1200, 1400, 1600, 1800, 2000, 2500, 3000};  // uint: .1 km/h
-
+    2,   3,   3.5, 4,  4.5, 5,  5.5, 6,  6.5,  7,  8,    9,  9.5, 10, 12, 13};                 // uint: hours
+const int16_t LOG_DIST_VALUES[] = {0, 100, 300, 500, 1000, 2000, 3000, 5000};                  // uint: .1 meters
+const int16_t LOG_TIME_VALUES[] = {0, 10, 30, 50, 100, 150, 200, 300, 600, 1200, 1800, 3000};  // unit: .1 seconds
+const int16_t LOG_SPEED_VALUES[] = {0,   100,  200,  300,  400,  500,  600,  700,  800,        // uint: .1 km/h
+                                    900, 1000, 1200, 1400, 1600, 1800, 2000, 2500, 3000};
 const appconfig_t DEFAULT_CONFIG = {
     sizeof(appconfig_t),                                                             // length
     {0, 0, 0, 0, 0, 0},                                                              // loggerAddr
     "NO LOGGER",                                                                     // loggerName
+    true,                                                                            // playBeep
     TRK_ONE_DAY,                                                                     // trackMode
     14,                                                                              // timeOffsetIdx (14: UTC+0)
     true,                                                                            // putWaypt
@@ -139,20 +150,21 @@ menuitem_t menuMain[] = {
 };
 
 cfgitem_t cfgOutput[] = {
-    // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
-    {"Back", "Exit this menu", "<<", NULL, NULL},
-    {"Track mode", "How to divide tracks in GPX file", "", &onTrackModeSelect, &onTrackModeUpdate},
-    {"Timezone offset", "UTC offset for 'a track per day' mode", "", &onTimezoneSelect, &onTimezoneUpdate},
-    {"Put WAYPTs", "Treat manulally recorded points as WAYPTs (POIs)", "", &onPutWayptSelect, &onPutWayptUpdate},
+    // {caption, hintText, valueDescr, onSelectItem, onDescrUpdate}
+    {"Back", "Exit this menu", "<<", true, NULL, NULL},
+    {"Track mode", "How to divide tracks in GPX file", "", true, &onTrackModeSelect, &onTrackModeUpdate},
+    {"Timezone offset", "UTC offset for 'a track per day' mode", "", true, &onTimezoneSelect, &onTimezoneUpdate},
+    {"Put WAYPTs", "Treat manulally recorded points as WAYPTs (POIs)", "", true, &onPutWayptSelect, &onPutWayptUpdate},
 };
 
 cfgitem_t cfgLogMode[] = {
     // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
-    {"Back", "Exit this menu", "<<", NULL, NULL},
-    {"Log by distance", "Auto log by moving distance", "", &onLogByDistanceSelect, &onLogByDistanceUpdate},
-    {"Log by time", "Auto log by elapsed time", "", &onLogByTimeSelect, &onLogByTimeUpdate},
-    {"Log by speed", "Auto log by exceeded speed", "", &onLogBySpeedSelect, &onLogBySpeedUpdate},
-    {"Log full action", "Behavior when the logger flash is full", "", &onLogFullActionSelect, &onLogFullActionUpdate},
+    {"Back", "Exit this menu", "<<", true, NULL, NULL},
+    {"Log by distance", "Auto log by moving distance", "", true, &onLogByDistanceSelect, &onLogByDistanceUpdate},
+    {"Log by time", "Auto log by elapsed time", "", true, &onLogByTimeSelect, &onLogByTimeUpdate},
+    {"Log by speed", "Auto log by exceeded speed", "", true, &onLogBySpeedSelect, &onLogBySpeedUpdate},
+    {"Log full action", "Behavior when the logger flash is full", "", true, &onLogFullActionSelect,
+     &onLogFullActionUpdate},
 };
 
 cfgitem_t *cfgLogByDist = &cfgLogMode[1];
@@ -161,35 +173,38 @@ cfgitem_t *cfgLogBySpd = &cfgLogMode[3];
 
 cfgitem_t cfgLogFormat[] = {
     // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
-    {"Back", "Exit this menu", "<<", NULL, NULL},
-    {"Load defaults", "Reset to the default format", "", &onLoadDefaultFormatSelect, &onLoadDefaultFormatUpdate},
-    {"TIME (required fields)", "Date and time data in seconds", "Enabled", &onReadOnlyItemSelect, NULL},
-    {"LAT, LON (required fields)", "Latitude and longitude data", "Enabled", &onReadOnlyItemSelect, NULL},
-    {"SPEED", "Moving speed data", "", &onRecordSpeedSelect, &onRecordSpeedUpdate},
-    {"ALT", "Altitude data", "", &onRecordAltitudeSelect, &onRecordAltitudeUpdate},
-    {"RCR", "Record reason (needed to put WAYPTs)", "", &onRecordRCRSelect, &onRecordRCRUpdate},
-    {"------", "The fields below are not used by SmallStep", "", &onReadOnlyItemSelect, NULL},
-    {"TRACK", "Track angle data", "", &onRecordHeadingSelect, &onRecordHeadingUpdate},
-    {"VALID", "Positioning status data (valid/invalid)", "", &onRecordValidSelect, &onRecordValidUpdate},
-    {"DIST", "Moving distance data", "", &onRecordDistanceSelect, &onRecordDistanceUpdate},
-    {"MSEC", "Time data in millisecond", "", &onRecordMillisSelect, &onRecordMillisUpdate},
-    {"DSTA, DAGE", "Differencial GPS data", "Disabled", &onRecordDgpsSelect, &onRecordDgpsUpdate},
-    {"PDOP, HDOP, VDOP", "Dilution of precision data", "Disabled", &onRecordDopSelect, &onRecordDopUpdate},
-    {"NSAT, ELE, AZI, SNR", "Satellite data", "Disabled", &onRecordSatSelect, &onRecordSatUpdate},
+    {"Back", "Exit this menu", "<<", true, NULL, NULL},
+    {"Load defaults", "Reset to the default format", "", true, &onLoadDefaultFormatSelect, &onLoadDefaultFormatUpdate},
+    {"TIME (required fields)", "Date and time data in seconds", "Enabled", true, &onReadOnlyItemSelect, NULL},
+    {"LAT, LON (required fields)", "Latitude and longitude data", "Enabled", true, &onReadOnlyItemSelect, NULL},
+    {"SPEED", "Moving speed data", "", true, &onRecordSpeedSelect, &onRecordSpeedUpdate},
+    {"ALT", "Altitude data", "", true, &onRecordAltitudeSelect, &onRecordAltitudeUpdate},
+    {"RCR", "Record reason (needed to put WAYPTs)", "", true, &onRecordRCRSelect, &onRecordRCRUpdate},
+    {"------", "The fields below are not used by SmallStep", "", false, NULL, NULL},
+    {"TRACK", "Track angle data", "", true, &onRecordHeadingSelect, &onRecordHeadingUpdate},
+    {"VALID", "Positioning status data (valid/invalid)", "", true, &onRecordValidSelect, &onRecordValidUpdate},
+    {"DIST", "Moving distance data", "", true, &onRecordDistanceSelect, &onRecordDistanceUpdate},
+    {"MSEC", "Time data in millisecond", "", true, &onRecordMillisSelect, &onRecordMillisUpdate},
+    {"DSTA, DAGE", "Differencial GPS data", "Disabled", true, &onRecordDgpsSelect, &onRecordDgpsUpdate},
+    {"PDOP, HDOP, VDOP", "Dilution of precision data", "Disabled", true, &onRecordDopSelect, &onRecordDopUpdate},
+    {"NSAT, ELE, AZI, SNR", "Satellite data", "Disabled", true, &onRecordSatSelect, &onRecordSatUpdate},
 };
 
 cfgitem_t *cfgResetFormat = &cfgLogFormat[1];
 
 cfgitem_t cfgMain[] = {
     // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
-    {"Save and exit", "Return to the main menu", "", NULL, NULL},
-    {"Pairing with a GPS logger", "Discover a supported GPS logger", ">>", &onPairWithLoggerCfgSelect,
+    {"Save and exit", "Return to the main menu", "", true, NULL, NULL},
+    {"Pairing with a GPS logger", "Discover supported GPS loggers", ">>", true, &onPairWithLoggerCfgSelect,
      &onPairWithLoggerCfgUpdate},
-    {"Output settings", "GPX log output options", ">>", &onOutputSubMenuSelect, NULL},
-    {"Log mode settings", "Logging behavior of the logger", ">>", &onLogModeSubMenuSelect, NULL},
-    {"Log format settings", "Contents to be stored on the logger", ">>", &onLogFormatSubMenuSelect, NULL},
-    {"Format SD card", "Perform a format for the SD card", "", &onPerformFormatSelect, NULL},
-    {"Clear all settings", "Erase the current settings of SmallStep", "", &onClearSettingsSelect, NULL},
+    {"Output settings", "GPX log output options", ">>", true, &onOutputSubMenuSelect, NULL},
+    {"Log mode settings", "Logging behavior of the logger", ">>", true, &onLogModeSubMenuSelect, NULL},
+    {"Log format settings", "Contents to be stored on the logger", ">>", true, &onLogFormatSubMenuSelect, NULL},
+    {"Beep sound", "Play beep sound when a task is finished", ">>", true, &onEnableBeepCfgSelect,
+     &onEnableBeepCfgUpdate},
+    {"------", "", "", false, NULL, NULL},
+    {"Format SD card", "Format the inserted SD card inserted", "", true, &onPerformFormatSelect, NULL},
+    {"Clear all settings", "Erase the current settings of SmallStep", "", true, &onClearSettingsSelect, NULL},
 };
 
 AppUI ui = AppUI();
@@ -209,18 +224,18 @@ void updateAppHint() {
 
 void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   switch (event) {
-  case ESP_SPP_INIT_EVT:  // SPP started
+  case ESP_SPP_INIT_EVT:  // SPP is started
     if (param == NULL) {
       ui.setBluetoothStatus(true);
       ui.drawTitleBar();
     }
     break;
 
-  case ESP_SPP_OPEN_EVT:  // SPP connection established
+  case ESP_SPP_OPEN_EVT:  // SPP connection is established
     memcpy(cfg.loggerAddr, param->open.rem_bda, BT_ADDR_LEN);
     break;
 
-  case ESP_SPP_UNINIT_EVT:  // SPP closed
+  case ESP_SPP_UNINIT_EVT:  // SPP is stopped
     if (param == NULL) {
       ui.setBluetoothStatus(false);
       ui.drawTitleBar();
@@ -233,7 +248,7 @@ void progressCallback(int32_t current, int32_t max) {
   ui.drawDialogProgress(current, max);
 }
 
-bool isZeroFilled(void *p, uint16_t size) {
+bool isZeroedBytes(void *p, uint16_t size) {
   uint8_t *pb = (uint8_t *)p;
 
   bool allZero = true;
@@ -245,7 +260,7 @@ bool isZeroFilled(void *p, uint16_t size) {
 }
 
 bool isLoggerPaired() {
-  bool paired = (!isZeroFilled(&cfg.loggerAddr, BT_ADDR_LEN));
+  bool paired = (!isZeroedBytes(&cfg.loggerAddr, BT_ADDR_LEN));
   if (!paired) {
     ui.drawDialogFrame("Setup Required");
     ui.drawDialogMessage(BLACK, 0, "Pairing has not been done yet.");
@@ -269,9 +284,8 @@ bool isSDcardAvailable() {
   if (SDcard.card()->sectorCount() == 0) {  // cannot get the sector count
     // print the error message
     ui.drawDialogFrame("SD Card Error");
-    ui.drawDialogMessage(RED, 0, "A SD card is not available.");
-    ui.drawDialogMessage(RED, 1, "- Make sure the SD card is inserted");
-    ui.drawDialogMessage(RED, 2, "- The card must be FAT32 formatted");
+    ui.drawDialogMessage(RED, 0, "SD card is not available.");
+    ui.drawDialogMessage(RED, 1, "- SD card is corrupted or is not inserted");
     return false;
   }
 
@@ -304,8 +318,8 @@ bool connectLogger(uint8_t msgLine) {
 }
 
 bool runDownloadLog() {
-  const char TEMP_BIN[] = "_download.bin";
-  const char TEMP_GPX[] = "_download.gpx";
+  const char TEMP_BIN[] = "download.bin";
+  const char TEMP_GPX[] = "download.gpx";
   const char FILENAME_FMT[] = "gps_%04d%02d%02d-%02d%02d%02d";
 
   // return false if the logger is not paired yet
@@ -414,8 +428,10 @@ void onAppInputIdle() {
  *
  */
 void onDownloadLogSelect(menuitem_t *item) {
-  runDownloadLog();
+  bool result = runDownloadLog();
   logger.disconnect();
+
+  playBeep(result, BEEP_DURATION_SHORT);
   ui.waitForInputOk();
 }
 
@@ -449,8 +465,10 @@ bool runFixRTCtime() {
  *
  */
 void onFixRTCtimeSelect(menuitem_t *item) {
-  runFixRTCtime();
+  bool result = runFixRTCtime();
   logger.disconnect();
+
+  playBeep(result, BEEP_DURATION_SHORT);
   ui.waitForInputOk();
 }
 
@@ -521,7 +539,9 @@ bool runPairWithLogger() {
  *
  */
 void onPairWithLoggerSelect(menuitem_t *item) {
-  runPairWithLogger();
+  bool result = runPairWithLogger();
+
+  playBeep(result, BEEP_DURATION_SHORT);
   ui.waitForInputOk();
 }
 
@@ -573,8 +593,10 @@ bool runClearFlash() {
 }
 
 void onClearFlashSelect(menuitem_t *item) {
-  runClearFlash();
+  bool result = runClearFlash();
   logger.disconnect();
+
+  playBeep(result, BEEP_DURATION_SHORT);
   ui.waitForInputOk();
 }
 
@@ -625,8 +647,10 @@ bool runSetLogFormat() {
 }
 
 void onSetLogFormatSelect(menuitem_t *item) {
-  runSetLogFormat();
+  bool result = runSetLogFormat();
   logger.disconnect();
+
+  playBeep(result, BEEP_DURATION_SHORT);
   ui.waitForInputOk();
 }
 
@@ -648,7 +672,7 @@ bool runSetLogMode() {
                              LOG_SPEED_VALUES[cfg.logSpeedIdx]};
 
   ui.drawDialogMessage(BLUE, 1, "Updating the log mode...");
-  if (!logger.getLogRecordMode(&curRecMode) || !logger.getLogCriteria(&curLogCri)) {
+  if ((!logger.getLogRecordMode(&curRecMode)) || (!logger.getLogCriteria(&curLogCri))) {
     ui.drawDialogMessage(RED, 1, "Updating the log mode... failed.");
     ui.drawDialogMessage(RED, 2, "Cannot get the current mode. Please retry.");
     return false;
@@ -668,7 +692,7 @@ bool runSetLogMode() {
     strcpy(buf[1], "Log full action : Overwrap");
   }
 
-  if ((curRecMode == newRecMode) && (!isDifferent(&curLogCri, &newLogCri, sizeof(logcriteria_t)))) {
+  if ((curRecMode == newRecMode) && (isSameBytes(&curLogCri, &newLogCri, sizeof(logcriteria_t)))) {
     ui.drawDialogMessage(BLACK, 1, "Updating the log mode... unchanged.");
     ui.drawDialogMessage(BLUE, 2, "The configured log mode is already set.");
     ui.drawDialogMessage(BLUE, 3, buf[0]);
@@ -691,8 +715,10 @@ bool runSetLogMode() {
 }
 
 void onSetLogModeSelect(menuitem_t *item) {
-  runSetLogMode();
+  bool result = runSetLogMode();
   logger.disconnect();
+
+  playBeep(result, BEEP_DURATION_SHORT);
   ui.waitForInputOk();
 }
 
@@ -707,7 +733,7 @@ void onAppSettingSelect(menuitem_t *item) {
   ui.openConfigMenu("Settings", cfgMain, itemCount);
 
   // save the configuration if modified
-  if (isDifferent(&oldcfg, &cfg, sizeof(appconfig_t))) {
+  if (!isSameBytes(&oldcfg, &cfg, sizeof(appconfig_t))) {
     saveAppConfig();
   }
 }
@@ -720,7 +746,7 @@ void onTrackModeUpdate(cfgitem_t *item) {
   if (cfg.trackMode == TRK_ONE_DAY) {
     strcpy(item->valueDescr, "A track per day");
   } else if (cfg.trackMode == TRK_AS_IS) {
-    strcpy(item->valueDescr, "As log recorded");
+    strcpy(item->valueDescr, "Split as recorded");
   } else {
     strcpy(item->valueDescr, "One track");
   }
@@ -750,8 +776,8 @@ void onLogByDistanceSelect(cfgitem_t *item) {
   cfg.logTimeIdx = 0;
   cfg.logSpeedIdx = 0;
 
-  cfgLogByTime->updateValueDescr(cfgLogByTime);  // update the logByTime menu
-  cfgLogBySpd->updateValueDescr(cfgLogBySpd);    // update the logBySpeed menu
+  cfgLogByTime->onUpdateDescr(cfgLogByTime);  // update the logByTime menu
+  cfgLogBySpd->onUpdateDescr(cfgLogBySpd);    // update the logBySpeed menu
 }
 
 void onLogByDistanceUpdate(cfgitem_t *item) {
@@ -772,8 +798,8 @@ void onLogByTimeSelect(cfgitem_t *item) {
   cfg.logTimeIdx = max(1, (cfg.logTimeIdx + 1) % valCount);
   cfg.logSpeedIdx = 0;
 
-  cfgLogByDist->updateValueDescr(cfgLogByDist);  // update the logByDist menu
-  cfgLogBySpd->updateValueDescr(cfgLogBySpd);    // update the logBySpeed menu
+  cfgLogByDist->onUpdateDescr(cfgLogByDist);  // update the logByDist menu
+  cfgLogBySpd->onUpdateDescr(cfgLogBySpd);    // update the logBySpeed menu
 }
 
 void onLogByTimeUpdate(cfgitem_t *item) {
@@ -794,8 +820,8 @@ void onLogBySpeedSelect(cfgitem_t *item) {
   cfg.logTimeIdx = 0;
   cfg.logSpeedIdx = max(1, (cfg.logSpeedIdx + 1) % valCount);
 
-  cfgLogByDist->updateValueDescr(cfgLogByDist);  // update the logByDist menu
-  cfgLogByTime->updateValueDescr(cfgLogByTime);  // update the logByTime menu
+  cfgLogByDist->onUpdateDescr(cfgLogByDist);  // update the logByDist menu
+  cfgLogByTime->onUpdateDescr(cfgLogByTime);  // update the logByTime menu
 }
 
 void onLogBySpeedUpdate(cfgitem_t *item) {
@@ -826,7 +852,7 @@ void onLoadDefaultFormatSelect(cfgitem_t *item) {
 
   for (int8_t i = 0; i < sizeof(cfgLogFormat) / sizeof(cfgitem_t); i++) {
     cfgitem_t *ci = &cfgLogFormat[i];
-    if (ci->updateValueDescr != NULL) ci->updateValueDescr(ci);
+    if (ci->onUpdateDescr != NULL) ci->onUpdateDescr(ci);
   }
 }
 
@@ -939,7 +965,7 @@ void onPairWithLoggerCfgSelect(cfgitem_t *item) {
 }
 
 void onPairWithLoggerCfgUpdate(cfgitem_t *item) {
-  if (isZeroFilled(&cfg.loggerAddr, BT_ADDR_LEN)) {
+  if (isZeroedBytes(&cfg.loggerAddr, BT_ADDR_LEN)) {
     strcpy(item->valueDescr, "Not paired");
   } else {
     strcpy(item->valueDescr, cfg.loggerName);
@@ -954,27 +980,29 @@ void onOutputSubMenuSelect(cfgitem_t *item) {
   // enter the output configuration sub-menu
   int8_t itemCount = (sizeof(cfgOutput) / sizeof(cfgitem_t));
   ui.openConfigMenu("Settings > Output", cfgOutput, itemCount);
-
-  // return to the parent menu
 }
 
 void onLogModeSubMenuSelect(cfgitem_t *item) {
   // enter the log mode configuration sub-menu
   int8_t itemCount = (sizeof(cfgLogMode) / sizeof(cfgitem_t));
   ui.openConfigMenu("Settings > Log Mode", cfgLogMode, itemCount);
-
-  // return to the parent menu
 }
 
 void onLogFormatSubMenuSelect(cfgitem_t *item) {
   // enter the log format configuration sub-menu
   int8_t itemCount = (sizeof(cfgLogFormat) / sizeof(cfgitem_t));
   ui.openConfigMenu("Settings > Log Format", cfgLogFormat, itemCount);
-
-  // return to the parent menu
 }
 
-void onPerformFormatSelect(cfgitem_t *) {
+void onEnableBeepCfgSelect(cfgitem_t *item) {
+  cfg.playBeep = (!cfg.playBeep);
+}
+
+void onEnableBeepCfgUpdate(cfgitem_t *item) {
+  setValueDescrByBool(item->valueDescr, cfg.playBeep);
+}
+
+void onPerformFormatSelect(cfgitem_t *item) {
   ui.drawDialogFrame("Format SD card");
   ui.drawNavBar(NULL);
 
@@ -1035,7 +1063,7 @@ void onClearSettingsSelect(cfgitem_t *item) {
   }
 }
 
-bool isDifferent(const void *data1, const void *data2, uint16_t size) {
+bool isSameBytes(const void *data1, const void *data2, uint16_t size) {
   uint8_t *pdata1 = (uint8_t *)(data1);
   uint8_t *pdata2 = (uint8_t *)(data2);
   bool diff = false;
@@ -1100,20 +1128,28 @@ bool loadAppConfig(bool loadDefault) {
   return true;
 }
 
+void playBeep(bool success, uint16_t duration) {
+  uint16_t freq = (success) ? BEEP_FREQ_SUCCESS : BEEP_FREQ_FAILURE;
+  if (cfg.playBeep) sb.beep(BEEP_VOLUME, freq, duration);
+}
+
 void setup() {
-  // start the serial
+  // start a serial port
   Serial.begin(115200);
 
   // initialize the configuration variable
   memcpy(&cfg, &DEFAULT_CONFIG, sizeof(appconfig_t));
 
-  // initialize the M5Stack
+  // initialize a M5Stack
   M5.begin();
   M5.Power.begin();
   M5.Lcd.setBrightness(LCD_BRIGHTNESS);
   M5.Lcd.fillScreen(BLACK);
   EEPROM.begin(sizeof(appconfig_t) + 1);
   SDcard.begin(GPIO_NUM_4, SD_ACCESS_SPEED);
+
+  // initialize SimpleBeep;
+  sb.init();
 
   // set the bluetooth event handler
   logger.setEventCallback(bluetoothCallback);
