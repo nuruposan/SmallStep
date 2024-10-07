@@ -512,7 +512,7 @@ void AppUI::drawConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount,
 
     sprite.setTextColor(BLACK);
     sprite.drawString(mi->caption, captionPos.x, captionPos.y, 2);
-    sprite.drawString(mi->description, descrPos.x, descrPos.y, 1);
+    sprite.drawString(mi->hintText, descrPos.x, descrPos.y, 1);
     if (mi->valueDescr != NULL) {
       sprite.setTextColor(BLUE);
       sprite.drawRightString(mi->valueDescr, valuePos.x, valuePos.y, 2);
@@ -535,7 +535,7 @@ void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount)
 
   for (int8_t i = 0; i < itemCount; i++) {
     cfgitem_t *ci = &menu[i];
-    if (ci->updateValueDescr != NULL) ci->updateValueDescr(&menu[i]);
+    if (ci->onUpdateDescr != NULL) ci->onUpdateDescr(&menu[i]);
   }
 
   bool endFlag = false;
@@ -572,12 +572,12 @@ void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount)
 
     case BID_BTN_C:  // call the onSelect function of the selected item
       cfgitem_t *ci = &menu[select];
-      if (ci->onSelect != NULL) {
-        ci->onSelect(ci);
-        if (ci->updateValueDescr != NULL) ci->updateValueDescr(ci);
-      }
+      if (ci->enabled) {
+        if (ci->onSelectItem != NULL) ci->onSelectItem(ci);
+        if (ci->onUpdateDescr != NULL) ci->onUpdateDescr(ci);
 
-      endFlag = (ci->onSelect == NULL);
+        endFlag = (ci->onSelectItem == NULL);
+      }
       break;
     }
   }
@@ -610,7 +610,9 @@ void AppUI::openMainMenu(menuitem_t *menu, int8_t itemCount) {
 
     case BID_BTN_C:  // call the onSelect function of the selected item
       menuitem_t *mi = &menu[select];
-      if (mi->onSelect != NULL) mi->onSelect(mi);
+      if (mi->enabled) {
+        if (mi->onSelect != NULL) mi->onSelect(mi);
+      }
       break;
     }
   }

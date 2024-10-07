@@ -36,10 +36,11 @@ typedef struct _menuitem {
 
 typedef struct _cfgitem {
   const char *caption;
-  const char *description;
-  char valueDescr[16];
-  void (*onSelect)(_cfgitem *);
-  void (*updateValueDescr)(_cfgitem *);
+  const char *hintText;
+  char valueDescr[20];
+  bool enabled;
+  void (*onSelectItem)(_cfgitem *);
+  void (*onUpdateDescr)(_cfgitem *);
 } cfgitem_t;
 
 typedef struct _uiarea {
