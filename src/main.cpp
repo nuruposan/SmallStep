@@ -12,15 +12,15 @@
 /* Otherwise, the BluetoothSerial library will not work properly. */
 /* ################################################## */
 
-#define SD_ACCESS_SPEED 15000000  // settins 20MHz should cause SD card error
+#define SD_ACCESS_SPEED 12000000  // settins 20MHz should cause SD card error
 #define BT_ADDR_LEN 6
 #define DEV_NAME_LEN 20
 
-#define BEEP_VOLUME 4
+#define BEEP_VOLUME 1
 #define BEEP_FREQ_SUCCESS 4186  // C8
-#define BEEP_FREQ_FAILURE 65    // C2
-#define BEEP_DURATION_SHORT 100
-#define BEEP_DURATION_LONG 500
+#define BEEP_FREQ_FAILURE 131   // C3
+#define BEEP_DURATION_SHORT 120
+#define BEEP_DURATION_LONG 600
 
 typedef struct _appconfig {
   uint16_t length;                  // must be sizeof(appconfig_t)
@@ -99,7 +99,6 @@ void onRecordDopSelect(cfgitem_t *);
 void onRecordDopUpdate(cfgitem_t *);
 void onRecordSatSelect(cfgitem_t *);
 void onRecordSatUpdate(cfgitem_t *);
-void onReadOnlyItemSelect(cfgitem_t *);
 void onPairWithLoggerCfgSelect(cfgitem_t *);
 void onPairWithLoggerCfgUpdate(cfgitem_t *);
 void onOutputSubMenuSelect(cfgitem_t *);
@@ -175,8 +174,8 @@ cfgitem_t cfgLogFormat[] = {
     // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
     {"Back", "Exit this menu", "<<", true, NULL, NULL},
     {"Load defaults", "Reset to the default format", "", true, &onLoadDefaultFormatSelect, &onLoadDefaultFormatUpdate},
-    {"TIME (required fields)", "Date and time data in seconds", "Enabled", true, &onReadOnlyItemSelect, NULL},
-    {"LAT, LON (required fields)", "Latitude and longitude data", "Enabled", true, &onReadOnlyItemSelect, NULL},
+    {"TIME (required fields)", "Date and time data in seconds", "Enabled", false, NULL, NULL},
+    {"LAT, LON (required fields)", "Latitude and longitude data", "Enabled", false, NULL, NULL},
     {"SPEED", "Moving speed data", "", true, &onRecordSpeedSelect, &onRecordSpeedUpdate},
     {"ALT", "Altitude data", "", true, &onRecordAltitudeSelect, &onRecordAltitudeUpdate},
     {"RCR", "Record reason (needed to put WAYPTs)", "", true, &onRecordRCRSelect, &onRecordRCRUpdate},
@@ -203,7 +202,7 @@ cfgitem_t cfgMain[] = {
     {"Beep sound", "Play beep sound when a task is finished", ">>", true, &onEnableBeepCfgSelect,
      &onEnableBeepCfgUpdate},
     {"------", "", "", false, NULL, NULL},
-    {"Format SD card", "Format the inserted SD card inserted", "", true, &onPerformFormatSelect, NULL},
+    {"Format SD card", "Format inserted SD card", "", true, &onPerformFormatSelect, NULL},
     {"Clear all settings", "Erase the current settings of SmallStep", "", true, &onClearSettingsSelect, NULL},
 };
 
@@ -227,7 +226,7 @@ void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   case ESP_SPP_INIT_EVT:  // SPP is started
     if (param == NULL) {
       ui.setBluetoothStatus(true);
-      ui.drawTitleBar();
+      ui.drawTitleBar();  // redraw the title bar to change the bluetooth icon to blue
     }
     break;
 
@@ -238,7 +237,7 @@ void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   case ESP_SPP_UNINIT_EVT:  // SPP is stopped
     if (param == NULL) {
       ui.setBluetoothStatus(false);
-      ui.drawTitleBar();
+      ui.drawTitleBar();  // redraw the title bar to change the bluetooth icon to grey
     }
     break;
   }
@@ -431,7 +430,7 @@ void onDownloadLogSelect(menuitem_t *item) {
   bool result = runDownloadLog();
   logger.disconnect();
 
-  playBeep(result, BEEP_DURATION_SHORT);
+  playBeep(result, BEEP_DURATION_LONG);
   ui.waitForInputOk();
 }
 
@@ -468,7 +467,7 @@ void onFixRTCtimeSelect(menuitem_t *item) {
   bool result = runFixRTCtime();
   logger.disconnect();
 
-  playBeep(result, BEEP_DURATION_SHORT);
+  playBeep(result, BEEP_DURATION_LONG);
   ui.waitForInputOk();
 }
 
@@ -541,7 +540,7 @@ bool runPairWithLogger() {
 void onPairWithLoggerSelect(menuitem_t *item) {
   bool result = runPairWithLogger();
 
-  playBeep(result, BEEP_DURATION_SHORT);
+  playBeep(result, BEEP_DURATION_LONG);
   ui.waitForInputOk();
 }
 
@@ -596,7 +595,7 @@ void onClearFlashSelect(menuitem_t *item) {
   bool result = runClearFlash();
   logger.disconnect();
 
-  playBeep(result, BEEP_DURATION_SHORT);
+  playBeep(result, BEEP_DURATION_LONG);
   ui.waitForInputOk();
 }
 
@@ -650,7 +649,7 @@ void onSetLogFormatSelect(menuitem_t *item) {
   bool result = runSetLogFormat();
   logger.disconnect();
 
-  playBeep(result, BEEP_DURATION_SHORT);
+  playBeep(result, BEEP_DURATION_LONG);
   ui.waitForInputOk();
 }
 
@@ -718,7 +717,7 @@ void onSetLogModeSelect(menuitem_t *item) {
   bool result = runSetLogMode();
   logger.disconnect();
 
-  playBeep(result, BEEP_DURATION_SHORT);
+  playBeep(result, BEEP_DURATION_LONG);
   ui.waitForInputOk();
 }
 
@@ -970,10 +969,6 @@ void onPairWithLoggerCfgUpdate(cfgitem_t *item) {
   } else {
     strcpy(item->valueDescr, cfg.loggerName);
   }
-}
-
-void onReadOnlyItemSelect(cfgitem_t *item) {
-  // nothing to do!
 }
 
 void onOutputSubMenuSelect(cfgitem_t *item) {
