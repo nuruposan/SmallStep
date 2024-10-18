@@ -210,11 +210,12 @@ bool MtkParser::readBinMarkers() {
 }
 
 bool MtkParser::convert(File32 *input, File32 *output, void (*progressCallback)(int32_t, int32_t)) {
-  // clear all of the status variables before use
+  // clear all of the status variables
   memset(&status, 0, sizeof(parsestatus_t));
 
   in = new MtkFileReader(input);
   out = new GpxFileWriter(output);
+  out->setTimeOffset(options.timeOffset);
 
   uint8_t progRate = 0;
   bool fileend = false;
@@ -240,8 +241,9 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*progressCallback)(
     }
 
     if (progressCallback != NULL) {
-      uint8_t cpr = 200 * ((float)in->position() / in->filesize());
-      if (cpr > progRate) {
+      uint8_t cpr = 200 * ((float)in->position() / in->filesize());  // do callback 200 times during running process
+
+      if (cpr > progRate) {  // if progress rate is increased
         progressCallback(in->position(), in->filesize());
         progRate = cpr;
       }
@@ -289,7 +291,7 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*progressCallback)(
 
   if (progressCallback != NULL) progressCallback(in->filesize(), in->filesize());
 
-  out->endXml();
+  out->endGpx();
   out->flush();
 
   status.trackCount = out->getTrackCount();

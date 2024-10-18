@@ -2,210 +2,248 @@
 
 GpxFileWriter::GpxFileWriter(File32 *output) {
   out = output;
-  out->seek(0);
 
+  setTimeOffset(0);  // set timeOffsetSec as 0 and timeOffsetStr as "Z"
+
+  inGpx = false;
   inTrack = false;
-  inSegment = false;
-  trackCount = 0;
-  trkptCount = 0;
-  wayptCount = 0;
-  memset(waypts, 0, (sizeof(gpsrecord_t) * MAX_WAYPTS_PER_TRK));
-
-  startXml();
+  inTrkSeg = false;
 }
 
 int16_t GpxFileWriter::addWaypt(gpsrecord_t rcd) {
   int16_t i = 0;
-  while ((waypts[i].time != 0) && i < MAX_WAYPTS_PER_TRK) i++;
 
+  // put data to the last of waypy list (array)
+  while ((waypts[i].format != 0) && i < MAX_WAYPTS_PER_TRK) i++;
   if (i < MAX_WAYPTS_PER_TRK) {
     memcpy(&waypts[i], &rcd, sizeof(gpsrecord_t));
+
+    gpxInfo.wayptCount += 1;
+    trackInfo.wayptCount += 1;
   }
 
-  return (i < MAX_WAYPTS_PER_TRK) ? (i + 1) : 0;
+  return (i < MAX_WAYPTS_PER_TRK) ? (i + 1) : -1;
 }
 
 void GpxFileWriter::flush() {
   out->flush();
 }
 
-void GpxFileWriter::startTrack(char *trkname) {
+void GpxFileWriter::beginTrack() {
+  if (!inGpx) beginGpx();
   if (inTrack) endTrack();
 
   out->write("<trk>\n");
-  if (trkname != NULL) {
-    char buf[64];
-    sprintf(buf, "<name>%s</name>\n", trkname);
-    out->write(buf);
-  }
 
   inTrack = true;
-  inSegment = false;
-  trackCount += 1;
+  inTrkSeg = false;
 
-  if (trkname != NULL) {
-    Serial.printf("GpxFileWriter.startTrack [trkCount=%d, trkName=\"%s\"]\n", trackCount, trkname);
-  } else {
-    Serial.printf("GpxFileWriter.startTrack [trkCount=%d]\n", trackCount);
-  }
+  gpxInfo.trackCount += 1;
+  memset(&trackInfo, 0, sizeof(gpxinfo_t));
+
+  Serial.printf("GpxFileWriter.beginTrack [trkCount=%d]\n", gpxInfo.trackCount);
 }
 
-void GpxFileWriter::startTrackSegment() {
+void GpxFileWriter::beginTrackSeg() {
+  if (!inTrack) beginTrack();
+  if (inTrkSeg) endTrackSeg();
+
   out->write("<trkseg>\n");
-  inSegment = true;
+  inTrkSeg = true;
 
   Serial.printf("GpxFileWriter.startSegment\n");
 }
 
-void GpxFileWriter::startXml() {
+void GpxFileWriter::beginGpx() {
+  if (inGpx) return;
+
+  out->seek(0);
+  // out->truncate(0);
+
   out->write(
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-      "<gpx version=\"1.1\" creator=\"" PARSER_DESCR "\""
+      "<gpx version=\"1.1\" creator=\"" PARSER_DESCR
+      "\""
       "xmlns:xsi=\"http://www.w3.org/2001/XMLSchema xmlns=\"https://www.topografix.com/GPX/1/1/gpx.xsd\">\n");
 
+  memset(&gpxInfo, 0, sizeof(gpxinfo_t));
+  memset(&trackInfo, 0, sizeof(gpxinfo_t));
+
+  inGpx = true;
   inTrack = false;
-  inSegment = false;
-  trackCount = 0;
-  trkptCount = 0;
-  wayptCount = 0;
+  inTrkSeg = false;
   memset(waypts, 0, (sizeof(gpsrecord_t) * MAX_WAYPTS_PER_TRK));
 }
 
 void GpxFileWriter::endTrack() {
-  if (inTrack) {
-    if (inSegment) endTrackSegment();
+  if (!inTrack) return;
 
-    endTrackSegment();
-    out->write("</trk>\n");
+  endTrackSeg();
 
-    for (int16_t i = 0; i < MAX_WAYPTS_PER_TRK; i++) {
-      if (waypts[i].time == 0) break;
+  // put the start & end time of the track as the track name
+  if (trackInfo.trkptCount > 0) {
+    char buf[48];
+    uint32_t duration = (trackInfo.endTime - trackInfo.startTime);
+    uint16_t drHour = duration / 3600;
+    uint16_t drMinute = (duration % 3600) / 60;
 
-      putWaypt(waypts[i]);
-      memset(&waypts[i], 0, sizeof(gpsrecord_t));
-    }
+    out->write("<name>");
+    out->write(timeToString(buf, trackInfo.startTime));
+    out->write(" to ");
+    out->write(timeToString(buf, trackInfo.endTime));
+    sprintf(buf, " (%d hr %d min, %d TRKPTs)",  //
+            drHour, drMinute, trackInfo.trkptCount, trackInfo.wayptCount);
+    out->write(buf);
+    out->write("</name>\n");
+  }
+  out->write("</trk>\n");
+
+  // put the waypts discovered in the last track
+  for (int16_t i = 0; i < MAX_WAYPTS_PER_TRK; i++) {
+    if (waypts[i].time == 0) break;
+
+    putWaypt(waypts[i]);
+    memset(&waypts[i], 0, sizeof(gpsrecord_t));
   }
 
-  inSegment = false;
+  inTrkSeg = false;
   inTrack = false;
 }
 
-void GpxFileWriter::endTrackSegment() {
-  if (inSegment) out->write("</trkseg>\n");
+void GpxFileWriter::endTrackSeg() {
+  if (!inTrkSeg) return;
 
-  inSegment = false;
+  out->write("</trkseg>\n");
+  inTrkSeg = false;
 }
 
-void GpxFileWriter::endXml() {
-  if (inTrack) endTrack();
+void GpxFileWriter::endGpx() {
+  if (!inGpx) return;
 
+  endTrack();
   out->write("</gpx>\n");
 
-  inXml = false;
+  inGpx = false;
   inTrack = false;
-  inSegment = false;
+  inTrkSeg = false;
 }
 
 void GpxFileWriter::putTrkpt(const gpsrecord_t rcd) {
-  char buf[48];
+  if (!inTrkSeg) beginTrackSeg();
 
-  if (!inTrack) {
-    if (rcd.format & FMT_TIME) {
-      time_t tt = rcd.time;
-      struct tm *t = localtime(&tt);
-      sprintf(buf, "Track started at %04d-%02d-%02d %02d:%02d:%02d",  //
-              (t->tm_year + 1900), (t->tm_mon + 1), t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
-
-      startTrack(buf);
-    } else {
-      startTrack(NULL);
-    }
-  }
-  if (!inSegment) startTrackSegment();
+  char buf[32];  // general buffer in this func
 
   out->write("<trkpt");
-  {
-    if (rcd.format & FMT_LAT) {
-      sprintf(buf, " lat=\"%0.6f\"", rcd.latitude);
-      out->write(buf);
-    }
-    if (rcd.format & FMT_LON) {
-      sprintf(buf, " lon=\"%0.6f\"", rcd.longitude);
-      out->write(buf);
-    }
-    out->write(">");
-
-    if (rcd.format & FMT_TIME) {
-      time_t tt = rcd.time;
-      struct tm *t = localtime(&tt);
-
-      sprintf(buf, "<time>%04d-%02d-%02dT%02d:%02d:%02dZ</time>",  //
-              (t->tm_year + 1900), (t->tm_mon + 1), t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
-      out->write(buf);
-    }
-
-    if (rcd.format & FMT_HEIGHT) {
-      sprintf(buf, "<ele>%0.2f</ele>", rcd.elevation);
-      out->write(buf);
-    }
-
-    if (rcd.format & FMT_SPEED) {
-      sprintf(buf, "<speed>%0.2f</speed>", rcd.speed);
-      out->write(buf);
-    }
+  if (rcd.format & FMT_LAT) {
+    sprintf(buf, " lat=\"%0.6f\"", rcd.latitude);
+    out->write(buf);
   }
+  if (rcd.format & FMT_LON) {
+    sprintf(buf, " lon=\"%0.6f\"", rcd.longitude);
+    out->write(buf);
+  }
+  out->write(">");
+
+  if (rcd.format & FMT_TIME) {
+    out->write("<time>");
+    out->write(timeToISO8601(buf, rcd.time));
+    out->write("</time>");
+
+    if (gpxInfo.startTime == 0) gpxInfo.startTime = rcd.time;
+    gpxInfo.endTime = rcd.time;
+    if (trackInfo.startTime == 0) trackInfo.startTime = rcd.time;
+    trackInfo.endTime = rcd.time;
+  }
+
+  if (rcd.format & FMT_HEIGHT) {
+    sprintf(buf, "<ele>%0.2f</ele>", rcd.elevation);
+    out->write(buf);
+  }
+
+  if (rcd.format & FMT_SPEED) {
+    sprintf(buf, "<speed>%0.2f</speed>", rcd.speed);
+    out->write(buf);
+  }
+
   out->write("</trkpt>\n");
 
-  trkptCount += 1;
+  gpxInfo.trkptCount += 1;
+  trackInfo.trkptCount += 1;
 }
 
 void GpxFileWriter::putWaypt(const gpsrecord_t rcd) {
-  char buf[48];
+  char buf[32];  // general buffer in this func
+
+  if (!inGpx) beginGpx();
+  if (inTrack) endTrack();
 
   out->write("<wpt");
-  {
-    if (rcd.format & FMT_LAT) {
-      sprintf(buf, " lat=\"%0.6f\"", rcd.latitude);
-      out->write(buf);
-    }
-    if (rcd.format & FMT_LON) {
-      sprintf(buf, " lon=\"%0.6f\"", rcd.longitude);
-      out->write(buf);
-    }
-    out->write(">");
+  if (rcd.format & FMT_LAT) {
+    sprintf(buf, " lat=\"%0.6f\"", rcd.latitude);
+    out->write(buf);
+  }
 
-    if (rcd.format & FMT_TIME) {
-      time_t tt = rcd.time;
-      struct tm *t = localtime(&tt);
+  if (rcd.format & FMT_LON) {
+    sprintf(buf, " lon=\"%0.6f\"", rcd.longitude);
+    out->write(buf);
+  }
+  out->write(">");
 
-      sprintf(buf, "<time>%04d-%02d-%02dT%02d:%02d:%02dZ</time>",  //
-              (t->tm_year + 1900), (t->tm_mon + 1), t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
-      out->write(buf);
-    }
+  if (rcd.format & FMT_TIME) {
+    out->write("<time>");
+    out->write(timeToISO8601(buf, rcd.time));
+    out->write("</time>");
+  }
 
-    if (rcd.format & FMT_HEIGHT) {
-      sprintf(buf, "<ele>%0.2f</ele>", rcd.elevation);
-      out->write(buf);
-    }
+  if (rcd.format & FMT_HEIGHT) {
+    sprintf(buf, "<ele>%0.2f</ele>", rcd.elevation);
+    out->write(buf);
+  }
 
-    if (rcd.format & FMT_SPEED) {
-      sprintf(buf, "<speed>%0.2f</speed>", rcd.speed);
-      out->write(buf);
-    }
+  if (rcd.format & FMT_SPEED) {
+    sprintf(buf, "<speed>%0.2f</speed>", rcd.speed);
+    out->write(buf);
   }
   out->write("</wpt>\n");
 
-  wayptCount += 1;
+  gpxInfo.wayptCount += 1;
 }
 
 int32_t GpxFileWriter::getTrackCount() {
-  return trackCount;
+  return gpxInfo.trackCount;
 }
 
 int32_t GpxFileWriter::getTrkptCount() {
-  return trkptCount;
+  return gpxInfo.trkptCount;
 }
 
 int32_t GpxFileWriter::getWayptCount() {
-  return wayptCount;
+  return gpxInfo.wayptCount;
+}
+
+void GpxFileWriter::setTimeOffset(float td) {
+  timeOffsetSec = 3600 * td;
+  sprintf(timeOffsetStr, "%+02d:%02d", (timeOffsetSec / 3600), (abs(timeOffsetSec) % 3600));
+}
+
+char *GpxFileWriter::timeToString(char *buf, uint32_t gpsTime) {
+  time_t tt = gpsTime + timeOffsetSec;  // include the configured time offset
+  struct tm *t = localtime(&tt);
+
+  sprintf(buf, "%04d-%02d-%02d %02d:%02d:%02d",              //
+          (t->tm_year + 1900), (t->tm_mon + 1), t->tm_mday,  // YYYY-MM-DD
+          t->tm_hour, t->tm_min, t->tm_sec);                 // hh:mm:ss
+
+  return buf;
+}
+
+char *GpxFileWriter::timeToISO8601(char *buf, uint32_t gpsTime) {
+  time_t tt = gpsTime;  // must not include the time offset
+  struct tm *t = localtime(&tt);
+
+  sprintf(buf, "%04d-%02d-%02dT%02d:%02d:%02dZ",             //
+          (t->tm_year + 1900), (t->tm_mon + 1), t->tm_mday,  // YYYY-MM-DD
+          t->tm_hour, t->tm_min, t->tm_sec);                 // hh:mm:ss
+
+  return buf;
 }
