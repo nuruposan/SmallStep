@@ -109,6 +109,7 @@ void onEnableBeepCfgUpdate(cfgitem_t *);
 void onPerformFormatSelect(cfgitem_t *);
 void onClearSettingsSelect(cfgitem_t *);
 void updateAppHint();
+int makeFilename(char *binName, char *gpxName, uint32_t tm);
 
 const char *APP_NAME = "SmallStep";
 const char LCD_BRIGHTNESS = 10;
@@ -316,10 +317,32 @@ bool connectLogger(uint8_t msgLine) {
   return true;
 }
 
+int makeFilename(char *gpxName, time_t startTime) {
+  const char FILENAME_FMT[] = "gps_%04d%02d%02d-%02d%02d%02d";
+
+  startTime += 3600 * TIME_OFFSET_VALUES[cfg.timeOffsetIdx];
+  struct tm *ltime = localtime(&startTime);
+
+  char baseName[32];
+  sprintf(baseName, FILENAME_FMT,
+          (ltime->tm_year + 1900),  // year (4 digits)
+          (ltime->tm_mon + 1),      // month (1-12)
+          ltime->tm_mday,           // day of month (1-31)
+          ltime->tm_hour, ltime->tm_min, ltime->tm_sec);
+
+  // 最初のtrkptの時刻を使ってGPXファイルとBINファイルの保存名を決める
+  for (uint16_t i = 1; i <= 65535; i++) {
+    sprintf(gpxName, "%s_%02d.gpx", baseName, i);
+
+    if (!SDcard.exists(gpxName)) return i;
+  }
+
+  return -1;
+}
+
 bool runDownloadLog() {
   const char TEMP_BIN[] = "download.bin";
   const char TEMP_GPX[] = "download.gpx";
-  const char FILENAME_FMT[] = "gps_%04d%02d%02d-%02d%02d%02d";
 
   // return false if the logger is not paired yet
   if (!isLoggerPaired()) return false;
@@ -368,7 +391,7 @@ bool runDownloadLog() {
     uint32_t trackCnt = parser->getTrackCount();
     uint32_t trkptCnt = parser->getTrkptCount();
     uint32_t wayptCnt = parser->getWayptCount();
-    time_t time1st = parser->getFirstTrkpt().time;
+    time_t startTime = parser->getFirstTrkpt().time;
     delete parser;
 
     // close the GPX file before rename and rename to the output file name
@@ -376,23 +399,8 @@ bool runDownloadLog() {
     gpxFile.close();
 
     // make a unique name for the GPX file
-    struct tm *ltime = localtime(&time1st);
-    char baseName[24];
     char gpxName[32];
-    char binName[32];
-    sprintf(baseName, FILENAME_FMT,
-            (ltime->tm_year + 1900),  // year (4 digits)
-            (ltime->tm_mon + 1),      // month (1-12)
-            ltime->tm_mday,           // day of month (1-31)
-            ltime->tm_hour, ltime->tm_min, ltime->tm_sec);
-
-    // 最初のtrkptの時刻を使ってGPXファイルとBINファイルの保存名を決める
-    for (uint16_t i = 1; i <= 65535; i++) {
-      sprintf(gpxName, "%s_%02d.gpx", baseName, i);
-      sprintf(binName, "%s_%02d.bin", baseName, i);
-
-      if (!SDcard.exists(gpxName)) break;
-    }
+    makeFilename(gpxName, startTime);
 
     if (trkptCnt > 0) {
       SDcard.rename(TEMP_GPX, gpxName);
