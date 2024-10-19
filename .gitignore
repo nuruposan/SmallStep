@@ -41,4 +41,4 @@ c_cpp_properties.json
 .clang_complete
 .gcc-flags.json
 launch.json
-.pio/
+.pio
