@@ -5,9 +5,11 @@
 #include <string.h>
 #include <time.h>
 
-MtkParser::MtkParser() {
+MtkParser::MtkParser(parseopt_t opts) {
   memset(&options, 0, sizeof(parseopt_t));
   memset(&status, 0, sizeof(parsestatus_t));
+
+  setOptions(opts);
 }
 
 bool MtkParser::isDifferentDate(uint32_t t1, uint32_t t2) {
@@ -168,16 +170,11 @@ bool MtkParser::readBinMarkers() {
       // do action according to the DSP type
       switch (dsType) {
       case DST_CHANGE_FORMAT:  // change format register
-        // Serial.printf("Parser.readMarker: Change log format by DSP at 0x%05X [t=%d, v=0x%08X]\n", startPos,
-        // dsType, dsVal);
-
         setRecordFormat(dsVal);
         break;
       case DST_LOG_STARTSTOP:  // log start(0x106), stop(0x0104)
         if ((dsVal == DSV_LOG_START) && (options.trackMode == TRK_AS_IS)) {
           out->endTrack();
-          // Serial.printf("Parser.readMarker: Start a new track by DSP at 0x%05X [t=%d, v=0x%04X]\n",
-          // startPos, dsType, dsVal);
         }
         break;
       case DST_CHANGE_METHOD:
@@ -209,7 +206,7 @@ bool MtkParser::readBinMarkers() {
   return match;
 }
 
-bool MtkParser::convert(File32 *input, File32 *output, void (*progressCallback)(int32_t, int32_t)) {
+gpxinfo_t MtkParser::convert(File32 *input, File32 *output, void (*progressCallback)(int32_t, int32_t)) {
   // clear all of the status variables
   memset(&status, 0, sizeof(parsestatus_t));
 
@@ -251,8 +248,8 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*progressCallback)(
 
     if (in->position() <= sectorStart) {
       in->seekCur(sectorStart - in->position());
-      printf("Parser.convert: sector#%d start at 0x%05X, %d records\n", status.sectorPos, sectorStart,
-             (uint16_t)in->readInt16());
+      printf("Parser.convert: sector#%d start at 0x%05X, %d records\n",  //
+             status.sectorPos, sectorStart, (uint16_t)in->readInt16());
       setRecordFormat(in->readInt32());
       in->seekCur(dataStart - in->position());
     }
@@ -267,7 +264,7 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*progressCallback)(
       continue;
     }
 
-    if ((options.trackMode == TRK_ONE_DAY) && (isDifferentDate(status.lastTrkpt.time, rcd.time))) {
+    if ((options.trackMode == TRK_ONE_DAY) && (isDifferentDate(out->getLastTime(), rcd.time))) {
       out->endTrack();
     }
 
@@ -278,12 +275,6 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*progressCallback)(
       out->addWaypt(rcd);
     }
 
-    // store the first and last trkpt
-    if (status.firstTrkpt.time == 0) {
-      memcpy(&status.firstTrkpt, &rcd, sizeof(gpsrecord_t));
-    }
-    memcpy(&status.lastTrkpt, &rcd, sizeof(gpsrecord_t));
-
     if ((in->position() + rcd.size) >= sectorEnd) {
       status.sectorPos += 1;
     }
@@ -291,35 +282,10 @@ bool MtkParser::convert(File32 *input, File32 *output, void (*progressCallback)(
 
   if (progressCallback != NULL) progressCallback(in->filesize(), in->filesize());
 
-  out->endGpx();
-  out->flush();
-
-  status.trackCount = out->getTrackCount();
-  status.trkptCount = out->getTrkptCount();
-  status.wayptCount = out->getWayptCount();
+  gpxinfo_t gpxInfo = out->endGpx();
 
   delete in;
   delete out;
 
-  return (fileend);
-}
-
-gpsrecord_t MtkParser::getFirstTrkpt() {
-  return status.firstTrkpt;
-}
-
-gpsrecord_t MtkParser::getLastTrkpt() {
-  return status.lastTrkpt;
-}
-
-int32_t MtkParser::getTrackCount() {
-  return status.trackCount;
-}
-
-int32_t MtkParser::getTrkptCount() {
-  return status.trkptCount;
-}
-
-int32_t MtkParser::getWayptCount() {
-  return status.wayptCount;
+  return gpxInfo;
 }

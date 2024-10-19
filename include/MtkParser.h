@@ -8,7 +8,7 @@
 
 #define SIZE_SECTOR 0x010000  // 65536 bytes
 #define SIZE_HEADER 0x000200  // 512 bytes
- 
+
 #define ROLLOVER_TIME 1554595200    // 2019-04-07
 #define ROLLOVER_CORRECT 619315200  // 1024 weeks
 
@@ -45,19 +45,14 @@ typedef struct _parseopt {
   bool putWaypts;
 } parseopt_t;
 
-typedef struct _parsest {
+typedef struct _parsestatus {
   uint16_t sectorPos;
   uint32_t logFormat;
+  bool m241Mode;
   uint8_t seekOffset1;
   uint8_t seekOffset2;
   uint8_t seekOffset3;
   uint8_t seekOffset4;
-  bool m241Mode;
-  gpsrecord_t firstTrkpt;
-  gpsrecord_t lastTrkpt;
-  int32_t trackCount;
-  int32_t trkptCount;
-  int32_t wayptCount;
 } parsestatus_t;
 
 class MtkParser {
@@ -78,15 +73,10 @@ class MtkParser {
   bool matchBinPattern(const char *ptn, uint8_t len);
   bool readBinMarkers();
   bool readBinRecord(gpsrecord_t *rcd);
+  void setOptions(parseopt_t opts);
   void setRecordFormat(uint32_t fmt);
 
  public:
-  MtkParser();
-  void setOptions(parseopt_t);
-  bool convert(File32 *input, File32 *output, void (*rateCallback)(int32_t, int32_t));
-  gpsrecord_t getFirstTrkpt();
-  gpsrecord_t getLastTrkpt();
-  int32_t getTrackCount();
-  int32_t getTrkptCount();
-  int32_t getWayptCount();
+  MtkParser(parseopt_t opts);
+  gpxinfo_t convert(File32 *input, File32 *output, void (*rateCallback)(int32_t, int32_t));
 };

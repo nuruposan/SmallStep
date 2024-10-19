@@ -180,7 +180,7 @@ cfgitem_t cfgLogFormat[] = {
     {"SPEED", "Moving speed data", "", true, &onRecordSpeedSelect, &onRecordSpeedUpdate},
     {"ALT", "Altitude data", "", true, &onRecordAltitudeSelect, &onRecordAltitudeUpdate},
     {"RCR", "Record reason (needed to put WAYPTs)", "", true, &onRecordRCRSelect, &onRecordRCRUpdate},
-    {"------", "The fields below are not used by SmallStep", "", false, NULL, NULL},
+    {"----", "The fields below are not used by SmallStep", "", false, NULL, NULL},
     {"TRACK", "Track angle data", "", true, &onRecordHeadingSelect, &onRecordHeadingUpdate},
     {"VALID", "Positioning status data (valid/invalid)", "", true, &onRecordValidSelect, &onRecordValidUpdate},
     {"DIST", "Moving distance data", "", true, &onRecordDistanceSelect, &onRecordDistanceUpdate},
@@ -202,7 +202,7 @@ cfgitem_t cfgMain[] = {
     {"Log format settings", "Contents to be stored on the logger", ">>", true, &onLogFormatSubMenuSelect, NULL},
     {"Beep sound", "Play beep sound when a task is finished", ">>", true, &onEnableBeepCfgSelect,
      &onEnableBeepCfgUpdate},
-    {"------", "", "", false, NULL, NULL},
+    {"----", "", "", false, NULL, NULL},
     {"Format SD card", "Format inserted SD card", "", true, &onPerformFormatSelect, NULL},
     {"Clear all settings", "Erase the current settings of SmallStep", "", true, &onClearSettingsSelect, NULL},
 };
@@ -216,9 +216,9 @@ uint32_t idleTimer;
 void updateAppHint() {
   // set the Paied logger name and address as the application hint
   char addrStr[16];
-  sprintf(addrStr, "%02X%02X-%02X%02X-%02X%02X",  // xxxx-xxxx-xxxx
-          cfg.loggerAddr[0], cfg.loggerAddr[1], cfg.loggerAddr[2], cfg.loggerAddr[3], cfg.loggerAddr[4],
-          cfg.loggerAddr[5]);
+  sprintf(addrStr, "%02X%02X-%02X%02X-%02X%02X",                    // xxxx-xxxx-xxxx
+          cfg.loggerAddr[0], cfg.loggerAddr[1], cfg.loggerAddr[2],  //
+          cfg.loggerAddr[3], cfg.loggerAddr[4], cfg.loggerAddr[5]);
   ui.setAppHints(cfg.loggerName, addrStr);
 }
 
@@ -384,14 +384,9 @@ bool runDownloadLog() {
   ui.drawDialogMessage(BLUE, 2, "Converting data to GPX file...");
   {
     // convert the binary file to GPX file and get the summary
-    MtkParser *parser = new MtkParser();
     parseopt_t parseopt = {cfg.trackMode, TIME_OFFSET_VALUES[cfg.timeOffsetIdx], cfg.putWaypt};
-    parser->setOptions(parseopt);
-    parser->convert(&binFile, &gpxFile, &progressCallback);
-    uint32_t trackCnt = parser->getTrackCount();
-    uint32_t trkptCnt = parser->getTrkptCount();
-    uint32_t wayptCnt = parser->getWayptCount();
-    time_t startTime = parser->getFirstTrkpt().time;
+    MtkParser *parser = new MtkParser(parseopt);
+    gpxinfo_t gpxInfo = parser->convert(&binFile, &gpxFile, &progressCallback);
     delete parser;
 
     // close the GPX file before rename and rename to the output file name
@@ -400,15 +395,16 @@ bool runDownloadLog() {
 
     // make a unique name for the GPX file
     char gpxName[32];
-    makeFilename(gpxName, startTime);
+    makeFilename(gpxName, gpxInfo.startTime);
 
-    if (trkptCnt > 0) {
+    if (gpxInfo.trackCount > 0) {
       SDcard.rename(TEMP_GPX, gpxName);
 
       // make the output message strings
       char outputstr[48], summarystr[48];
       sprintf(outputstr, "Output file : %s", gpxName);
-      sprintf(summarystr, "Summary : %d TRKs, %d TRKPTs, %d WPTs", trackCnt, trkptCnt, wayptCnt);
+      sprintf(summarystr, "Summary : %d TRKs, %d TRKPTs, %d WPTs",  //
+              gpxInfo.trackCount, gpxInfo.trkptCount, gpxInfo.wayptCount);
 
       // print the result message
       ui.drawDialogMessage(BLACK, 2, "Converting data to GPX file... done.");
