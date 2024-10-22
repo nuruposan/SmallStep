@@ -24,22 +24,22 @@ bool MtkParser::isDifferentDate(uint32_t t1, uint32_t t2) {
 void MtkParser::setRecordFormat(uint32_t format) {
   status.logFormat = format;
 
-  status.seekOffset1 = (sizeof(uint16_t) * (bool)(format & FMT_VALID));  //
-  status.seekOffset2 = (sizeof(float) * (bool)(format & FMT_TRACK)) +    //
+  status.ignoreSize1 = (sizeof(uint16_t) * (bool)(format & FMT_VALID));  //
+  status.ignoreSize2 = (sizeof(float) * (bool)(format & FMT_TRACK)) +    //
                        (sizeof(uint16_t) * (bool)(format & FMT_DSTA)) +  //
                        (sizeof(float) * (bool)(format & FMT_DAGE)) +     //
                        (sizeof(uint16_t) * (bool)(format & FMT_PDOP)) +  //
                        (sizeof(uint16_t) * (bool)(format & FMT_HDOP)) +  //
                        (sizeof(uint16_t) * (bool)(format & FMT_VDOP)) +  //
                        (sizeof(uint16_t) * (bool)(format & FMT_NSAT));   //
-  status.seekOffset3 = (sizeof(int16_t) * (bool)(format & FMT_ELE)) +    //
+  status.ignoreSize3 = (sizeof(int16_t) * (bool)(format & FMT_ELE)) +    //
                        (sizeof(uint16_t) * (bool)(format & FMT_AZI)) +   //
                        (sizeof(uint16_t) * (bool)(format & FMT_SNR));    //
-  status.seekOffset4 = (sizeof(uint16_t) * (bool)(format & FMT_MSEC)) +  //
+  status.ignoreSize4 = (sizeof(uint16_t) * (bool)(format & FMT_MSEC)) +  //
                        (sizeof(double) * (bool)(format & FMT_DIST));     //
 
   Serial.printf("Parser.setFormat: change log format [reg=0x%08X, ignoreLen={%d, %d, %d, %d}]\n", status.logFormat,
-                status.seekOffset1, status.seekOffset2, status.seekOffset3, status.seekOffset4);
+                status.ignoreSize1, status.ignoreSize2, status.ignoreSize3, status.ignoreSize4);
 }
 
 void MtkParser::setOptions(parseopt_t opts) {
@@ -70,7 +70,7 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   }
 
   // skip VALID field if it exists
-  in->seekCur(status.seekOffset1);
+  in->seekCur(status.ignoreSize1);
 
   // read LAT, LON, ELE fields if they exist
   if (status.m241Mode) {  // for Holux M-241
@@ -87,7 +87,7 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   if (rcd->format & FMT_SPEED) rcd->speed = in->readFloat() / 3.60;
 
   // skip TRACK, DSTA, DAGE, PDOP, HDOP, VDO, NSAT fields if they exist
-  in->seekCur(status.seekOffset2);
+  in->seekCur(status.ignoreSize2);
 
   // skip SID, ELE + AZI + SNR fields if they exist
   if (rcd->format & FMT_SID) {
@@ -96,7 +96,7 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
     siv = (siv == 0xFF) ? 0 : siv;
 
     // skip SIV x (ELE + AZI + SNR) fields
-    in->seekCur(status.seekOffset3 * siv);
+    in->seekCur(status.ignoreSize3 * siv);
   }
 
   // read RCR field if it exists
@@ -105,14 +105,14 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
     rcd->reason = (uint8_t)(in->readInt16() & 0b00001111);
 
     // RCR reason code
-    // 0b0001: recorded by the time criteria
-    // 0b0010: recorded by the distance criteria
-    // 0b0100: recorded by the speed criteria
-    // 0b1000: recorded by the user request (button press)
+    // 0b0001: log by time
+    // 0b0010: log by distance
+    // 0b0100: log by speed
+    // 0b1000: log by user (button press)
   }
 
   // skip MSEC, DIST fields if they exist
-  in->seekCur(status.seekOffset4);
+  in->seekCur(status.ignoreSize4);
 
   // store the size of the record
   rcd->size = (in->position() - startPos);

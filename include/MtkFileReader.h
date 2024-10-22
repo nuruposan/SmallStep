@@ -4,9 +4,21 @@
 
 class MtkFileReader {
  private:
-  static const uint16_t PAGE_SIZE = 512;  // >= 512 (MtkParser.HEADER_SIZE)
+  static const uint16_t PAGE_SIZE = 1024;  // >= 512 (MtkParser.HEADER_SIZE)
   static const uint16_t PAGE_CENTER = (PAGE_SIZE / 2);
   static const uint16_t BUF_SIZE = (PAGE_SIZE * 2);
+
+  /*
+   * Note:
+   * Time taken to convert 0x3B950 (231,760) bytes of log data that includes 4 TRKs and 7455 TRKPTs
+   * Settings: CPU freq: 80 MHz, SD card: Class 10 Sillicon Power 8 GB
+   *
+   * PAGE_SIZE 512  -> 27.46 sec (not so fast but 400% faster than non-buffered access)
+   * PAGE_SIZE 1024 -> 24.97 sec (9% faster than set PAGE_SIZE 512)
+   * PAGE_SIZE 2048 -> 24.96 sec
+   * PAGE_SIZE 4096 -> 23.34 sec
+   * PAGE_SIZE 8192 -> 22.88 sec
+   */
 
   char buf[BUF_SIZE];
   File32 *in;
