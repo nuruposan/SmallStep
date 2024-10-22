@@ -49,17 +49,18 @@ typedef struct _parsestatus {
   uint16_t sectorPos;
   uint32_t logFormat;
   bool m241Mode;
-  uint8_t seekOffset1;
-  uint8_t seekOffset2;
-  uint8_t seekOffset3;
-  uint8_t seekOffset4;
+  uint8_t ignoreSize1;
+  uint8_t ignoreSize2;
+  uint8_t ignoreSize3;
+  uint8_t ignoreSize4;
 } parsestatus_t;
 
 class MtkParser {
  private:
   const char PTN_DSET_AA[7] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
   const char PTN_DSET_BB[4] = {0xBB, 0xBB, 0xBB, 0xBB};
-  const char PTN_M241[16] = {'H', 'O', 'L', 'U', 'X', 'G', 'R', '2', '4', '1', 'L', 'O', 'G', 'G', 'E', 'R'};
+  const char PTN_M241[16] = {'H', 'O', 'L', 'U', 'X', 'G', 'R', '2', '4', '1',  //
+                             'L', 'O', 'G', 'G', 'E', 'R'};
   const char PTN_M241_SP[4] = {' ', ' ', ' ', ' '};
   const char PTN_SCT_END[16] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
                                 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
