@@ -12,9 +12,12 @@
 /* Otherwise, the BluetoothSerial library will not work properly. */
 /* ################################################## */
 
-#define SD_ACCESS_SPEED 12000000  // settins 20MHz should cause SD card error
 #define BT_ADDR_LEN 6
 #define DEV_NAME_LEN 20
+
+#define CPU_FREQ_HIGH 240
+#define CPU_FREQ_LOW 80
+#define SD_ACCESS_SPEED 15000000  // settins 20MHz should cause SD card error
 
 #define BEEP_VOLUME 1
 #define BEEP_FREQ_SUCCESS 4186  // C8
@@ -106,6 +109,7 @@ void onLogModeSubMenuSelect(cfgitem_t *);
 void onLogFormatSubMenuSelect(cfgitem_t *);
 void onEnableBeepCfgSelect(cfgitem_t *);
 void onEnableBeepCfgUpdate(cfgitem_t *);
+void onClearCacheFileSelect(cfgitem_t *);
 void onPerformFormatSelect(cfgitem_t *);
 void onClearSettingsSelect(cfgitem_t *);
 void updateAppHint();
@@ -145,7 +149,7 @@ menuitem_t menuMain[] = {
     {"Set Log Mode", ICON_LOG_MODE, true, &onSetLogModeSelect},
     {"Set Log Format", ICON_LOG_FORMAT, true, &onSetLogFormatSelect},
     //  {"Show Location", ICON_NAVIGATION, true, &onShowLocationSelect},
-    {"Pair w/ Logger", ICON_PAIR_LOGGER, true, &onPairWithLoggerSelect},
+    {"Link to Logger", ICON_PAIR_LOGGER, true, &onPairWithLoggerSelect},
     {"App Settings", ICON_APP_SETTINGS, true, &onAppSettingSelect},
 };
 
@@ -203,7 +207,8 @@ cfgitem_t cfgMain[] = {
     {"Beep sound", "Play beep sound when a task is finished", ">>", true, &onEnableBeepCfgSelect,
      &onEnableBeepCfgUpdate},
     {"----", "", "", false, NULL, NULL},
-    {"Format SD card", "Format inserted SD card", "", true, &onPerformFormatSelect, NULL},
+    {"Clear carche file", "Delete the download cache file", "", true, &onClearCacheFileSelect, NULL},
+    {"Format SD card", "Format the inserted SD card", "", true, &onPerformFormatSelect, NULL},
     {"Clear all settings", "Erase the current settings of SmallStep", "", true, &onClearSettingsSelect, NULL},
 };
 
@@ -383,11 +388,17 @@ bool runDownloadLog() {
 
   ui.drawDialogMessage(BLUE, 2, "Converting data to GPX file...");
   {
+    // change CPU freq. to 240 MHz temporally
+    setCpuFrequencyMhz(CPU_FREQ_HIGH);
+
     // convert the binary file to GPX file and get the summary
     parseopt_t parseopt = {cfg.trackMode, TIME_OFFSET_VALUES[cfg.timeOffsetIdx], cfg.putWaypt};
     MtkParser *parser = new MtkParser(parseopt);
     gpxinfo_t gpxInfo = parser->convert(&binFile, &gpxFile, &progressCallback);
     delete parser;
+
+    // reset CPU freq. to 80 MHz
+    setCpuFrequencyMhz(CPU_FREQ_LOW);
 
     // close the GPX file before rename and rename to the output file name
     binFile.close();
@@ -1001,6 +1012,17 @@ void onEnableBeepCfgUpdate(cfgitem_t *item) {
   setValueDescrByBool(item->valueDescr, cfg.playBeep);
 }
 
+void onClearCacheFileSelect(cfgitem_t *item) {
+  if (SDcard.exists("download.bin")) SDcard.remove("download.bin");
+  if (SDcard.exists("download.gpx")) SDcard.remove("download.gpx");
+
+  ui.drawDialogFrame("Delete cache file");
+  ui.drawNavBar(NULL);
+  ui.drawDialogMessage(BLUE, 0, "Cache files are cleared.");
+
+  ui.waitForInputOk();
+}
+
 void onPerformFormatSelect(cfgitem_t *item) {
   ui.drawDialogFrame("Format SD card");
   ui.drawNavBar(NULL);
@@ -1133,6 +1155,8 @@ void playBeep(bool success, uint16_t duration) {
 }
 
 void setup() {
+  setCpuFrequencyMhz(CPU_FREQ_LOW);
+
   // start a serial port
   Serial.begin(115200);
 

@@ -10,14 +10,18 @@ class MtkFileReader {
 
   /*
    * Note:
-   * Time taken to convert 0x3B950 (231,760) bytes of log data that includes 4 TRKs and 7455 TRKPTs
-   * Settings: CPU freq: 80 MHz, SD card: Class 10 Sillicon Power 8 GB
+   * Time taken to convert 231,760 bytes of log data that includes 4 TRKs and 7455 TRKPTs
    *
-   * PAGE_SIZE 512  -> 27.46 sec (not so fast but 400% faster than non-buffered access)
+   * CPU freq: 80 MHz, SD card (SPI) 12 MHz, SD card: Sillicon Power 8 GB Class 10
+   * PAGE_SIZE 512  -> 27.46 sec
    * PAGE_SIZE 1024 -> 24.97 sec (9% faster than set PAGE_SIZE 512)
    * PAGE_SIZE 2048 -> 24.96 sec
    * PAGE_SIZE 4096 -> 23.34 sec
    * PAGE_SIZE 8192 -> 22.88 sec
+   *
+   * CPU freq: 240 MHz, SD card (SPI) 15 MHz, SD card: Sillicon Power 8 GB Class 10
+   * PAGE_SIZE 1024 -> 20.80 sec
+   * PAGE_SIZE 8192 -> 18.55 sec
    */
 
   char buf[BUF_SIZE];
