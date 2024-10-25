@@ -34,9 +34,11 @@ uint32_t MtkFileReader::seek(uint16_t mv) {
   if (((cpos + PAGE_CENTER) >= in->position()) && (in->position() < in->size())) {
     uint16_t pg = (pt < PAGE_SIZE) ? PAGE_SIZE : 0;
 
-    memset(&buf[pg], 0xFF, PAGE_SIZE);
     if (in->position() < in->size()) {
-      in->readBytes(&buf[pg], PAGE_SIZE);
+      size_t rs = in->readBytes(&buf[pg], PAGE_SIZE);
+      memset(&buf[pg + rs], 0xFF, (PAGE_SIZE - rs));
+    } else {
+      memset(&buf[pg], 0xFF, PAGE_SIZE);
     }
   }
 

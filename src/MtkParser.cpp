@@ -116,14 +116,14 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   // calc current record size from FILE* position and calculate the checksum
   uint8_t checksum = in->checksum();
 
-  // read the checksum delimiter '*' when the logger is not Holux M-241
-  // nore: Holux M-241 does not write '*' before checksum value
+  // read checksum delimiter '*' and checksum field
+  // Note: Holux M-241 does not have '*' before checksum field
   char chkmkr = '*';
   if (!status.m241Mode) in->read(&chkmkr, sizeof(char));
-
-  // verify the checksum is correct or not
   uint8_t chkval;
   in->read(&chkval, sizeof(uint8_t));
+
+  // verify the checksum is correct or not
   rcd->valid = ((chkmkr == '*') && (chkval == checksum));
 
   // finally, store the size of the record
@@ -171,29 +171,23 @@ bool MtkParser::readBinMarkers() {
     in->read(&dsp.value, sizeof(uint32_t));
 
     if (matchBinPattern(PTN_DSET_BB, sizeof(PTN_DSET_BB))) {  // DSP_B
-      match = true;
-
       // do action according to the DSP type
       switch (dsp.type) {
       case DST_CHANGE_FORMAT:  // change format register
         setRecordFormat(dsp.value);
         break;
+
       case DST_LOG_STARTSTOP:  // log start(0x106), stop(0x0104)
         if ((dsp.value == DSV_LOG_START) && (options.trackMode == TRK_AS_IS)) {
           out->endTrack();
         }
         break;
-      case DST_CHANGE_METHOD:
-      case DST_AUTOLOG_DIST:
-      case DST_AUTOLOG_TIME:
-      case DST_AUTOLOG_SPEED:
-        // just ingnore these types
-        break;
-      default:
-        Serial.printf("Parser.readMarker: Unknown DSP type at 0x%06X [t=%d, v=0x%08X]\n",  //
-                      startPos, dsp.type, dsp.value);
+
+      default:  // all other types
         break;
       }
+
+      match = true;
     }
   } else if (matchBinPattern(PTN_M241, sizeof(PTN_M241))) {  // M-241
     matchBinPattern(PTN_M241_SP, sizeof(PTN_M241_SP));       // M-241 fw1.13
@@ -206,8 +200,6 @@ bool MtkParser::readBinMarkers() {
     // seek sector position to the next
     status.sectorPos += 1;
     match = true;
-
-    Serial.printf("Parser.readMarker: sector end at 0x%06X\n", startPos);
   }
 
   return match;
@@ -232,6 +224,8 @@ gpxinfo_t MtkParser::convert(File32 *input, File32 *output, void (*progressCallb
 
   if (progressCallback != NULL) progressCallback(0, in->filesize());
 
+  Serial.printf("Parser.convert: started (t=%d)\n", millis());
+
   while (true) {
     if (sectorStart != (SIZE_SECTOR * status.sectorPos)) {
       sectorStart = (SIZE_SECTOR * status.sectorPos);
@@ -245,7 +239,7 @@ gpxinfo_t MtkParser::convert(File32 *input, File32 *output, void (*progressCallb
     }
 
     if (progressCallback != NULL) {
-      uint8_t cpr = 200 * ((float)in->position() / in->filesize());  // do callback 200 times during running process
+      uint8_t cpr = 200 * ((float)in->position() / in->filesize());  // callback 200 times during running process
 
       if (cpr > progRate) {  // if progress rate is increased
         progressCallback(in->position(), in->filesize());
@@ -258,8 +252,8 @@ gpxinfo_t MtkParser::convert(File32 *input, File32 *output, void (*progressCallb
 
       uint16_t nos;
       in->read(&nos, sizeof(uint16_t));
-      printf("Parser.convert: sector#%d start at 0x%06X, %d records\n",  //
-             status.sectorPos, sectorStart, (uint16_t)nos);
+      Serial.printf("Parser.convert: sector#%d start at 0x%06X, %d records\n",  //
+                    status.sectorPos, sectorStart, (uint16_t)nos);
 
       uint32_t fmt;
       in->read(&fmt, sizeof(uint32_t));
@@ -272,7 +266,7 @@ gpxinfo_t MtkParser::convert(File32 *input, File32 *output, void (*progressCallb
     int32_t pos = in->position();
     gpsrecord_t rcd;
     if (!readBinRecord(&rcd)) {
-      Serial.printf("Parser.convert: no valid data at 0x%06X\n", in->position());
+      Serial.printf("Parser.convert: no valid pattern or record at 0x%06X\n", in->position());
       in->seek(1);
       continue;
     }
@@ -299,6 +293,8 @@ gpxinfo_t MtkParser::convert(File32 *input, File32 *output, void (*progressCallb
 
   delete in;
   delete out;
+
+  Serial.printf("Parser.convert: finished (t=%d)\n", millis());
 
   return gpxInfo;
 }

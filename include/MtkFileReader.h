@@ -4,7 +4,7 @@
 
 class MtkFileReader {
  private:
-  static const uint16_t PAGE_SIZE = 1024;  // >= 512 (MtkParser.HEADER_SIZE)
+  static const uint16_t PAGE_SIZE = 4096;  // >= 512 (MtkParser.HEADER_SIZE)
   static const uint16_t PAGE_CENTER = (PAGE_SIZE / 2);
   static const uint16_t BUF_SIZE = (PAGE_SIZE * 2);
 

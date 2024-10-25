@@ -39,7 +39,7 @@ class MtkLogger {
   esp_spp_cb_t eventCallback;
 
   uint8_t calcNmeaChecksum(const char *cmd);
-  int32_t resetResumeFile(File32 *cache);
+  int32_t resetCache(File32 *cache);
   bool sendNmeaCommand(const char *cmd);
   bool waitForNmeaReply(const char *reply, uint16_t timeout);
   bool sendDownloadCommand(int startPos, int reqSize);

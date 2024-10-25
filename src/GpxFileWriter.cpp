@@ -41,7 +41,7 @@ void GpxFileWriter::beginTrack() {
   gpxInfo.trackCount += 1;
   memset(&trackInfo, 0, sizeof(gpxinfo_t));
 
-  Serial.printf("GpxFileWriter.beginTrack [trkCount=%d]\n", gpxInfo.trackCount);
+  Serial.printf("GpxWriter.beginTrack: Track #%d\n", gpxInfo.trackCount);
 }
 
 void GpxFileWriter::beginTrackSeg() {
@@ -50,8 +50,10 @@ void GpxFileWriter::beginTrackSeg() {
 
   out->write("<trkseg>\n");
   inTrkSeg = true;
+  trackInfo.trackCount += 1;
 
-  Serial.printf("GpxFileWriter.startSegment\n");
+  Serial.printf("GpxWriter.beginSegment: Track #%d / Segment #%d\n",  //
+                gpxInfo.trackCount, trackInfo.trackCount);
 }
 
 void GpxFileWriter::beginGpx() {
@@ -157,6 +159,9 @@ gpxinfo_t GpxFileWriter::endGpx() {
   inGpx = false;
   inTrack = false;
   inTrkSeg = false;
+
+  Serial.printf("GpxWriter.endGpx: %d TRKs, %d TRKPTs, %d WAYPTs\n",  //
+                gpxInfo.trackCount, gpxInfo.trkptCount, gpxInfo.wayptCount);
 
   return gpxInfo;
 }

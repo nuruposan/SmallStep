@@ -433,7 +433,7 @@ bool runDownloadLog() {
 }
 
 void onAppInputIdle() {
-  Serial.printf("SmallStep.onAppInputIdle: idle shutdown\n");
+  Serial.printf("SmallStep.onIdle: idle shutdown (t=%d)\n", millis());
   SDcard.end();
   M5.Power.powerOFF();
 }

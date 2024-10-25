@@ -160,7 +160,7 @@ bool MtkLogger::sendNmeaCommand(const char *cmd) {
   // Note: DO NOT call gpsSerial->flush() here!!
 
   // print the debug message
-  Serial.printf("Logger.sendCmd: -> %s\n", sendbuf);
+  Serial.printf("Logger.send: -> %s\n", sendbuf);
 
   return true;
 }
@@ -180,7 +180,7 @@ bool MtkLogger::waitForNmeaReply(const char *reply, uint16_t timeout) {
     // exit loop if the timeout reached
     uint32_t timeElapsed = millis() - timeStartAt;
     if (timeElapsed > timeout) {
-      Serial.printf("Logger.recvReply: ** timeout occured **\n");
+      Serial.printf("Logger.recv: ** timeout occured **\n");
       return false;
     }
 
@@ -191,7 +191,7 @@ bool MtkLogger::waitForNmeaReply(const char *reply, uint16_t timeout) {
     // exit loop (and return true) if the expected response is detected
     if (buffer->match(reply)) {
       // put debug message
-      Serial.printf("Logger.waitReply: <- %.48s\n", buffer->getBuffer());
+      Serial.printf("Logger.recv: <- %.80s\n", buffer->getBuffer());
 
       break;
     }
@@ -234,17 +234,18 @@ bool MtkLogger::getLastRecordAddress(int32_t *address) {
   // set return value
   *address = endAddr;
 
-  Serial.printf("Logger.getLastRecordAddress: 0x%06X\n", endAddr);
-
   // return true if the last address is obtained
   return (endAddr > 0);
 }
 
-int32_t MtkLogger::resetResumeFile(File32 *cache) {
+int32_t MtkLogger::resetCache(File32 *cache) {
+  const uint32_t CHECK_LEN = 0x100;
   uint32_t binFileSize = cache->fileSize();
 
-  Serial.printf("Logger.canResume: binFileSize %d bytes\n", binFileSize);
-  if (binFileSize < SIZE_SECTOR) return 0;
+  if (binFileSize < SIZE_SECTOR) {
+    cache->truncate(0);
+    return 0;
+  }
 
   if (!sendDownloadCommand(0, SIZE_REPLY)) return -1;
   if (!waitForNmeaReply("$PMTK182,8,", 3000)) return -1;
@@ -254,17 +255,16 @@ int32_t MtkLogger::resetResumeFile(File32 *cache) {
   buffer->seek(SIZE_HEADER * 2);
 
   // 最初のデータフィールドの先頭0x100バイト(0x200-0x2FF)が同一なら前回の続きと見なす
-  char fbuf[0x100];
-  cache->readBytes(fbuf, sizeof(fbuf));
-
   bool canResume = true;
+  char fbuf[CHECK_LEN];
+  cache->readBytes(fbuf, sizeof(fbuf));
   for (int16_t i = 0; i < sizeof(fbuf) - 1; i++) {
     byte dlby;
     buffer->readHexByteFull(&dlby);
     canResume &= (fbuf[i] == (char)dlby);
   }
 
-  // ACKメッセージを待つ (間に合わない場合が多いが問題ないため無視する
+  // ACKメッセージを待つ (間に合わずタイムアウトになっても問題ない)
   waitForNmeaReply("$PMTK001,", ACK_WAIT);
 
   // キャッシュが以前のものではない場合0を返す
@@ -278,12 +278,17 @@ int32_t MtkLogger::resetResumeFile(File32 *cache) {
   // * 0xFFFF以外(そのセクターのレコード数が確定済み)であれば次の最終セクターをダウンロード再開位置とする
   // (0x00, 0x00, ... 0x00, 0x00 がセンター境界にきている場合、最終の一つ手前のセクターの末尾はまだ更新される)
   int16_t sectors = cache->fileSize() / SIZE_SECTOR;
-  int32_t resumeAddr = (sectors - 1) * SIZE_SECTOR;
-  cache->seek(resumeAddr);
-  uint16_t records = (cache->read() << 8) + (cache->read());
-  if (records != 0xFFFF) resumeAddr += SIZE_SECTOR;
+  int32_t resumeAddr = 0;
+  for (int16_t i = 0; i < sectors; i++) {
+    cache->seek(resumeAddr);
+    uint16_t records = (cache->read() << 8) + (cache->read());
 
-  Serial.printf("Logger.canResume: resume position is 0x%06X\n", resumeAddr);
+    if (records == 0xFFFF) break;
+
+    resumeAddr += SIZE_SECTOR;
+  }
+
+  Serial.printf("Logger.resetCache: using %d bytes of cache\n", resumeAddr);
 
   // finally seek to the potision to resume
   cache->truncate(resumeAddr);
@@ -304,6 +309,8 @@ bool MtkLogger::downloadLogData(File32 *output, void (*progressCallback)(int32_t
   int8_t retries = 0;    // retry count
   int16_t timeout = LOG_TIMEOUT1;
 
+  Serial.printf("Logger.download: initalizing\n");
+
   // get the last address to be downloaded (endAddr).
   // the address is the address of the last og data (STOP mode) or the flash size (OVERWRAP mode).
   // this value will be used for calculating the download progress rate.
@@ -313,19 +320,21 @@ bool MtkLogger::downloadLogData(File32 *output, void (*progressCallback)(int32_t
   // perform the callback to notify the download process is started
   if (progressCallback) progressCallback(nextAddr, endAddr);
 
-  if ((nextAddr = resetResumeFile(output)) == -1) return false;
+  if ((nextAddr = resetCache(output)) == -1) return false;
   output->truncate(nextAddr);
 
   // perform the callback to notify the download process is started
   if (progressCallback) progressCallback(0, endAddr);
 
-  Serial.printf("Logger.download: started [nextAddr=0x%06X, endAddr=0x%06X, resume=%d]\n", nextAddr, endAddr,
-                (nextAddr != 0));
+  Serial.printf("Logger.download: started [start=0x%06X, end=0x%06X, resume=%d] (t=%d)\n",  //
+                nextAddr, endAddr, (nextAddr != 0), millis());
+
   while (gpsSerial->connected()) {
     // break if the download process is finished
     if (nextAddr >= endAddr) {
       // print the success message and
-      Serial.printf("Logger.download: finished [endAddr=0x%06X]\n", endAddr);
+      Serial.printf("Logger.download: finished [end=0x%06X] (t=%d)\n",  //
+                    endAddr, millis());
       break;
     }
 
@@ -364,9 +373,6 @@ bool MtkLogger::downloadLogData(File32 *output, void (*progressCallback)(int32_t
     int32_t startAddr = 0;
     buffer->readColumnAsInt(2, &startAddr, true);
 
-    // print the debug message to the serial console
-    Serial.printf("Logger.download: recv data block fomr 0x%06X\n", startAddr);
-
     // ignore this line if the starting address is not the expected value
     if (startAddr != nextAddr) continue;
 
@@ -391,7 +397,7 @@ bool MtkLogger::downloadLogData(File32 *output, void (*progressCallback)(int32_t
     nextReq = (recvSize >= REQ_SIZE);
     if (dataEnd) {
       endAddr = nextAddr + (REQ_SIZE - recvSize);
-      Serial.printf("Logger.download: found the end of data. update endAddr [endAddr = 0x%06X]\n", endAddr);
+      Serial.printf("Logger.download: found the end of data\n");
     }
 
     // wait for the next ACK responce if the size received is enough to send the next request
@@ -470,7 +476,6 @@ bool MtkLogger::getLogRecordMode(recordmode_t *recmode) {
   int32_t value = 0;
   buffer->readColumnAsInt(3, &value, true);
   *recmode = (recordmode_t)value;
-  Serial.printf("Logger.getLogFullAction: %2d (2=STOP, 1=OVERWRAP)\n", value);
 
   waitForNmeaReply("$PMTK001,", ACK_WAIT);
   return (*recmode != MODE_NONE);
