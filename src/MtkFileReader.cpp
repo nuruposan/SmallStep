@@ -7,89 +7,70 @@ MtkFileReader::MtkFileReader(File32 *input) {
   in = input;
   in->seek(0);
   in->readBytes(buf, PAGE_SIZE);
-  pos = 0;
-  ptr = 0;
+
+  cpos = 0;
+  mpos = 0;
 }
 
-void MtkFileReader::read(void *p, int8_t len) {
+void MtkFileReader::read(void *p, uint8_t len) {
   int8_t *dst = (int8_t *)p;
-  int16_t pt = ptr;
 
-  for (int8_t i = 0; i < len; i++) {
-    *dst++ = buf[pt++ % BUF_SIZE];
+  for (uint32_t i = cpos; i < (cpos + len); i++) {
+    *dst++ = buf[i % BUF_SIZE];  // copy value
   }
-  seekCur(len);
+  seek(len);
 }
 
-double MtkFileReader::readDouble() {
-  double val = 0;
-  read(&val, sizeof(double));
+void MtkFileReader::read(void *p, uint8_t offset, uint8_t len) {
+  int8_t *dst = (int8_t *)p + offset;
 
-  return val;
+  read(dst, len);
 }
 
-float MtkFileReader::readFloat24() {
-  float val = 0;
-  int8_t *pval = (int8_t *)(&val) + 1;  // {0x00, 0xXX, 0xXX, 0xXX}
-  read(pval, (sizeof(int8_t) * 3));
+uint32_t MtkFileReader::seek(uint16_t mv) {
+  uint16_t pt = cpos % BUF_SIZE;
+  cpos += mv;
 
-  return val;
-}
+  if (((cpos + PAGE_CENTER) >= in->position()) && (in->position() < in->size())) {
+    uint16_t pg = (pt < PAGE_SIZE) ? PAGE_SIZE : 0;
 
-float MtkFileReader::readFloat() {
-  float val = 0;
-  read(&val, sizeof(float));
-
-  return val;
-}
-
-int8_t MtkFileReader::readInt8() {
-  int8_t val = 0;
-  read(&val, sizeof(int8_t));
-
-  return val;
-}
-
-int16_t MtkFileReader::readInt16() {
-  int16_t val = 0;
-  read(&val, sizeof(int16_t));
-
-  return val;
-}
-
-int32_t MtkFileReader::readInt32() {
-  int32_t val = 0;
-  read(&val, sizeof(int32_t));
-
-  return val;
-}
-
-uint32_t MtkFileReader::seekCur(uint16_t mv) {
-  uint16_t _ptr = ptr;
-  pos += mv;
-  ptr = pos % BUF_SIZE;
-
-  if (((pos + PAGE_CENTER) >= in->position()) &&
-      (in->position() < in->size())) {
-    uint16_t pg = (_ptr < PAGE_SIZE) ? PAGE_SIZE : 0;
     memset(&buf[pg], 0xFF, PAGE_SIZE);
-    if (in->position() < in->size()) in->readBytes(&buf[pg], PAGE_SIZE);
+    if (in->position() < in->size()) {
+      in->readBytes(&buf[pg], PAGE_SIZE);
+    }
   }
 
-  return pos;
+  return cpos;
 }
 
-uint32_t MtkFileReader::setMark() {
-  mpos = pos;
+uint32_t MtkFileReader::mark() {
+  mpos = cpos;  // store the marking position
+
   return mpos;
 }
 
-uint32_t MtkFileReader::moveToMark() {
-  pos = mpos;
-  ptr = pos % BUF_SIZE;
-  return pos;
+uint8_t MtkFileReader::checksum() {
+  uint8_t chk = 0;
+  uint16_t pt = mpos % BUF_SIZE;
+  uint16_t len = cpos - mpos;
+
+  for (uint32_t i = mpos; i < (mpos + len); i++) {
+    chk ^= buf[i % BUF_SIZE];
+  }
+
+  return chk;
+}
+
+uint32_t MtkFileReader::jump() {
+  cpos = mpos;
+
+  return cpos;
 };
 
-uint32_t MtkFileReader::position() { return pos; }
+uint32_t MtkFileReader::position() {
+  return cpos;
+}
 
-uint32_t MtkFileReader::filesize() { return in->size(); }
+uint32_t MtkFileReader::filesize() {
+  return in->size();
+}

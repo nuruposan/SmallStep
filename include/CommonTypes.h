@@ -31,7 +31,7 @@ typedef struct _gpsrecord {  // 36 bytes/record
   double longitude;          // 8 bytes
   float elevation;           // 4 bytes
   float speed;               // 4 bytes
-  uint8_t reason;            // 1 byte
+  uint16_t reason;           // 1 byte
   bool valid;                // 1 byte
   uint16_t size;             // 2 bytes
 } gpsrecord_t;

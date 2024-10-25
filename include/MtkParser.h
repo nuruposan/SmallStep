@@ -55,6 +55,11 @@ typedef struct _parsestatus {
   uint8_t ignoreSize4;
 } parsestatus_t;
 
+typedef struct _dspdata {
+  uint8_t type;
+  uint32_t value;
+} dspdata_t;
+
 class MtkParser {
  private:
   const char PTN_DSET_AA[7] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};

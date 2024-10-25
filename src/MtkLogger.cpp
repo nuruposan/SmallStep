@@ -160,7 +160,7 @@ bool MtkLogger::sendNmeaCommand(const char *cmd) {
   // Note: DO NOT call gpsSerial->flush() here!!
 
   // print the debug message
-  Serial.printf("Logger.sendNmeaCommand: -> %s\n", sendbuf);
+  Serial.printf("Logger.sendCmd: -> %s\n", sendbuf);
 
   return true;
 }
@@ -180,7 +180,7 @@ bool MtkLogger::waitForNmeaReply(const char *reply, uint16_t timeout) {
     // exit loop if the timeout reached
     uint32_t timeElapsed = millis() - timeStartAt;
     if (timeElapsed > timeout) {
-      Serial.printf("Logger.waitReply: timeout occured\n");
+      Serial.printf("Logger.recvReply: ** timeout occured **\n");
       return false;
     }
 
@@ -188,11 +188,13 @@ bool MtkLogger::waitForNmeaReply(const char *reply, uint16_t timeout) {
     if (!gpsSerial->available()) continue;
     if (!buffer->put(gpsSerial->read())) continue;
 
-    // print the debug message to the serial console
-    Serial.printf("Logger.waitReply: <- %.80s\n", buffer->getBuffer());
-
     // exit loop (and return true) if the expected response is detected
-    if (buffer->match(reply)) break;
+    if (buffer->match(reply)) {
+      // put debug message
+      Serial.printf("Logger.waitReply: <- %.48s\n", buffer->getBuffer());
+
+      break;
+    }
   }
 
   // return true if the expected reply is received
@@ -317,13 +319,13 @@ bool MtkLogger::downloadLogData(File32 *output, void (*progressCallback)(int32_t
   // perform the callback to notify the download process is started
   if (progressCallback) progressCallback(0, endAddr);
 
-  Serial.printf("Logger.download: download started [nextAddr=0x%06X, endAddr=0x%06X, resume=%d]\n", nextAddr, endAddr,
+  Serial.printf("Logger.download: started [nextAddr=0x%06X, endAddr=0x%06X, resume=%d]\n", nextAddr, endAddr,
                 (nextAddr != 0));
   while (gpsSerial->connected()) {
     // break if the download process is finished
     if (nextAddr >= endAddr) {
       // print the success message and
-      Serial.printf("Logger.download: process finished [endAddr=0x%06X]\n", endAddr);
+      Serial.printf("Logger.download: finished [endAddr=0x%06X]\n", endAddr);
       break;
     }
 
@@ -363,7 +365,7 @@ bool MtkLogger::downloadLogData(File32 *output, void (*progressCallback)(int32_t
     buffer->readColumnAsInt(2, &startAddr, true);
 
     // print the debug message to the serial console
-    Serial.printf("Logger.download: recv a data block [startAddr=0x%06X]\n", startAddr);
+    Serial.printf("Logger.download: recv data block fomr 0x%06X\n", startAddr);
 
     // ignore this line if the starting address is not the expected value
     if (startAddr != nextAddr) continue;

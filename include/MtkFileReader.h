@@ -26,24 +26,18 @@ class MtkFileReader {
 
   char buf[BUF_SIZE];
   File32 *in;
-  uint32_t pos;
-  uint16_t ptr;
+  uint32_t cpos;
   uint32_t mpos;
-
-  void read(void *dst, int8_t len);
 
  public:
   MtkFileReader(File32 *input);
 
-  uint32_t moveToMark();
+  uint8_t checksum();
   uint32_t filesize();
-  uint32_t setMark();
+  uint32_t jump();
+  uint32_t mark();
   uint32_t position();
-  float readFloat();
-  float readFloat24();
-  double readDouble();
-  int8_t readInt8();
-  int16_t readInt16();
-  int32_t readInt32();
-  uint32_t seekCur(uint16_t mv);
+  void read(void *dst, uint8_t len);
+  void read(void *dst, uint8_t offset, uint8_t len);
+  uint32_t seek(uint16_t mv);
 };
