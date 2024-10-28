@@ -24,7 +24,7 @@ typedef enum _fmtreg {
   FMT_FIXONLY = 0x80000000
 } formatreg_t;
 
-typedef struct _gpsrecord {  // 36 bytes/record
+typedef struct _gpsrecord {  // 37 bytes/record
   uint32_t format;           // 4 bytes
   uint32_t time;             // 4 bytes
   double latitude;           // 8 bytes

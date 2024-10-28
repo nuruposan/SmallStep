@@ -34,10 +34,11 @@ class MtkFileReader {
 
   uint8_t checksum();
   uint32_t filesize();
+  float getFloat();
+  float getFloat24();
   uint32_t jump();
   uint32_t mark();
   uint32_t position();
-  void read(void *dst, uint8_t len);
-  void read(void *dst, uint8_t offset, uint8_t len);
+  void readBytes(void *dst, uint8_t len);
   uint32_t seek(uint16_t mv);
 };

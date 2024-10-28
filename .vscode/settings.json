@@ -6,7 +6,11 @@
         "*.tcc": "cpp",
         "fstream": "cpp",
         "sstream": "cpp",
-        "iomanip": "cpp"
+        "iomanip": "cpp",
+        "iosfwd": "cpp",
+        "istream": "cpp",
+        "limits": "cpp",
+        "streambuf": "cpp"
     },
     "editor.formatOnSave": true,
     "C_Cpp.clang_format_style": "{ BasedOnStyle: Google, ColumnLimit: 120, UseTab: Never, IndentCaseLabels: false, AllowShortFunctionsOnASingleLine: None }"

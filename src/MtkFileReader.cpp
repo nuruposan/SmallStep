@@ -12,7 +12,7 @@ MtkFileReader::MtkFileReader(File32 *input) {
   mpos = 0;
 }
 
-void MtkFileReader::read(void *p, uint8_t len) {
+void MtkFileReader::readBytes(void *p, uint8_t len) {
   int8_t *dst = (int8_t *)p;
 
   for (uint32_t i = cpos; i < (cpos + len); i++) {
@@ -21,10 +21,19 @@ void MtkFileReader::read(void *p, uint8_t len) {
   seek(len);
 }
 
-void MtkFileReader::read(void *p, uint8_t offset, uint8_t len) {
-  int8_t *dst = (int8_t *)p + offset;
+float MtkFileReader::getFloat() {
+  float val = 0;
+  readBytes(&val, sizeof(float));
 
-  read(dst, len);
+  return val;
+}
+
+float MtkFileReader::getFloat24() {
+  float val = 0;
+  int8_t *pval = (int8_t *)&val;
+  readBytes((pval + 1), sizeof(float) - 1);
+
+  return val;
 }
 
 uint32_t MtkFileReader::seek(uint16_t mv) {

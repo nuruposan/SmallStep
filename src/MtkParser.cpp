@@ -64,7 +64,7 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   // read TIME field if it exists
   if (status.logFormat & FMT_TIME) {
     // get the value of the TIME field and correct the rollover
-    in->read(&rcd->time, sizeof(uint32_t));
+    in->readBytes(&rcd->time, sizeof(uint32_t));
     if (rcd->time < ROLLOVER_TIME) rcd->time += ROLLOVER_CORRECT;
   }
 
@@ -73,18 +73,18 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
 
   // read LAT, LON, ELE fields if they exist
   if (status.m241Mode) {  // for Holux M-241
-    if (rcd->format & FMT_LAT) in->read(&rcd->latitude, 4, (sizeof(double) - 4));
-    if (rcd->format & FMT_LON) in->read(&rcd->longitude, 4, (sizeof(double) - 4));
-    if (rcd->format & FMT_HEIGHT) in->read(&rcd->elevation, 1, ((sizeof(float) - 1)));
+    if (rcd->format & FMT_LAT) rcd->latitude = (double)in->getFloat();
+    if (rcd->format & FMT_LON) rcd->longitude = (double)in->getFloat();
+    if (rcd->format & FMT_HEIGHT) rcd->elevation = (float)in->getFloat24();
   } else {  // for other standard models
-    if (rcd->format & FMT_LAT) in->read(&rcd->latitude, sizeof(double));
-    if (rcd->format & FMT_LON) in->read(&rcd->longitude, sizeof(double));
-    if (rcd->format & FMT_HEIGHT) in->read(&rcd->elevation, sizeof(float));
+    if (rcd->format & FMT_LAT) in->readBytes(&rcd->latitude, sizeof(double));
+    if (rcd->format & FMT_LON) in->readBytes(&rcd->longitude, sizeof(double));
+    if (rcd->format & FMT_HEIGHT) in->readBytes(&rcd->elevation, sizeof(float));
   }
 
   // read SPEED field if it exists
   if (rcd->format & FMT_SPEED) {
-    in->read(&rcd->speed, sizeof(float));
+    in->readBytes(&rcd->speed, sizeof(float));
     rcd->speed /= 3.60;
   }
 
@@ -95,7 +95,7 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   if (rcd->format & FMT_SID) {
     // read the number of SATs in view (lower 8 bit of 32-bit int)
     uint32_t siv = 0;
-    in->read(&siv, sizeof(uint32_t));
+    in->readBytes(&siv, sizeof(uint32_t));
     siv = siv & 0x000000FF;
 
     // skip SIV x (ELE + AZI + SNR) fields
@@ -106,7 +106,7 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   // read RCR field if exists
   if (rcd->format & FMT_RCR) {
     // get the lower 4 bits of RCR field
-    in->read(&rcd->reason, sizeof(uint16_t));
+    in->readBytes(&rcd->reason, sizeof(uint16_t));
     rcd->reason = (rcd->reason & 0x000F);
   }
 
@@ -119,9 +119,9 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   // read checksum delimiter '*' and checksum field
   // Note: Holux M-241 does not have '*' before checksum field
   char chkmkr = '*';
-  if (!status.m241Mode) in->read(&chkmkr, sizeof(char));
+  if (!status.m241Mode) in->readBytes(&chkmkr, sizeof(char));
   uint8_t chkval;
-  in->read(&chkval, sizeof(uint8_t));
+  in->readBytes(&chkval, sizeof(uint8_t));
 
   // verify the checksum is correct or not
   rcd->valid = ((chkmkr == '*') && (chkval == checksum));
@@ -148,7 +148,7 @@ bool MtkParser::matchBinPattern(const char *ptn, uint8_t len) {
   bool match = true;
   for (int i = 0; ((i < len) && (match)); i++) {
     char val;
-    in->read(&val, sizeof(char));
+    in->readBytes(&val, sizeof(char));
 
     match = match && (val == ptn[i]);
   }
@@ -167,8 +167,8 @@ bool MtkParser::readBinMarkers() {
   if (matchBinPattern(PTN_DSET_AA, sizeof(PTN_DSET_AA))) {  // DSP_A
     // read type and value of the DSP
     dspdata_t dsp;
-    in->read(&dsp.type, sizeof(uint8_t));
-    in->read(&dsp.value, sizeof(uint32_t));
+    in->readBytes(&dsp.type, sizeof(uint8_t));
+    in->readBytes(&dsp.value, sizeof(uint32_t));
 
     if (matchBinPattern(PTN_DSET_BB, sizeof(PTN_DSET_BB))) {  // DSP_B
       // do action according to the DSP type
@@ -251,12 +251,12 @@ gpxinfo_t MtkParser::convert(File32 *input, File32 *output, void (*progressCallb
       in->seek(sectorStart - in->position());
 
       uint16_t nos;
-      in->read(&nos, sizeof(uint16_t));
+      in->readBytes(&nos, sizeof(uint16_t));
       Serial.printf("Parser.convert: sector#%d start at 0x%06X, %d records\n",  //
                     status.sectorPos, sectorStart, (uint16_t)nos);
 
       uint32_t fmt;
-      in->read(&fmt, sizeof(uint32_t));
+      in->readBytes(&fmt, sizeof(uint32_t));
       setRecordFormat(fmt);
       in->seek(dataStart - in->position());
     }
