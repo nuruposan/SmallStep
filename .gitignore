@@ -35,10 +35,10 @@
 .DS_Store
 
 # PlatformIO
-c_cpp_properties.json
 .pioenvs
 .piolibdeps
 .clang_complete
 .gcc-flags.json
-launch.json
 .pio/
+.vscode/c_cpp_properties.json
+.vscode/launch.json
