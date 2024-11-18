@@ -34,7 +34,7 @@ SmallStep supports following GPS loggers in the current release.
 - Holux m-241 (all fw ver.)
   - Changing the log mode (by distance or by time) and the log format (enable additional data to record such as RCR, DOP, DGPS) is not supported on m-241
 
-**Request to the users:**<br>
+**Request for users:**<br>
 If you have one of MTK GPS loggers below, please let the author its the Bluetooth device name.
 SmallStep should also work correctly for these models.
 But the author cannot provide support them because the device name for discovery/pairing is not known.
@@ -51,8 +51,8 @@ But the author cannot provide support them because the device name for discovery
 SmallStep provides following features works with your GPS logger.
 
 - Download log data and save it as GPX file
-- Fix GPS week number rollover problem 
-- Clear flash memory of logger 
+- Fix GPS week number rollover problem
+- Clear flash memory of logger
 - Change logging mode setting
 - Change logging format
 
@@ -71,5 +71,3 @@ nuruposan [Twittter/X](https://x.com/yaeh77)
 ## License
 
 SmallSteps is licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).
-
-
