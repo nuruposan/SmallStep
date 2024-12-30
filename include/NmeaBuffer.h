@@ -19,7 +19,7 @@ class NmeaBuffer {
   uint8_t expectedChecksum;
   uint8_t receivedChecksum;
 
-  static bool isTextChar(char ch);
+  static bool isValidChar(char ch);
   static uint8_t hexCharToByte(char ch);
   bufferpage_t *allocatePage(bufferpage_t **pg);
   void freePages(bufferpage_t *tgp);
@@ -37,7 +37,7 @@ class NmeaBuffer {
   bool readHexByteFull(byte *by);
   bool readHexByteHalf(byte *by);
   bool readColumnAsInt(uint8_t clm, int32_t *value, bool hex);
-  bool seekToColumn(uint8_t clm);
-  bool seek(uint32_t sk);
+  bool seekCurToColumn(uint8_t clm);
+  bool seekCur(uint32_t sk);
   bool match(const char *str);
 };

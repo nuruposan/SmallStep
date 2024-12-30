@@ -18,7 +18,7 @@ void MtkFileReader::readBytes(void *p, uint8_t len) {
   for (uint32_t i = cpos; i < (cpos + len); i++) {
     *dst++ = buf[i % BUF_SIZE];  // copy value
   }
-  seek(len);
+  seekCur(len);
 }
 
 float MtkFileReader::getFloat() {
@@ -36,7 +36,7 @@ float MtkFileReader::getFloat24() {
   return val;
 }
 
-uint32_t MtkFileReader::seek(uint16_t mv) {
+uint32_t MtkFileReader::seekCur(uint16_t mv) {
   uint16_t pt = cpos % BUF_SIZE;
   cpos += mv;
 

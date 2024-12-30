@@ -15,9 +15,10 @@
 #define BT_ADDR_LEN 6
 #define DEV_NAME_LEN 20
 
-#define CPU_FREQ_HIGH 240
-#define CPU_FREQ_LOW 80
-#define SD_ACCESS_SPEED 15000000  // settins 20MHz should cause SD card error
+#define SERIAL_SPEED 115200       // 115200 baud
+#define CPU_FREQ_HIGH 240         // 240 MHz
+#define CPU_FREQ_LOW 80           // 80 MHz
+#define SD_ACCESS_SPEED 15000000  // 15 MHz (Note: > 15 Mhz may cause I/O errors)
 
 #define BEEP_VOLUME 1
 #define BEEP_FREQ_SUCCESS 4186  // C8
@@ -232,7 +233,6 @@ void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   case ESP_SPP_INIT_EVT:  // SPP is started
     if (param == NULL) {
       ui.setBluetoothStatus(true);
-      ui.drawTitleBar();  // redraw the title bar to change the bluetooth icon to blue
     }
     break;
 
@@ -243,7 +243,6 @@ void bluetoothCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   case ESP_SPP_UNINIT_EVT:  // SPP is stopped
     if (param == NULL) {
       ui.setBluetoothStatus(false);
-      ui.drawTitleBar();  // redraw the title bar to change the bluetooth icon to grey
     }
     break;
   }
@@ -1155,23 +1154,24 @@ void playBeep(bool success, uint16_t duration) {
 }
 
 void setup() {
-  setCpuFrequencyMhz(CPU_FREQ_LOW);
+  // set the CPU frequency to 80 MHz
+  if (getCpuFrequencyMhz() != CPU_FREQ_LOW) {
+    setCpuFrequencyMhz(CPU_FREQ_LOW);
+  }
 
-  // start a serial port
-  Serial.begin(115200);
+  // start the serial port
+  Serial.begin(SERIAL_SPEED);
 
   // initialize the configuration variable
   memcpy(&cfg, &DEFAULT_CONFIG, sizeof(appconfig_t));
 
-  // initialize a M5Stack
+  // initialize libraries
   M5.begin();
   M5.Power.begin();
   M5.Lcd.setBrightness(LCD_BRIGHTNESS);
   M5.Lcd.fillScreen(BLACK);
   EEPROM.begin(sizeof(appconfig_t) + 1);
   SDcard.begin(GPIO_NUM_4, SD_ACCESS_SPEED);
-
-  // initialize SimpleBeep;
   sb.init();
 
   // set the bluetooth event handler
@@ -1179,8 +1179,8 @@ void setup() {
 
   // load the configuration data
   M5.update();
-  bool defaultConfig = (M5.BtnA.read() == 1);
-  bool firstBoot = (loadAppConfig(defaultConfig) == false);
+  bool defaultConfig = ((bool)M5.BtnA.read());
+  bool firstBoot = (!loadAppConfig(defaultConfig));
 
   // draw the screen
   updateAppHint();
@@ -1212,13 +1212,12 @@ void setup() {
     ui.waitForInputOk();
   }
 
-  // enter the main menu (infinit loop in this function)
+  // enter the main menu (infinite loop in ui.openMainMenu)
   int8_t itemCount = (sizeof(menuMain) / sizeof(menuitem_t));
   ui.openMainMenu(menuMain, itemCount);
 }
 
 void loop() {
-  // *** NEVER REACH HERE ***
   // power off the device if reaching here
   SDcard.end();         // stop SD card access
   M5.Power.powerOFF();  // power off

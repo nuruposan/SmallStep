@@ -28,8 +28,8 @@ typedef struct _logcriteria {
 
 class MtkLogger {
  private:
-  const uint32_t TIMEOUT = 1000;
-  const int32_t ACK_WAIT = 100;
+  const uint32_t MSG_TIMEOUT = 1000;
+  const int32_t ACK_TIMEOUT = 100;
 
   const char *deviceName;
   char address[6];

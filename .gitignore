@@ -31,14 +31,20 @@
 *.out
 *.app
 
+# vim/nano
+*.swp
+
 # macOS
 .DS_Store
 
-# PlatformIO
-.pioenvs
-.piolibdeps
-.clang_complete
-.gcc-flags.json
-.pio/
+# VSCode and PlatformIO
 .vscode/c_cpp_properties.json
 .vscode/launch.json
+.clang_complete
+.gcc-flags.json
+.pioenvs
+.piolibdeps
+.pio/
+
+# Backup files
+*.*~

@@ -63,7 +63,7 @@ void NmeaBuffer::clear() {
   receivedChecksum = 0;
 }
 
-bool NmeaBuffer::isTextChar(char ch) {
+bool NmeaBuffer::isValidChar(char ch) {
   // return true if the given chars is usable in PMTK sentence
   return ((ch >= ' ') && (ch <= '~'));
 }
@@ -117,7 +117,7 @@ bool NmeaBuffer::put(char ch) {
     break;
   }
 
-  if (isTextChar(ch)) {
+  if (isValidChar(ch)) {
     // append given char (when buffer available), then
     // calculate checksum of a receiving sentence or extract checksum value
     appendToBuffer(ch);
@@ -145,7 +145,7 @@ char NmeaBuffer::get() {
 }
 
 bool NmeaBuffer::readColumnAsInt(uint8_t clm, int32_t *value, bool hex) {
-  if (seekToColumn(clm) == false) return false;
+  if (seekCurToColumn(clm) == false) return false;
 
   *value = 0;
   for (int8_t i = 0; i < 32; i++) {
@@ -191,7 +191,7 @@ bool NmeaBuffer::match(const char *str) {
   return (strstr(rootPage->buf, str) != NULL);
 }
 
-bool NmeaBuffer::seekToColumn(uint8_t clm) {
+bool NmeaBuffer::seekCurToColumn(uint8_t clm) {
   bufferpage_t *pg = rootPage;
   uint16_t pt = 0;
   uint16_t cc = 0;
@@ -226,7 +226,7 @@ bool NmeaBuffer::seekToColumn(uint8_t clm) {
   return (cc == clm);
 }
 
-bool NmeaBuffer::seek(uint32_t sk) {
+bool NmeaBuffer::seekCur(uint32_t sk) {
   for (int i = 0; i < sk; i++) {
     if (get() == 0) return false;
   }

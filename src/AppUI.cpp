@@ -419,16 +419,25 @@ void AppUI::setIdleCallback(void (*callback)(), uint32_t timeout) {
 }
 
 void AppUI::setIconVisible(bool btVisible, bool sdVisible) {
+  if ((btIcon.visible == btVisible) && (sdIcon.visible == sdVisible)) return;
+
   btIcon.visible = btVisible;
   sdIcon.visible = sdVisible;
+  drawTitleBar();
 }
 
 void AppUI::setBluetoothStatus(bool active) {
+  if (btIcon.active == active) return;
+
   btIcon.active = active;
+  drawTitleBar();
 }
 
 void AppUI::setSDcardStatus(bool mounted) {
+  if (sdIcon.active == mounted) return;
+
   sdIcon.active = mounted;
+  drawTitleBar();
 }
 
 btnid_t AppUI::waitForButtonInput(navmenu_t *nav) {

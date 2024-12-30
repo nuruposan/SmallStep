@@ -26,35 +26,6 @@ const uint8_t ICON_APP[] = {32,         20,         0,          0,           // 
 /**
  * The following icons were converted from Google Material Symbols & Icons. 
  * https://fonts.google.com/icons
- * 
- * convert step
- * 1: download icons in PNG format 
- * 2: convert the PNG icons to monochrome using some image editor
- * 3: convert the image to a byte array using the following script
- * 
- * --- begin python script ---
- * # monoimg-to-icondata.py
- * import tkinter.filedialog
- * import cv2
- * ffilter = [("monochrome picture", "*")];
- * imgname = tkinter.filedialog.askopenfilename(filetypes=ffilter)
- * 
- * if (imgname == ""): quit()
- * 
- * img = cv2.imread(imgname)
- * print("// %s" % (imgname))
- * print("const uint8_t ICON_NAME[] = {")
- * print("  %d, %d, 0, 0, // width, height, reserved, reserved" % (img.shape[1], img.shape[0]))
- * for y in range(img.shape[0]):
- *   print("  ", end="")
- *   for x in range(img.shape[1]):
- *     if (x % 8) == 0: print("0b", end="")
- *     px = 1 if (img[y,x][0] > 0) or (img[y,x][1] > 0) or (img[y,x][2] > 0) else 0
- *     print(px, end="")
- *     if (x % 8) == 7: print(", ", end="")
- *   print(" // %2d" % (y))
- * print("};")
- * --- end python script ---
  */
 
 const uint8_t ICON_DOWNLOAD_LOG[] = {
