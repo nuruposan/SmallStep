@@ -1,15 +1,14 @@
 # SmallStep
 
-A portable data downloading and configuration utility for classic MTK GPS Loggers runs on M5Stack Basic.
-
 ## Overview
+
+A portable data downloading and configuration utility for classic MTK GPS Loggers runs on M5Stack Basic.
 
 ## Instruction
 
 ### Requirement
 
-You will need to install [VScode](https://code.visualstudio.com/download), [PlatformIO IDE](https://platformio.org/install/) and [Git](https://git-scm.com/downloads) to your PC.
-To install these software, please refer to the instructions on their official websites.
+You will need to install [VScode](https://code.visualstudio.com/download), [PlatformIO IDE](https://platformio.org/install/) and [Git](https://git-scm.com/downloads) to your PC. To install these software, please refer to the instructions on their official websites.
 
 You also need to have a M5Stack Basic that have a SD card run SmallStep. No expansion module required.
 
@@ -19,12 +18,16 @@ You also need to have a M5Stack Basic that have a SD card run SmallStep. No expa
 2. Clone [SmallStep repositoly](https://github.com/nuruposan/SmallStep) to a local directory
 3. Open the directory using VScode
 4. Edit `BluetoothSerial.h` and increase `RX_QUEUE_SIZE` from 512 to 4094 (bytes)
-5. Connect a M5Stack Basic to the PC
-6. Run "PlatformIO: Upload" task and install SmallStep to the M5Stack
+5. Edit `SimpleBeep.h` and fix `include <arduino.h>` to `include <Arduino.h>`
+6. Connect a M5Stack Basic to the PC
+7. Run "PlatformIO: Upload" task and install SmallStep to the M5Stack
 
 **Important Notice:**<br>
-Please don't forget to perform Step 4 or you will get a error while downloading log data from your GPS logger.
-You can find `BluetoothSerial.h` in `$HOME/.platformio/packages/framework-arduinoespressif32/libraries/BluetoothSerial/src/`, not in the project directory.
+Please don't forget to perform Step 4 and 5.
+
+`BluetoothSerial.h` is in `$HOME/.platformio/packages/framework-arduinoespressif32/libraries/BluetoothSerial/src/`, **not** in the project directory.
+`SimpleBeep.h` is in `SmallStep/.pio/libdeps/m5stack-core-esp32/M5Stack_SimpleBeep/src/SimpleBeep.h`.
+`
 
 ### Suppored GPS Loggers
 
