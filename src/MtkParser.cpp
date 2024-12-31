@@ -271,7 +271,8 @@ bool MtkParser::readBinMarkers() {
 
 /**
  * @fn gpxinfo_t MtkParser::convert(File32 *input, File32 *output, void (*progressCallback)(int32_t, int32_t))
- * @brief Read a
+ * @brief Read a GPS data record from the current position in the input file. The read record is valid, write it as a
+ * TRKPT into the output file and move to the next position. Otherwise, move the position to the next byte.  
  * @param input
  * @param output
  * @param progressCallback

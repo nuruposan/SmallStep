@@ -663,7 +663,8 @@ bool MtkLogger::setLogCriteria(logcriteria_t criteria) {
 /**
  * @fn bool MtkLogger::getLogByDistance(int16_t *dist)
  * @brief Get log by distance parameter of the connected logger.
- * @param time A pointer to the variable to store the distance value. the unit is in meters (100 means 100 meters)
+ * @param time A pointer to the variable to store the distance value. The unit is in 0.1 meter (1000 means 100 meters).
+ * 0 means auto-logging by distance is disabled.
  * @return true if the command is done successfully, otherwise false.
  */
 bool MtkLogger::getLogByDistance(int16_t *dist) {
@@ -682,7 +683,7 @@ bool MtkLogger::getLogByDistance(int16_t *dist) {
 /**
  * @fn bool MtkLogger::setLogByDistance(int16_t distance)
  * @brief Set log by distance parameter of the connected logger.
- * @param time The distance value to set. The unit is in seconds (100 means 100 meters). If the specified value is
+ * @param time The distance value to set. The unit is in 0.1 meter (1000 means 100 meters). If the specified value is
  * negative, it will be set to 0 (disabled).
  * @return True if the command is done successfully, otherwise false.
  */
@@ -701,7 +702,8 @@ bool MtkLogger::setLogByDistance(int16_t distance) {
 /**
  * @fn bool MtkLogger::getLogByTime(int16_t *time)
  * @brief Get log by time parameter of the connected logger.
- * @param time A pointer to the variable to store the time value. The unit is in seconds (300 means 300 seconds)
+ * @param time A pointer to the variable to store the time value. The unit is in 0.1 sec (e.g. 1000 means 100 seconds).
+ * 0 means auto-logging by time is disabled.
  * @return True if the command is done successfully, otherwise false.
  */
 bool MtkLogger::getLogByTime(int16_t *time) {
@@ -721,7 +723,7 @@ bool MtkLogger::getLogByTime(int16_t *time) {
 /**
  * @fn bool MtkLogger::setLogBySpeed(int16_t speed)
  * @brief Set log by speed of the connected logger.
- * @param speed The speed value to set. The unit is in 0.1km/h (1000 means 100 km/h). If the specified value is
+ * @param speed The speed value to set. The unit is in 0.1km/h (e.g. 1000 means 100 km/h). If the specified value is
  * negative, it will be set to 0 (disabled).
  * @return true if the command is done successfully, otherwise false.
  */
@@ -741,8 +743,8 @@ bool MtkLogger::setLogBySpeed(int16_t speed) {
 /**
  * @fn bool MtkLogger::getLogBySpeed(int16_t *speed)
  * @brief Get log by speed parameter of the connected logger.
- * @param speed A pointer to the variable to store the speed value. The unit is in 0.1km/h (1000 means 100 km/h).
- * If the specified value is negative, it will be set to 0 (disabled).
+ * @param speed A pointer to the variable to store the speed value. The unit is in 0.1km/h (e.g. 1000 means 100 km/h).
+ * 0 means auto-logging by speed is disabled.
  * @return true if the command is done successfully, otherwise false.
  */
 bool MtkLogger::getLogBySpeed(int16_t *speed) {
@@ -762,7 +764,7 @@ bool MtkLogger::getLogBySpeed(int16_t *speed) {
 /**
  * @fn bool MtkLogger::setLogByTime(int16_t time)
  * @brief Set log by time parameter of the connected logger
- * @param time the time value to set. the unit is in seconds (300 means 300 seconds). if the value is negative,
+ * @param time the time value to set. the unit is 0.1 sec (e.g. 1000 means 100 seconds). if the value is negative,
  * it will be set to 0 (disabled).
  * @return true if the command is done successfully, otherwise false.
  */

@@ -7,24 +7,19 @@
 #include "MtkParser.h"
 #include "Resources.h"
 
-/* ################ Important Notice ################ */
-/* You MUST increase RX_QUEUE_SIZE 512 to 4094 in BluetoothSerial.h. */
-/* Otherwise, the BluetoothSerial library will not work properly. */
-/* ################################################## */
-
 #define BT_ADDR_LEN 6
 #define DEV_NAME_LEN 20
 
 #define SERIAL_SPEED 115200       // 115200 baud
-#define CPU_FREQ_HIGH 240         // 240 MHz
 #define CPU_FREQ_LOW 80           // 80 MHz
+#define CPU_FREQ_HIGH 240         // 240 MHz
 #define SD_ACCESS_SPEED 15000000  // 15 MHz (Note: > 15 Mhz may cause I/O errors)
 
-#define BEEP_VOLUME 1
-#define BEEP_FREQ_SUCCESS 4186  // C8
-#define BEEP_FREQ_FAILURE 131   // C3
-#define BEEP_DURATION_SHORT 120
-#define BEEP_DURATION_LONG 600
+#define BEEP_VOLUME 1            // beep volume level (1-10)
+#define BEEP_FREQ_SUCCESS 4186   // 4186 Hz (C8) for success beep frequency
+#define BEEP_FREQ_FAILURE 131    // 131 Hz (C3) for failure beep frequency
+#define BEEP_DURATION_SHORT 120  // 120 msec for short beep
+#define BEEP_DURATION_LONG 600   // 600 msec for long beep
 
 typedef struct _appconfig {
   uint16_t length;                  // must be sizeof(appconfig_t)
