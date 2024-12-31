@@ -43,7 +43,7 @@ class MtkLogger {
   bool sendNmeaCommand(const char *cmd);
   bool waitForNmeaReply(const char *reply, uint16_t timeout);
   bool sendDownloadCommand(int startPos, int reqSize);
-  static int32_t modelIdToFlashSize(uint16_t modelId);
+  static int32_t firmwareIdToFlashSize(uint16_t modelId);
   bool getLastRecordAddress(int32_t *size);
 
  public:

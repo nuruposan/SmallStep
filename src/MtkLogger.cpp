@@ -3,9 +3,15 @@
 #define PROGRESS_STARTED 0
 #define PROGRESS_FINISHED 100
 
+/**
+ * @fn MtkLogger::MtkLogger(const char *devname)
+ * @brief Constructor of the MtkLogger class. Initialize the member variables and allocate the resources.
+ * @param devname Name of the device for Bluetooth connection (default: "ESP32"; any name is acceptable).
+ */
 MtkLogger::MtkLogger(const char *devname) {
   deviceName = (devname == NULL) ? "ESP32" : devname;
   memset(&address, 0, sizeof(address));
+
   gpsSerial = new BluetoothSerial();
   buffer = new NmeaBuffer();
   sppStarted = false;
@@ -14,6 +20,11 @@ MtkLogger::MtkLogger(const char *devname) {
   // (probably because of M5stack is not ready yet)
 };
 
+/**
+ * @fn MtkLogger::~MtkLogger()
+ * @brief Destructor of the MtkLogger class. Disconnect the current connection (if SPP is started) and release the
+ * resources.
+ */
 MtkLogger::~MtkLogger() {
   // disconnect the current conection if it is still connected
   if (connected()) {
@@ -24,6 +35,13 @@ MtkLogger::~MtkLogger() {
   delete gpsSerial;
 }
 
+/**
+ * @fn bool MtkLogger::connect(String name)
+ * @brief Connect to the GPS logger of the specified name. The connection is established by the SPP (Serial Port
+ * Profile) of Bluetooth Classic.
+ * @param name Name of the GPS logger to connect.
+ * @return Returns true if the connection is established successfully, otherwise false.
+ */
 bool MtkLogger::connect(String name) {
   if (!sppStarted) {
     sppStarted = gpsSerial->begin(deviceName, true);
@@ -48,6 +66,14 @@ bool MtkLogger::connect(String name) {
   return conn;
 }
 
+/**
+ * @fn bool MtkLogger::connect(uint8_t *addr)
+ * @brief Connect to the GPS logger of the specified address. The connection is established by the SPP (Serial Port
+ * Profile) of Bluetooth Classic.
+ * @param addr Address of the GPS logger to connect.
+ * @note The address is a 6-byte array that contains the MAC address of the GPS logger.
+ * @return Returns true if the connection is established successfully, otherwise false.
+ */
 bool MtkLogger::connect(uint8_t *addr) {
   if (!sppStarted) {
     sppStarted = gpsSerial->begin("SmallStep", true);
@@ -78,11 +104,20 @@ bool MtkLogger::connect(uint8_t *addr) {
   return conn;
 }
 
+/**
+ * @fn bool MtkLogger::connected()
+ * @brief Check if the GPS logger is connected or not.
+ * @return Returns true if the GPS logger is connected, otherwise false.
+ */
 bool MtkLogger::connected() {
   bool conn = (sppStarted && gpsSerial->connected());
   return conn;
 }
 
+/**
+ * @fn void MtkLogger::disconnect()
+ * @brief Disconnect the current connection to the GPS logger.
+ */
 void MtkLogger::disconnect() {
   if (!connected()) return;
 
@@ -96,9 +131,16 @@ void MtkLogger::disconnect() {
   Serial.printf("Logger.disconnect: disconnected\n");
 }
 
-int32_t MtkLogger::modelIdToFlashSize(uint16_t modelId) {
+/**
+ * @fn int32_t MtkLogger::firmwareIdToFlashSize(uint16_t firmwareId)
+ * @brief Return the flash size of the GPS logger model specified by the firmware ID. The firmware ID is a 16-bit value
+ * that is could be obtained by the PMTK_Q_RELEASE command (PMTK605).
+ * @param firmwareId Firmware ID of the GPS logger model.
+ * @return Returns the flash size of the GPS logger model. If the model is unknown, it is assumed as 32Mbit.
+ */
+int32_t MtkLogger::firmwareIdToFlashSize(uint16_t firmwareId) {
   int32_t flashSize = 0;
-  switch (modelId) {
+  switch (firmwareId) {
   // 8Mbit flash models
   case 0x1388:  // 757/ZI v1
   case 0x5202:  // 757/ZI v2
@@ -133,6 +175,13 @@ int32_t MtkLogger::modelIdToFlashSize(uint16_t modelId) {
   return flashSize;
 }
 
+/**
+ * @fn uint8_t MtkLogger::calcNmeaChecksum(const char *cmd)
+ * @brief Calculate the checksum of the given NMEA command string. The checksum is calculated by XORing all bytes of the
+ * string.
+ * @param cmd A pointer to the NMEA command string without the leading '$' and the trailing '*' and checksum.
+ * @return Returns the calculated checksum value of the given NMEA command.
+ */
 uint8_t MtkLogger::calcNmeaChecksum(const char *cmd) {
   uint8_t chk = 0;
   for (uint8_t i = 0; cmd[i] > 0; i++) {
@@ -142,6 +191,13 @@ uint8_t MtkLogger::calcNmeaChecksum(const char *cmd) {
   return chk;
 }
 
+/**
+ * @fn bool MtkLogger::sendNmeaCommand(const char *cmd)
+ * @brief Send the given NMEA command to the GPS logger. The command is sent as a NMEA sentence with the leading '$' and
+ * the trailing '*' and checksum.
+ * @param cmd A pointer to the NMEA command string without the leading '$' and the trailing '*' and checksum.
+ * @return Returns true if the command is sent successfully, otherwise false.
+ */
 bool MtkLogger::sendNmeaCommand(const char *cmd) {
   // return false if the GPS logger is not connected
   if (!connected()) return false;
@@ -165,6 +221,14 @@ bool MtkLogger::sendNmeaCommand(const char *cmd) {
   return true;
 }
 
+/**
+ * @fn bool MtkLogger::waitForNmeaReply(const char *reply, uint16_t timeout)
+ * @brief Wait for the expected reply from the GPS logger. The reply is expected to be a NMEA sentence that matches the
+ * given reply string.
+ * @param reply A pointer to the expected reply string with or without the leading '$'.
+ * @param timeout A uint16_t value that contains the timeout period in milliseconds.
+ * @return Returns true if the expected reply is received within the timeout period, otherwise false.
+ */
 bool MtkLogger::waitForNmeaReply(const char *reply, uint16_t timeout) {
   // return false if the GPS logger is not connected
   if (!connected()) return false;
@@ -201,6 +265,16 @@ bool MtkLogger::waitForNmeaReply(const char *reply, uint16_t timeout) {
   return true;
 }
 
+/**
+ * @fn bool MtkLogger::sendDownloadCommand(int startPos, int reqSize)
+ * @brief Send the download command to the GPS logger to request the lod data from the specified address.
+ * After sending the download command, the GPS logger sends multiple response beginning with "$PMTK182,8," prefix.
+ * The response contains the starting address (in 3rd column) and the ASCII-encoded log data (in 4th column).
+ * @param startPos A int value that contains the start address of the log data to download.
+ * @param reqSize A int value that contains the size of the log data to download (It is recommended this value be a
+ * multiple of 0x800. MTK logger sends the data in 0x800-byte blocks).
+ * @return Returns true if the download command is sent successfully, otherwise false.
+ */
 bool MtkLogger::sendDownloadCommand(int startPos, int reqSize) {
   char cmdstr[32];
   sprintf(cmdstr, "PMTK182,7,%06X,%04X", startPos, reqSize);
@@ -208,6 +282,12 @@ bool MtkLogger::sendDownloadCommand(int startPos, int reqSize) {
   return sendNmeaCommand(cmdstr);
 }
 
+/**
+ * @fn bool MtkLogger::getLastRecordAddress(int32_t *address)
+ * @brief Determine the last address of the log data to be downloaded. The address is the address of the last log data
+ * (FULLSTOP mode) or the flash size (OVERWRITE mode).
+ * @return Returns true if the last address is obtained successfully, otherwise false.
+ */
 bool MtkLogger::getLastRecordAddress(int32_t *address) {
   const int32_t TIMEOUT = 1000;
 
@@ -240,6 +320,14 @@ bool MtkLogger::getLastRecordAddress(int32_t *address) {
   return (endAddr > 0);
 }
 
+/**
+ * @fn bool MtkLogger::resetCache(File32 *cache)
+ * @brief Determine the resume position of the download process. The resume position is determined in units of data
+ * sectors (multiple of 65536 bytes). If the cache file is invalid, the file is truncated and the function returns 0.
+ * @param cache A pointer to the cache file object to store the downloaded data.
+ * @return Returns the resume position of the download process in bytes. The content after the resume position in
+ * the cache file is automatically truncated.
+ */
 int32_t MtkLogger::resetCache(File32 *cache) {
   const uint32_t CHECK_LEN = 0x200;
   uint32_t binFileSize = cache->fileSize();
@@ -297,6 +385,16 @@ int32_t MtkLogger::resetCache(File32 *cache) {
   return resumeAddr;
 }
 
+/**
+ * @fn book MtkLogger::downloadLogData(File32 *output, void (*progressCallback)(int32_t, int32_t))
+ * @brief Download the log data from the GPS logger and store it in the given output / cache file.
+ * The callback function is called to notify the progress of the download process.
+ * @param output A pointer to the output file object to store the downloaded log data.
+ * @param progressCallback A pointer to the callback function that is called to notify the progress of the download
+ * process. The function should have two int32_t arguments that contain the current position and the end position of the
+ * download process.
+ * @return Returns true if the download process is finished successfully, otherwise false.
+ */
 bool MtkLogger::downloadLogData(File32 *output, void (*progressCallback)(int32_t, int32_t)) {
   const int8_t MAX_RETRIES = 3;
   const int32_t REQ_SIZE = 0x4000;
@@ -417,6 +515,13 @@ bool MtkLogger::downloadLogData(File32 *output, void (*progressCallback)(int32_t
   return ((dataEnd) || (nextAddr >= endAddr));
 }
 
+/**
+ * @fn bool MtkLogger::fixRTCdatetime()
+ * @brief Fix the RTC date and time of the GPS logger. The date and time are set to 2020-01-01 00:00:00 temporarily.
+ * After setting the date and time, the GPS logger is restarted to apply the fix.
+ * @return Returns true if the RTC date and time are fixed successfully, otherwise false.
+ * @note After the fix, the GPS logger will recognize the current date and time from the GPS signal correctly.
+ */
 bool MtkLogger::fixRTCdatetime() {
   // send PMTK_API_SET_RTC_TIME (set date/time)
   if (!sendNmeaCommand("PMTK335,2020,1,1,0,0,0")) return false;
@@ -428,15 +533,21 @@ bool MtkLogger::fixRTCdatetime() {
   return true;
 }
 
+/**
+ * @fn bool MtkLogger::getFlashSize(int32_t *size)
+ * @brief Get the flash size of the connected logger. The size is determined by the firmware release ID of the logger.
+ * @param size A pointer to the variable to store the flash size.
+ * @return True if the command is done successfully, otherwise false.
+ */
 bool MtkLogger::getFlashSize(int32_t *size) {
-  // send query firmware release
+  // send a query command to get the firmware release ID
   if (!sendNmeaCommand("PMTK605")) return false;
   if (!waitForNmeaReply("$PMTK705,", MSG_TIMEOUT)) return false;
 
   // determine the flash size
-  int32_t modelId = 0;
-  buffer->readColumnAsInt(2, &modelId, true);  // read modelID from the reply
-  *size = modelIdToFlashSize(modelId);         // determine flash size from modelID
+  int32_t fwRelID = 0;
+  buffer->readColumnAsInt(2, &fwRelID, true);  // read modelID from the reply
+  *size = firmwareIdToFlashSize(fwRelID);      // determine flash size from modelID
 
   // print debug message
   Serial.printf("Logger.flashSize: 0x%06X\n", *size);
@@ -445,6 +556,13 @@ bool MtkLogger::getFlashSize(int32_t *size) {
   return true;
 }
 
+/**
+ * @fn bool MtkLogger::getLogFormat(uint32_t *format)
+ * @brief Get the log format of the connected logger.
+ * @param format A pointer to the variable to store the log format. The format is a combination of the values of the
+ * logformat_t enumeration (e.g. FMT_FIXONLY | FMT_TIME | FMT_LON | FMT_LAT | FMT_HEIGHT | FMT_SPEED).
+ * @return True if the command is done successfully, otherwise false.
+ */
 bool MtkLogger::getLogFormat(uint32_t *format) {
   if (!sendNmeaCommand("PMTK182,2,2")) return false;
   if (!waitForNmeaReply("$PMTK182,3,2,", MSG_TIMEOUT)) return false;
@@ -461,6 +579,14 @@ bool MtkLogger::getLogFormat(uint32_t *format) {
   return true;
 }
 
+/**
+ * @fn bool MtkLogger::setLogFormat(uint32_t format)
+ * @brief Set the log format of the connected logger.
+ * @param format The log format to set. The format is a combination of the values of the logformat_t enumeration
+ * (e.g. FMT_FIXONLY | FMT_TIME | FMT_LON | FMT_LAT | FMT_HEIGHT | FMT_SPEED).
+ * @note M-241 does not support this command. The command will be accepted but the format will not be changed.
+ * @return True if the command is done successfully, otherwise false.
+ */
 bool MtkLogger::setLogFormat(uint32_t format) {
   char cmdstr[24];
   sprintf(cmdstr, "PMTK182,1,2,%08X", format);
@@ -471,6 +597,12 @@ bool MtkLogger::setLogFormat(uint32_t format) {
   return true;
 }
 
+/**
+ * @fn bool MtkLogger::getLogRecordMode(recordmode_t *recmode)
+ * @brief Get the logging record mode of the connected logger. The record mode is MODE_OVERWRITE or MODE_FULLSTOP.
+ * @param recmode A pointer to the variable to store the record mode.
+ * @return True if the command is done successfully, otherwise false.
+ */
 bool MtkLogger::getLogRecordMode(recordmode_t *recmode) {
   if (!sendNmeaCommand("PMTK182,2,6")) return false;
   if (!waitForNmeaReply("$PMTK182,3,6,", MSG_TIMEOUT)) return false;
@@ -484,6 +616,12 @@ bool MtkLogger::getLogRecordMode(recordmode_t *recmode) {
   return (*recmode != MODE_NONE);
 }
 
+/**
+ * @fn bool MtkLogger::setLogRecordMode(recordmode_t recmode)
+ * @brief Set the logging record mode of the connected logger.
+ * @param recmode The record mode to set. The mode can be set is MODE_OVERWRITE or MODE_FULLSTOP.
+ * @return True if the command is done successfully, otherwise false.
+ */
 bool MtkLogger::setLogRecordMode(recordmode_t recmode) {
   char cmdstr[24];
   sprintf(cmdstr, "PMTK182,1,6,%d", recmode);
@@ -494,6 +632,12 @@ bool MtkLogger::setLogRecordMode(recordmode_t recmode) {
   return true;
 }
 
+/**
+ * @fn bool MtkLogger::getLogCriteria(logcriteria_t *criteria)
+ * @brief Get the logging criteria of the connected logger. The criteria is a combination of distance, time, and speed.
+ * @param criteria A pointer to the variable to store the log criteria.
+ * @return true if the command is done successfully, otherwise false.
+ */
 bool MtkLogger::getLogCriteria(logcriteria_t *criteria) {
   if (!getLogByDistance(&criteria->distance)) return false;
   if (!getLogByTime(&criteria->time)) return false;
@@ -502,6 +646,12 @@ bool MtkLogger::getLogCriteria(logcriteria_t *criteria) {
   return true;
 }
 
+/**
+ * @fn bool MtkLogger::setLogCriteria(logcriteria_t criteria)
+ * @brief Set the logging criteria of the connected logger. The criteria is a combination of distance, time, and speed.
+ * @param criteria The log criteria to set.
+ * @return True if the command is done successfully, otherwise false.
+ */
 bool MtkLogger::setLogCriteria(logcriteria_t criteria) {
   if (!setLogByDistance(criteria.distance)) return false;
   if (!setLogByTime(criteria.time)) return false;
@@ -510,6 +660,12 @@ bool MtkLogger::setLogCriteria(logcriteria_t criteria) {
   return true;
 }
 
+/**
+ * @fn bool MtkLogger::getLogByDistance(int16_t *dist)
+ * @brief Get log by distance parameter of the connected logger.
+ * @param time A pointer to the variable to store the distance value. the unit is in meters (100 means 100 meters)
+ * @return true if the command is done successfully, otherwise false.
+ */
 bool MtkLogger::getLogByDistance(int16_t *dist) {
   if (!sendNmeaCommand("PMTK182,2,4")) return false;
   if (!waitForNmeaReply("$PMTK182,3,4,", MSG_TIMEOUT)) return false;
@@ -524,8 +680,11 @@ bool MtkLogger::getLogByDistance(int16_t *dist) {
   return true;
 }
 /**
- * Set log by distance parameter of the connected logger
- * @param time the distance value to set. the unit is in seconds (100 => 100 meters)
+ * @fn bool MtkLogger::setLogByDistance(int16_t distance)
+ * @brief Set log by distance parameter of the connected logger.
+ * @param time The distance value to set. The unit is in seconds (100 means 100 meters). If the specified value is
+ * negative, it will be set to 0 (disabled).
+ * @return True if the command is done successfully, otherwise false.
  */
 bool MtkLogger::setLogByDistance(int16_t distance) {
   if (distance < 0) distance = 0;
@@ -539,6 +698,12 @@ bool MtkLogger::setLogByDistance(int16_t distance) {
   return true;
 }
 
+/**
+ * @fn bool MtkLogger::getLogByTime(int16_t *time)
+ * @brief Get log by time parameter of the connected logger.
+ * @param time A pointer to the variable to store the time value. The unit is in seconds (300 means 300 seconds)
+ * @return True if the command is done successfully, otherwise false.
+ */
 bool MtkLogger::getLogByTime(int16_t *time) {
   if (!sendNmeaCommand("PMTK182,2,3")) return false;
   if (!waitForNmeaReply("$PMTK182,3,3,", MSG_TIMEOUT)) return false;
@@ -554,8 +719,11 @@ bool MtkLogger::getLogByTime(int16_t *time) {
 }
 
 /**
- * Set log by speed of the connected logger
- * @param speed the speed value to set. the unit is in 0.1km/h (1000 => 100 km/h)
+ * @fn bool MtkLogger::setLogBySpeed(int16_t speed)
+ * @brief Set log by speed of the connected logger.
+ * @param speed The speed value to set. The unit is in 0.1km/h (1000 means 100 km/h). If the specified value is
+ * negative, it will be set to 0 (disabled).
+ * @return true if the command is done successfully, otherwise false.
  */
 bool MtkLogger::setLogBySpeed(int16_t speed) {
   if (speed < 0) speed = 0;
@@ -571,7 +739,11 @@ bool MtkLogger::setLogBySpeed(int16_t speed) {
 }
 
 /**
- *
+ * @fn bool MtkLogger::getLogBySpeed(int16_t *speed)
+ * @brief Get log by speed parameter of the connected logger.
+ * @param speed A pointer to the variable to store the speed value. The unit is in 0.1km/h (1000 means 100 km/h).
+ * If the specified value is negative, it will be set to 0 (disabled).
+ * @return true if the command is done successfully, otherwise false.
  */
 bool MtkLogger::getLogBySpeed(int16_t *speed) {
   if (!sendNmeaCommand("PMTK182,2,5")) return false;
@@ -588,8 +760,11 @@ bool MtkLogger::getLogBySpeed(int16_t *speed) {
 }
 
 /**
- * Set log by time parameter of the connected logger
- * @param time the time value to set. the unit is in seconds (300 => 300 seconds)
+ * @fn bool MtkLogger::setLogByTime(int16_t time)
+ * @brief Set log by time parameter of the connected logger
+ * @param time the time value to set. the unit is in seconds (300 means 300 seconds). if the value is negative,
+ * it will be set to 0 (disabled).
+ * @return true if the command is done successfully, otherwise false.
  */
 bool MtkLogger::setLogByTime(int16_t time) {
   if (time < 0) time = 0;
@@ -604,9 +779,10 @@ bool MtkLogger::setLogByTime(int16_t time) {
 }
 
 /**
- * Clear the flash memory of the connected logger.
+ * @brief Send a command to clear the flash memory of the connected logger.
  * This function takes some time and calls a callback function periodically during the process.
  * @param rateCallback a function pointer to a callback function
+ * @return true if the flash memory is cleared successfully, otherwise false.
  */
 bool MtkLogger::clearFlash(void (*rateCallback)(int32_t, int32_t)) {
   const uint32_t CALLBACK_INTERVAL = 500;
@@ -654,6 +830,12 @@ bool MtkLogger::clearFlash(void (*rateCallback)(int32_t, int32_t)) {
   return true;
 }
 
+/**
+ * @fn void MtkLogger::setEventCallback(esp_spp_cb_t cbfunc)
+ * @brief Set the event callback (bluetooth event handler) function. The function will be called when Bluetooth SPP
+ * status is changed.
+ * @param cbfunc a function pointer to the event callback function.
+ */
 void MtkLogger::setEventCallback(esp_spp_cb_t cbfunc) {
   if (cbfunc != NULL) {
     gpsSerial->register_callback(cbfunc);
@@ -662,6 +844,11 @@ void MtkLogger::setEventCallback(esp_spp_cb_t cbfunc) {
   eventCallback = cbfunc;
 }
 
+/**
+ * @fn bool MtkLogger::reloadDevice()
+ * @brief Send a hot start command to the connected logger to reload the device.
+ * @return true if the command is done successfully, otherwise false.
+ */
 bool MtkLogger::reloadDevice() {
   const int32_t RESET_TIMEOUT = 3000;
 
