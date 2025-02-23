@@ -24,14 +24,14 @@ typedef enum _fmtreg {
   FMT_FIXONLY = 0x80000000
 } formatreg_t;
 
-typedef struct _gpsrecord {  // 37 bytes/record
-  uint32_t format;           // 4 bytes
-  uint32_t time;             // 4 bytes
-  double latitude;           // 8 bytes
-  double longitude;          // 8 bytes
-  float elevation;           // 4 bytes
-  float speed;               // 4 bytes
-  uint16_t reason;           // 2 byte
-  bool valid;                // 1 byte
-  uint16_t size;             // 2 bytes
+typedef struct _gpsrecord {
+  uint32_t format;   // log format (set of formatreg_t values)
+  uint32_t time;     // timestamp (unixtime in second)
+  double latitude;   // degree of latitude (N: positive, S: negative)
+  double longitude;  // degree of longigude (E: positive, W: negative)
+  float altitude;    // altutude abobe sea level (meter)
+  float speed;       // moving speed (km/h)
+  uint16_t reason;   // record resson (dist/time/speed/manual)
+  bool valid;        // valid record flag
+  uint16_t size;     // record size in BIN file
 } gpsrecord_t;

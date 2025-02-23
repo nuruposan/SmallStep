@@ -97,12 +97,12 @@ void AppUI::drawDialogProgress(int32_t current, int32_t max) {
   sprite.deleteSprite();
 }
 
-void AppUI::drawDialogMessage(int16_t color, int8_t line, String msg) {
+void AppUI::drawDialogText(int16_t color, int8_t row, String line) {
   uisize_t border = {8, 34};
   uint8_t lineHeight = 18;
   uipos_t msgPos0 = {(int16_t)(DIALOG_AREA.x + border.w), (int16_t)(DIALOG_AREA.y + border.h)};
   uiarea_t msgArea = {(int16_t)(DIALOG_AREA.w - (border.w * 2)), (int16_t)(lineHeight),  //
-                      msgPos0.x, (int16_t)(msgPos0.y + (line * lineHeight))};
+                      msgPos0.x, (int16_t)(msgPos0.y + (row * lineHeight))};
 
   sprite.createSprite(msgArea.w, msgArea.h);
   sprite.fillSprite(LIGHTGREY);
@@ -112,7 +112,7 @@ void AppUI::drawDialogMessage(int16_t color, int8_t line, String msg) {
   sprite.setTextSize(1);
   sprite.setTextColor(color);
   sprite.setCursor(0, 0);
-  sprite.print(msg);
+  sprite.print(line);
 
   sprite.pushSprite(msgArea.x, msgArea.y);
   sprite.deleteSprite();
@@ -146,7 +146,7 @@ void AppUI::drawDialogFrame(const char *title) {
  * @param top top item index
  * @param select selected item index
  */
-void AppUI::drawMainMenu(menuitem_t *menu, int8_t itemCount, int8_t top, int8_t select) {
+void AppUI::drawMainMenu(mainmenuitem_t *menu, int8_t itemCount, int8_t top, int8_t select) {
   uisize_t border = {8, 8};
   uisize_t margin = {6, 8};
   uipos_t btnPos0 = {(int16_t)(CLIENT_AREA.x + border.w), border.h};
@@ -166,7 +166,7 @@ void AppUI::drawMainMenu(menuitem_t *menu, int8_t itemCount, int8_t top, int8_t 
     int8_t idx = top + i;
     if (idx >= itemCount) break;
 
-    menuitem_t *mi = menu + idx;
+    mainmenuitem_t *mi = menu + idx;
     uipos_t btnPos = {(int16_t)(btnPos0.x + ((btnSize.w + margin.w) * (i % 3))),
                       (int16_t)(btnPos0.y + ((btnSize.h + margin.h) * (i / 3)))};
     uipos_t btnTextPos = {(int16_t)(btnPos.x + (btnSize.w / 2)), (int16_t)(btnPos.y + (btnSize.h - textOffset))};
@@ -267,39 +267,35 @@ void AppUI::drawTitleBar() {
   uipos_t batIconPos = {(int16_t)(TITLE_AREA.w - 24), iconTop};
   uipos_t sdIconPos = {(int16_t)((sdIcon.visible) ? (batIconPos.x - 20) : batIconPos.x), iconTop};
   uipos_t btIconPos = {(int16_t)((btIcon.visible) ? (sdIconPos.x - 18) : sdIconPos.x), iconTop};
-  uipos_t hintPos = {(int16_t)(btIconPos.x - 90), 4};
+  uipos_t hintPos = {(int16_t)(btIconPos.x - 3), 4};
 
-  // draw a title bar
+  // draw the title bar background
   sprite.createSprite(TITLE_AREA.w, TITLE_AREA.h);
   sprite.fillSprite(LIGHTGREY);
 
-  // draw the title text
+  // draw the application icon and title at the left side
+  if (appIcon != NULL) drawAppIcon(appIconPos.x, appIconPos.y);
   sprite.setTextSize(1);
   sprite.setTextColor(BLACK);
   sprite.drawString(appTitle, titlePos.x, titlePos.y, 4);
 
-  // draw the icons
-  if (appIcon != NULL) drawAppIcon(appIconPos.x, appIconPos.y);
+  // draw the status icons and hints at the right side
   drawBatteryIcon(batIconPos.x, batIconPos.y);
   if (sdIcon.visible) drawSDcardIcon(sdIconPos.x, sdIconPos.y);
   if (btIcon.visible) drawBluetoothIcon(btIconPos.x, btIconPos.y);
-
-  // draw the hint text
   sprite.setTextSize(1);
   sprite.setTextColor(BLACK);
-  sprite.drawString(appHint[0], hintPos.x, hintPos.y, 1);
-  sprite.drawString(appHint[1], hintPos.x, (hintPos.y + 10), 1);
+  sprite.drawRightString(appHint[0], hintPos.x, hintPos.y, 1);
+  sprite.drawRightString(appHint[1], hintPos.x, (hintPos.y + 10), 1);
 
+  // display the title bar on the top of the screen
   sprite.pushSprite(TITLE_AREA.x, TITLE_AREA.y);
   sprite.deleteSprite();
 }
 
 void AppUI::drawAppIcon(int16_t x, int16_t y) {
-  // define the drawing color for the app icon
-  uint16_t colorIc = COLOR16(0, 64, 255);
-
   // draw the app icon
-  drawBitmap(appIcon, x, y, colorIc);
+  drawBitmap(appIcon, x, y, appIconColor);
 }
 
 void AppUI::drawBluetoothIcon(int16_t x, int16_t y) {
@@ -401,8 +397,9 @@ void AppUI::setAppTitle(const char *title) {
   appTitle = title;
 }
 
-void AppUI::setAppIcon(const uint8_t *icon) {
+void AppUI::setAppIcon(const uint8_t *icon, uint16_t color) {
   appIcon = icon;
+  appIconColor = color;
 }
 
 void AppUI::setAppHints(const char *hint1, const char *hint2) {
@@ -440,7 +437,7 @@ void AppUI::setSDcardStatus(bool mounted) {
   drawTitleBar();
 }
 
-btnid_t AppUI::waitForButtonInput(navmenu_t *nav) {
+btnid_t AppUI::promptCustom(navmenu_t *nav) {
   drawNavBar(nav);
 
   uint32_t idleStart = millis();
@@ -460,29 +457,29 @@ btnid_t AppUI::waitForButtonInput(navmenu_t *nav) {
   return btn;
 }
 
-btnid_t AppUI::waitForInputOk() {
+btnid_t AppUI::promptOk() {
   navmenu_t nav;
   nav.items[0] = {"", false};
   nav.items[1] = {"", false};
   nav.items[2] = {"OK", true};
 
-  waitForButtonInput(&nav);
+  promptCustom(&nav);
 
   return BID_OK;
 }
 
-btnid_t AppUI::waitForInputOkCancel() {
+btnid_t AppUI::promptOkCancel() {
   navmenu_t nav;
   nav.items[0] = {"", false};
   nav.items[1] = {"Cancel", true};
   nav.items[2] = {"OK", true};
 
-  btnid_t btn = (waitForButtonInput(&nav) == BID_BTN_C) ? BID_OK : BID_CANCEL;
+  btnid_t btn = (promptCustom(&nav) == BID_BTN_C) ? BID_OK : BID_CANCEL;
 
   return btn;
 }
 
-void AppUI::drawConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount, int8_t top, int8_t select) {
+void AppUI::drawConfigMenu(const char *title, textmenuitem_t *menu, int8_t itemCount, int8_t top, int8_t select) {
   uisize_t border = {6, 6};
   uisize_t margin = {0, 4};
   uiarea_t titleArea = {(int16_t)(CLIENT_AREA.w - (border.w * 2)), 18,  //
@@ -509,7 +506,7 @@ void AppUI::drawConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount,
     int8_t idx = top + i;
     if (idx >= itemCount) break;
 
-    cfgitem_t *mi = menu + idx;
+    textmenuitem_t *mi = menu + idx;
 
     uipos_t menuPos = {menuPos0.x, (int16_t)(menuPos0.y + ((menuSize.h + margin.h) * i))};
     uipos_t captionPos = {(int16_t)(menuPos.x + 4), (int16_t)(menuPos.y + 4)};
@@ -532,7 +529,7 @@ void AppUI::drawConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount,
   sprite.deleteSprite();
 }
 
-void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount) {
+void AppUI::openTextMenu(const char *title, textmenuitem_t *menu, int8_t itemCount) {
   navmenu_t nav;
   nav.items[0] = {"Prev", true};
   nav.items[1] = {"Next", true};
@@ -543,7 +540,7 @@ void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount)
   int8_t select = 0;
 
   for (int8_t i = 0; i < itemCount; i++) {
-    cfgitem_t *ci = &menu[i];
+    textmenuitem_t *ci = &menu[i];
     if (ci->onUpdateDescr != NULL) ci->onUpdateDescr(&menu[i]);
   }
 
@@ -554,7 +551,7 @@ void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount)
     drawConfigMenu(title, menu, itemCount, top, select);
 
     // check the button input
-    switch (waitForButtonInput(&nav)) {
+    switch (promptCustom(&nav)) {
     case BID_BTN_A:  // move the selection to the previous
       select = (select + (itemCount - 1)) % itemCount;
 
@@ -580,7 +577,7 @@ void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount)
       break;
 
     case BID_BTN_C:  // call the onSelect function of the selected item
-      cfgitem_t *ci = &menu[select];
+      textmenuitem_t *ci = &menu[select];
       if (ci->enabled) {
         if (ci->onSelectItem != NULL) ci->onSelectItem(ci);
         if (ci->onUpdateDescr != NULL) ci->onUpdateDescr(ci);
@@ -592,7 +589,7 @@ void AppUI::openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount)
   }
 }
 
-void AppUI::openMainMenu(menuitem_t *menu, int8_t itemCount) {
+void AppUI::openMainMenu(mainmenuitem_t *menu, int8_t itemCount) {
   navmenu_t nav;
   nav.items[0] = {"Prev", true};
   nav.items[1] = {"Next", true};
@@ -606,7 +603,7 @@ void AppUI::openMainMenu(menuitem_t *menu, int8_t itemCount) {
     drawTitleBar();
     drawMainMenu(menu, itemCount, top, select);
 
-    switch (waitForButtonInput(&nav)) {
+    switch (promptCustom(&nav)) {
     case BID_BTN_A:  // move the selection to the previous
       select = (select + (itemCount - 1)) % itemCount;
       top = (itemCount < 4) ? 0 : (((select - 3) / 3) * 3);
@@ -618,7 +615,7 @@ void AppUI::openMainMenu(menuitem_t *menu, int8_t itemCount) {
       break;
 
     case BID_BTN_C:  // call the onSelect function of the selected item
-      menuitem_t *mi = &menu[select];
+      mainmenuitem_t *mi = &menu[select];
       if (mi->enabled) {
         if (mi->onSelect != NULL) mi->onSelect(mi);
       }

@@ -22,6 +22,7 @@ int16_t GpxFileWriter::addWaypt(gpsrecord_t rcd) {
   if (i < MAX_WAYPTS_PER_TRK) {
     memcpy(&waypts[i], &rcd, sizeof(gpsrecord_t));
 
+    // update the number of WAYPTs in the GPX data
     gpxInfo.wayptCount += 1;
     trackInfo.wayptCount += 1;
   }
@@ -69,7 +70,8 @@ void GpxFileWriter::beginGpx() {
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
       "<gpx version=\"1.1\" creator=\"" PARSER_DESCR
       "\""
-      "xmlns:xsi=\"http://www.w3.org/2001/XMLSchema xmlns=\"https://www.topografix.com/GPX/1/1/gpx.xsd\">\n");
+      " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema"
+      " xmlns=\"https://www.topografix.com/GPX/1/1/gpx.xsd\">\n");
 
   // initialize the GPX and track information
   memset(&gpxInfo, 0, sizeof(gpxinfo_t));
@@ -114,7 +116,7 @@ void GpxFileWriter::endTrack() {
   // close the track
   out->write("</trk>\n");
 
-  // put the waypts discovered in the last track
+  // put the waypts added in the last track
   for (int16_t i = 0; i < MAX_WAYPTS_PER_TRK; i++) {
     if (waypts[i].time == 0) break;
 
@@ -176,13 +178,30 @@ gpxinfo_t GpxFileWriter::endGpx() {
   return gpxInfo;
 }
 
-void GpxFileWriter::putTrkpt(const gpsrecord_t rcd) {
-  if (!inTrkSeg) beginTrackSeg();
+void GpxFileWriter::putTrackPoint(gpsrecord_t rcd, bool asWpt) {
+  const char *tag = (asWpt) ? "wpt" : "trkpt";
 
-  char buf[32];  // general buffer in this func
+  if (asWpt) {
+    Serial.printf("%s, (%.3f %.3f)\n", tag, rcd.latitude, rcd.longitude);
+  }
 
-  // put a new TRKPT
-  out->write("<trkpt");
+  out->write("<");
+  out->write(tag);
+  putLatLon(rcd);
+  out->write(">");
+
+  putTime(rcd);
+  putHeight(rcd);
+  putSpeed(rcd);
+
+  out->write("</");
+  out->write(tag);
+  out->write(">\n");
+}
+
+void GpxFileWriter::putLatLon(gpsrecord_t rcd) {
+  char buf[32];
+
   if (rcd.format & FMT_LAT) {
     sprintf(buf, " lat=\"%.6f\"", rcd.latitude);
     out->write(buf);
@@ -191,81 +210,62 @@ void GpxFileWriter::putTrkpt(const gpsrecord_t rcd) {
     sprintf(buf, " lon=\"%.6f\"", rcd.longitude);
     out->write(buf);
   }
-  out->write(">");
+}
 
-  // put the TIME of the TRKPT (if recorded)
+void GpxFileWriter::putHeight(gpsrecord_t rcd) {
+  char buf[32];
+
+  if (rcd.format & FMT_HEIGHT) {
+    sprintf(buf, "<ele>%.2f</ele>", rcd.altitude);
+    out->write(buf);
+  }
+}
+
+void GpxFileWriter::putSpeed(gpsrecord_t rcd) {
+  char buf[32];
+
+  if (rcd.format & FMT_SPEED) {
+    sprintf(buf, "<speed>%.2f</speed>", rcd.speed);
+    out->write(buf);
+  }
+}
+
+void GpxFileWriter::putTime(gpsrecord_t rcd) {
+  char buf[32];
+
   if (rcd.format & FMT_TIME) {
     out->write("<time>");
     out->write(timeToISO8601(buf, rcd.time));
     out->write("</time>");
+  }
+}
 
+void GpxFileWriter::putTrkpt(const gpsrecord_t rcd) {
+  if (!inTrkSeg) beginTrackSeg();
+
+  // put a TRKPT
+  putTrackPoint(rcd, false);
+
+  // update the start/end time of the GPX data and the track
+  if (rcd.format & FMT_TIME) {
     if (gpxInfo.startTime == 0) gpxInfo.startTime = rcd.time;
     gpxInfo.endTime = rcd.time;
     if (trackInfo.startTime == 0) trackInfo.startTime = rcd.time;
     trackInfo.endTime = rcd.time;
   }
 
-  // put the ELE of the TRKPT (if recorded)
-  if (rcd.format & FMT_HEIGHT) {
-    sprintf(buf, "<ele>%.2f</ele>", rcd.elevation);
-    out->write(buf);
-  }
-
-  // put the SPEED of the TRKPT (if recorded)
-  if (rcd.format & FMT_SPEED) {
-    sprintf(buf, "<speed>%.2f</speed>", rcd.speed);
-    out->write(buf);
-  }
-
-  // close the TRKPT
-  out->write("</trkpt>\n");
-
-  // update the number of TRKPT
+  // update the number of TRKPTs
   gpxInfo.trkptCount += 1;
   trackInfo.trkptCount += 1;
 }
 
-void GpxFileWriter::putWaypt(const gpsrecord_t rcd) {
-  char buf[32];  // general buffer in this func
-
+void GpxFileWriter::putWaypt(gpsrecord_t rcd) {
   if (!inGpx) beginGpx();
-  if (inTrack) endTrack();
 
-  // put a new WPT
-  out->write("<wpt");
-  if (rcd.format & FMT_LAT) {
-    sprintf(buf, " lat=\"%.6f\"", rcd.latitude);
-    out->write(buf);
-  }
+  // put a WPT
+  putTrackPoint(rcd, true);
 
-  if (rcd.format & FMT_LON) {
-    sprintf(buf, " lon=\"%.6f\"", rcd.longitude);
-    out->write(buf);
-  }
-  out->write(">");
-
-  // put the TIME of the WPT (if recorded)
-  if (rcd.format & FMT_TIME) {
-    out->write("<time>");
-    out->write(timeToISO8601(buf, rcd.time));
-    out->write("</time>");
-  }
-
-  // put the ELE of the WPT (if recorded)
-  if (rcd.format & FMT_HEIGHT) {
-    sprintf(buf, "<ele>%.2f</ele>", rcd.elevation);
-    out->write(buf);
-  }
-
-  // put the SPEED of the WPT (if recorded)
-  if (rcd.format & FMT_SPEED) {
-    sprintf(buf, "<speed>%.2f</speed>", rcd.speed);
-    out->write(buf);
-  }
-  out->write("</wpt>\n");
-
-  // update the number of WPT
-  gpxInfo.wayptCount += 1;
+  // Note: never update the number of WAYPTs here (addWaypt)
 }
 
 uint32_t GpxFileWriter::getLastTime() {

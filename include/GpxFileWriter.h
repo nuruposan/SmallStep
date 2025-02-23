@@ -20,20 +20,24 @@ class GpxFileWriter {
  private:
   File32 *out;
 
-  int32_t offsetSec;
-
   gpxinfo_t gpxInfo;
   gpxinfo_t trackInfo;
+  gpsrecord_t waypts[MAX_WAYPTS_PER_TRK];
 
+  int32_t offsetSec;
   bool inGpx;
   bool inTrack;
   bool inTrkSeg;
-  gpsrecord_t waypts[MAX_WAYPTS_PER_TRK];
 
   void beginGpx();
   void beginTrack();
   void beginTrackSeg();
   void putWaypt(gpsrecord_t rcd);
+  void putTrackPoint(gpsrecord_t rcd, bool asWpt);
+  void putLatLon(gpsrecord_t rcd);
+  void putHeight(gpsrecord_t rcd);
+  void putSpeed(gpsrecord_t rcd);
+  void putTime(gpsrecord_t rcd);
 
  public:
   GpxFileWriter(File32 *output);

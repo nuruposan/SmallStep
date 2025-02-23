@@ -27,21 +27,22 @@ typedef struct _navmenu {
   void (*onSelect)(_navmenu *);
 } navmenu_t;
 
-typedef struct _menuitem {
+typedef struct _mainmenuitem {
   const char *caption;
   const uint8_t *iconData;
   bool enabled;
-  void (*onSelect)(_menuitem *);
-} menuitem_t;
+  void (*onSelect)(_mainmenuitem *);
+} mainmenuitem_t;
 
-typedef struct _cfgitem {
+typedef struct _textmenuitem {
   const char *caption;
   const char *hintText;
   char valueDescr[20];
   bool enabled;
-  void (*onSelectItem)(_cfgitem *);
-  void (*onUpdateDescr)(_cfgitem *);
-} cfgitem_t;
+  void (*onSelectItem)(_textmenuitem *);
+  void (*onUpdateDescr)(_textmenuitem *);
+  void *var;
+} textmenuitem_t;
 
 typedef struct _uiarea {
   int16_t w;
@@ -73,6 +74,7 @@ class AppUI {
   Button *buttons[3];
 
   const uint8_t *appIcon;
+  uint16_t appIconColor;
   const char *appTitle;
   char appHint[2][APP_HINT_LEN];
   void (*idleCallback)();
@@ -88,8 +90,8 @@ class AppUI {
                                 (int16_t)(CLIENT_AREA.x + 4), (int16_t)(CLIENT_AREA.y + 4)};
 
   btnid_t checkButtonInput(navmenu_t *nav);
-  void drawConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount, int8_t top, int8_t select);
-  void drawMainMenu(menuitem_t *menu, int8_t itemCount, int8_t top, int8_t select);
+  void drawConfigMenu(const char *title, textmenuitem_t *menu, int8_t itemCount, int8_t top, int8_t select);
+  void drawMainMenu(mainmenuitem_t *menu, int8_t itemCount, int8_t top, int8_t select);
   void drawAppIcon(int16_t x, int16_t y);
   void drawBatteryIcon(int16_t x, int16_t y);
   void drawBitmap(const uint8_t *iconData, int16_t x, int16_t y, int16_t color);
@@ -104,20 +106,20 @@ class AppUI {
   ~AppUI();
 
   void drawDialogFrame(const char *title);
-  void drawDialogMessage(int16_t color, int8_t line, String msg);
+  void drawDialogText(int16_t color, int8_t line, String msg);
   void drawDialogProgress(int32_t current, int32_t max);
   void drawTitleBar();
   void drawNavBar(navmenu_t *nav);
   void setAppHints(const char *into1, const char *info2);
-  void setAppIcon(const uint8_t *icon);
+  void setAppIcon(const uint8_t *icon, uint16_t color);
   void setAppTitle(const char *title);
   void setIconVisible(bool btVisible, bool sdVisible);
   void setSDcardStatus(bool mounted);
   void setBluetoothStatus(bool active);
   void setIdleCallback(void (*callback)(), uint32_t timeout);
-  btnid_t waitForButtonInput(navmenu_t *nav);
-  btnid_t waitForInputOk();
-  btnid_t waitForInputOkCancel();
-  void openConfigMenu(const char *title, cfgitem_t *menu, int8_t itemCount);
-  void openMainMenu(menuitem_t *menu, int8_t itemCount);
+  btnid_t promptCustom(navmenu_t *nav);
+  btnid_t promptOk();
+  btnid_t promptOkCancel();
+  void openTextMenu(const char *title, textmenuitem_t *menu, int8_t itemCount);
+  void openMainMenu(mainmenuitem_t *menu, int8_t itemCount);
 };

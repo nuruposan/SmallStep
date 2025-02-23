@@ -111,11 +111,11 @@ bool MtkParser::readBinRecord(gpsrecord_t *rcd) {
   if (status.m241Mode) {  // for Holux M-241
     if (rcd->format & FMT_LAT) rcd->latitude = (double)in->getFloat();
     if (rcd->format & FMT_LON) rcd->longitude = (double)in->getFloat();
-    if (rcd->format & FMT_HEIGHT) rcd->elevation = (float)in->getFloat24();
+    if (rcd->format & FMT_HEIGHT) rcd->altitude = (float)in->getFloat24();
   } else {  // for other standard models
     if (rcd->format & FMT_LAT) in->readBytes(&rcd->latitude, sizeof(double));
     if (rcd->format & FMT_LON) in->readBytes(&rcd->longitude, sizeof(double));
-    if (rcd->format & FMT_HEIGHT) in->readBytes(&rcd->elevation, sizeof(float));
+    if (rcd->format & FMT_HEIGHT) in->readBytes(&rcd->altitude, sizeof(float));
   }
 
   // read SPEED field if it exists
@@ -244,24 +244,27 @@ bool MtkParser::readBinMarkers() {
         break;
       }
 
+      Serial.printf("Parser.readMarker: Found a DSP [t=%d, v=0x%04X] at 0x%06X\n",  //
+                    dsp.type, dsp.value, startPos);
       return true;
     }
   }
-
   // try to read a HOLUX M-241 pattern from the current position
-  if (matchBinPattern(PTN_M241, sizeof(PTN_M241))) {    // M-241
-    matchBinPattern(PTN_M241_SP, sizeof(PTN_M241_SP));  // M-241 fw1.13
-    status.m241Mode = true;
+  else if (matchBinPattern(PTN_M241, sizeof(PTN_M241))) {  // M-241
+    matchBinPattern(PTN_M241_SP, sizeof(PTN_M241_SP));     // M-241 fw1.13
 
-    Serial.printf("Parser.readMarker: M-241 marker at 0x%06X\n", startPos);
-
+    if (!status.m241Mode) {
+      status.m241Mode = true;
+      Serial.printf("Parser.readMarker: Found a m-241 marker at 0x%06X\n", startPos);
+    }
     return true;
   }
-
   // try to read a Sector-end pattern from the current position
-  if (matchBinPattern(PTN_SCT_END, sizeof(PTN_SCT_END))) {  // sector end
+  else if (matchBinPattern(PTN_SCT_END, sizeof(PTN_SCT_END))) {  // sector end
     // seek sector position to the next
     status.sectorPos += 1;
+
+    Serial.printf("Parser.readMarker: Found the EoS at 0x%06X\n", startPos);
     return true;
   }
 
@@ -272,7 +275,7 @@ bool MtkParser::readBinMarkers() {
 /**
  * @fn gpxinfo_t MtkParser::convert(File32 *input, File32 *output, void (*progressCallback)(int32_t, int32_t))
  * @brief Read a GPS data record from the current position in the input file. The read record is valid, write it as a
- * TRKPT into the output file and move to the next position. Otherwise, move the position to the next byte.  
+ * TRKPT into the output file and move to the next position. Otherwise, move the position to the next byte.
  * @param input
  * @param output
  * @param progressCallback
@@ -364,6 +367,7 @@ gpxinfo_t MtkParser::convert(File32 *input, File32 *output, void (*progressCallb
 
     // store the current record to write as a waypt if the putWaypts option is enabled and
     // the record is logged by user
+    // Note: the waypt is written at the back of the track when it closed
     if ((options.putWaypts) && (rcd.reason & RCR_LOG_BY_USER)) {
       out->addWaypt(rcd);
     }
