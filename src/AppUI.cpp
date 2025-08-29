@@ -146,7 +146,7 @@ void AppUI::drawDialogFrame(const char *title) {
  * @param top top item index
  * @param select selected item index
  */
-void AppUI::drawMainMenu(mainmenuitem_t *menu, int8_t itemCount, int8_t top, int8_t select) {
+void AppUI::drawMainMenu(iconmenu_t *menu, int8_t itemCount, int8_t top, int8_t select) {
   uisize_t border = {8, 8};
   uisize_t margin = {6, 8};
   uipos_t btnPos0 = {(int16_t)(CLIENT_AREA.x + border.w), border.h};
@@ -166,7 +166,7 @@ void AppUI::drawMainMenu(mainmenuitem_t *menu, int8_t itemCount, int8_t top, int
     int8_t idx = top + i;
     if (idx >= itemCount) break;
 
-    mainmenuitem_t *mi = menu + idx;
+    iconmenu_t *mi = menu + idx;
     uipos_t btnPos = {(int16_t)(btnPos0.x + ((btnSize.w + margin.w) * (i % 3))),
                       (int16_t)(btnPos0.y + ((btnSize.h + margin.h) * (i / 3)))};
     uipos_t btnTextPos = {(int16_t)(btnPos.x + (btnSize.w / 2)), (int16_t)(btnPos.y + (btnSize.h - textOffset))};
@@ -479,7 +479,7 @@ btnid_t AppUI::promptOkCancel() {
   return btn;
 }
 
-void AppUI::drawConfigMenu(const char *title, textmenuitem_t *menu, int8_t itemCount, int8_t top, int8_t select) {
+void AppUI::drawTextMenu(const char *title, textmenu_t *menu, int8_t itemCount, int8_t top, int8_t select) {
   uisize_t border = {6, 6};
   uisize_t margin = {0, 4};
   uiarea_t titleArea = {(int16_t)(CLIENT_AREA.w - (border.w * 2)), 18,  //
@@ -503,10 +503,12 @@ void AppUI::drawConfigMenu(const char *title, textmenuitem_t *menu, int8_t itemC
   sprite.drawString(title, titlePos.x, titlePos.y, 2);
 
   for (int i = 0; i < 4; i++) {
+    Serial.printf("drawTextMenu: top=%d, select=%d, i=%d\n", top, select, i);
+
     int8_t idx = top + i;
     if (idx >= itemCount) break;
 
-    textmenuitem_t *mi = menu + idx;
+    textmenu_t *mi = menu + idx;
 
     uipos_t menuPos = {menuPos0.x, (int16_t)(menuPos0.y + ((menuSize.h + margin.h) * i))};
     uipos_t captionPos = {(int16_t)(menuPos.x + 4), (int16_t)(menuPos.y + 4)};
@@ -529,7 +531,7 @@ void AppUI::drawConfigMenu(const char *title, textmenuitem_t *menu, int8_t itemC
   sprite.deleteSprite();
 }
 
-void AppUI::openTextMenu(const char *title, textmenuitem_t *menu, int8_t itemCount) {
+void AppUI::openTextMenu(const char *title, textmenu_t *menu, int8_t itemCount, bool runOnce) {
   navmenu_t nav;
   nav.items[0] = {"Prev", true};
   nav.items[1] = {"Next", true};
@@ -539,8 +541,10 @@ void AppUI::openTextMenu(const char *title, textmenuitem_t *menu, int8_t itemCou
   int8_t top = 0;
   int8_t select = 0;
 
+  Serial.printf("openTextMenu: %s\n", title);
+
   for (int8_t i = 0; i < itemCount; i++) {
-    textmenuitem_t *ci = &menu[i];
+    textmenu_t *ci = &menu[i];
     if (ci->onUpdateDescr != NULL) ci->onUpdateDescr(&menu[i]);
   }
 
@@ -548,7 +552,7 @@ void AppUI::openTextMenu(const char *title, textmenuitem_t *menu, int8_t itemCou
   bool needSave = false;
   while (!endFlag) {
     drawTitleBar();
-    drawConfigMenu(title, menu, itemCount, top, select);
+    drawTextMenu(title, menu, itemCount, top, select);
 
     // check the button input
     switch (promptCustom(&nav)) {
@@ -577,19 +581,19 @@ void AppUI::openTextMenu(const char *title, textmenuitem_t *menu, int8_t itemCou
       break;
 
     case BID_BTN_C:  // call the onSelect function of the selected item
-      textmenuitem_t *ci = &menu[select];
+      textmenu_t *ci = &menu[select];
       if (ci->enabled) {
         if (ci->onSelectItem != NULL) ci->onSelectItem(ci);
         if (ci->onUpdateDescr != NULL) ci->onUpdateDescr(ci);
 
-        endFlag = (ci->onSelectItem == NULL);
+        endFlag = (ci->onSelectItem == NULL) || (runOnce);
       }
       break;
     }
   }
 }
 
-void AppUI::openMainMenu(mainmenuitem_t *menu, int8_t itemCount) {
+void AppUI::openIconMenu(iconmenu_t *menu, int8_t itemCount) {
   navmenu_t nav;
   nav.items[0] = {"Prev", true};
   nav.items[1] = {"Next", true};
@@ -615,7 +619,7 @@ void AppUI::openMainMenu(mainmenuitem_t *menu, int8_t itemCount) {
       break;
 
     case BID_BTN_C:  // call the onSelect function of the selected item
-      mainmenuitem_t *mi = &menu[select];
+      iconmenu_t *mi = &menu[select];
       if (mi->enabled) {
         if (mi->onSelect != NULL) mi->onSelect(mi);
       }

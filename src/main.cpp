@@ -64,7 +64,7 @@ bool runFixRTCtime();
 bool runPairWithLogger();
 bool runClearFlash();
 bool runSetLogFormat();
-bool runSetLogMode();
+bool runSetLogMode(logmodeset_t *);
 
 // system event handler
 void onAppInputIdle();
@@ -72,61 +72,62 @@ void onBTStatusUpdate(esp_spp_cb_event_t, esp_spp_cb_param_t *);
 void onProgressUpdate(int32_t, int32_t);
 
 // menu item event handlers
-void onDownloadLogSelect(mainmenuitem_t *);
-void onFixRTCtimeSelect(mainmenuitem_t *);
-void onShowLocationSelect(mainmenuitem_t *);
-void onPairWithLoggerSelect(mainmenuitem_t *);
-void onClearFlashSelect(mainmenuitem_t *);
-void onSetLogFormatSelect(mainmenuitem_t *);
-void onSetLogModeSelect(mainmenuitem_t *);
-void onAppSettingSelect(mainmenuitem_t *);
-void onTimezoneUpdate(textmenuitem_t *);
-void onTimezoneSelect(textmenuitem_t *);
-void onTrackModeSelect(textmenuitem_t *);
-void onTrackModeUpdate(textmenuitem_t *);
-void onPutWayptSelect(textmenuitem_t *);
-void onPutWayptUpdate(textmenuitem_t *);
-void onAutoLogDistSelect(textmenuitem_t *);
-void onAutoLogDistUpdate(textmenuitem_t *);
-void onAutoLogTimeSelect(textmenuitem_t *);
-void onAutoLogTimeUpdate(textmenuitem_t *);
-void onAutoLogSpeedSelect(textmenuitem_t *);
-void onAutoLogSpeedUpdate(textmenuitem_t *);
-void onLogFullActionSelect(textmenuitem_t *);
-void onLogFullActionUpdate(textmenuitem_t *);
-void onLoadDefaultFormatSelect(textmenuitem_t *);
-void onLoadDefaultFormatUpdate(textmenuitem_t *);
-void onRecordRCRSelect(textmenuitem_t *);
-void onRecordRCRUpdate(textmenuitem_t *);
-void onRecordValidSelect(textmenuitem_t *);
-void onRecordValidUpdate(textmenuitem_t *);
-void onRecordMillisSelect(textmenuitem_t *);
-void onRecordMillisUpdate(textmenuitem_t *);
-void onRecordSpeedSelect(textmenuitem_t *);
-void onRecordSpeedUpdate(textmenuitem_t *);
-void onRecordAltitudeSelect(textmenuitem_t *);
-void onRecordAltitudeUpdate(textmenuitem_t *);
-void onRecordHeadingSelect(textmenuitem_t *);
-void onRecordHeadingUpdate(textmenuitem_t *);
-void onRecordDistanceSelect(textmenuitem_t *);
-void onRecordDistanceUpdate(textmenuitem_t *);
-void onRecordDgpsSelect(textmenuitem_t *);
-void onRecordDgpsUpdate(textmenuitem_t *);
-void onRecordDopSelect(textmenuitem_t *);
-void onRecordDopUpdate(textmenuitem_t *);
-void onRecordSatSelect(textmenuitem_t *);
-void onRecordSatUpdate(textmenuitem_t *);
-void onPairWithLoggerCfgSelect(textmenuitem_t *);
-void onPairWithLoggerCfgUpdate(textmenuitem_t *);
-void onOutputSubMenuSelect(textmenuitem_t *);
-void onLogMode1SubMenuSelect(textmenuitem_t *);
-void onLogMode2SubMenuSelect(textmenuitem_t *);
-void onLogFormatSubMenuSelect(textmenuitem_t *);
-void onEnableBeepCfgSelect(textmenuitem_t *);
-void onEnableBeepCfgUpdate(textmenuitem_t *);
-void onClearCacheFileSelect(textmenuitem_t *);
-void onPerformFormatSelect(textmenuitem_t *);
-void onClearSettingsSelect(textmenuitem_t *);
+void onDownloadLogSelect(iconmenu_t *);
+void onFixRTCtimeSelect(iconmenu_t *);
+void onShowLocationSelect(iconmenu_t *);
+void onPairWithLoggerSelect(iconmenu_t *);
+void onClearFlashSelect(iconmenu_t *);
+void onSetLogFormatSelect(iconmenu_t *);
+void onSetLogModeSelect(iconmenu_t *);
+void onSetLogModeSelect2(textmenu_t *);
+void onAppSettingSelect(iconmenu_t *);
+void onTimezoneUpdate(textmenu_t *);
+void onTimezoneSelect(textmenu_t *);
+void onTrackModeSelect(textmenu_t *);
+void onTrackModeUpdate(textmenu_t *);
+void onPutWayptSelect(textmenu_t *);
+void onPutWayptUpdate(textmenu_t *);
+void onAutoLogDistSelect(textmenu_t *);
+void onAutoLogDistUpdate(textmenu_t *);
+void onAutoLogTimeSelect(textmenu_t *);
+void onAutoLogTimeUpdate(textmenu_t *);
+void onAutoLogSpeedSelect(textmenu_t *);
+void onAutoLogSpeedUpdate(textmenu_t *);
+void onLogFullActionSelect(textmenu_t *);
+void onLogFullActionUpdate(textmenu_t *);
+void onLoadDefaultFormatSelect(textmenu_t *);
+void onLoadDefaultFormatUpdate(textmenu_t *);
+void onRecordRCRSelect(textmenu_t *);
+void onRecordRCRUpdate(textmenu_t *);
+void onRecordValidSelect(textmenu_t *);
+void onRecordValidUpdate(textmenu_t *);
+void onRecordMillisSelect(textmenu_t *);
+void onRecordMillisUpdate(textmenu_t *);
+void onRecordSpeedSelect(textmenu_t *);
+void onRecordSpeedUpdate(textmenu_t *);
+void onRecordAltitudeSelect(textmenu_t *);
+void onRecordAltitudeUpdate(textmenu_t *);
+void onRecordHeadingSelect(textmenu_t *);
+void onRecordHeadingUpdate(textmenu_t *);
+void onRecordDistanceSelect(textmenu_t *);
+void onRecordDistanceUpdate(textmenu_t *);
+void onRecordDgpsSelect(textmenu_t *);
+void onRecordDgpsUpdate(textmenu_t *);
+void onRecordDopSelect(textmenu_t *);
+void onRecordDopUpdate(textmenu_t *);
+void onRecordSatSelect(textmenu_t *);
+void onRecordSatUpdate(textmenu_t *);
+void onPairWithLoggerCfgSelect(textmenu_t *);
+void onPairWithLoggerCfgUpdate(textmenu_t *);
+void onOutputSubMenuSelect(textmenu_t *);
+void onLogMode1SubMenuSelect(textmenu_t *);
+void onLogMode2SubMenuSelect(textmenu_t *);
+void onLogFormatSubMenuSelect(textmenu_t *);
+void onEnableBeepCfgSelect(textmenu_t *);
+void onEnableBeepCfgUpdate(textmenu_t *);
+void onClearCacheFileSelect(textmenu_t *);
+void onPerformFormatSelect(textmenu_t *);
+void onClearSettingsSelect(textmenu_t *);
 
 // device settings
 const char *APP_NAME = "SmallStep";  // application title
@@ -165,7 +166,7 @@ const appconfig_t DEFAULT_CONFIG = {
 };
 
 // application main menu item list
-mainmenuitem_t menuMain[] = {
+iconmenu_t menuMain[] = {
     // {caption, iconData, enabled, onSelect}
     {"Download Log", ICON_DOWNLOAD_LOG, true, &onDownloadLogSelect},
     {"Fix RTC Time", ICON_FIX_RTC, true, &onFixRTCtimeSelect},
@@ -178,46 +179,53 @@ mainmenuitem_t menuMain[] = {
 };
 
 // output settings sub-menu item list
-textmenuitem_t cfgOutput[] = {
+textmenu_t cfgOutput[] = {
     // {caption, hintText, valueDescr, onSelectItem, onDescrUpdate}
     {"Back", "Exit this menu", "<<", true, NULL, NULL, NULL},
     {"Track mode", "How to divide tracks in GPX file", "", true,  //
      &onTrackModeSelect, &onTrackModeUpdate, NULL},
     {"Timezone offset", "UTC offset for 'a track per day' mode", "", true,  //
      &onTimezoneSelect, &onTimezoneUpdate, NULL},
-    {"Put WAYPTs", "Treat manulally recorded points as WAYPTs (POIs)", "", true,  //
+    {"Put WAYPTs", "Record manual recorded points as WAYPTs (POIs)", "", true,  //
      &onPutWayptSelect, &onPutWayptUpdate, NULL},
 };
 
 // log mode settings sub-menu item list
-textmenuitem_t cfgLogMode1[] = {
+textmenu_t cfgLogMode1[] = {
     // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
     {"Back", "Exit this menu", "<<", true, NULL, NULL, NULL},
-    {"Log by distance", "Auto log by moving distance", "", true,  //
+    {"Log by distance", "Auto-log by moved distance", "", true,  //
      &onAutoLogDistSelect, &onAutoLogDistUpdate, &cfg.logMode1.distIdx},
-    {"Log by time", "Auto log by elapsed time", "", true,  //
+    {"Log by time", "Auto-log by elapsed time", "", true,  //
      &onAutoLogTimeSelect, &onAutoLogTimeUpdate, &cfg.logMode1.timeIdx},
-    {"Log by speed", "Auto log by exceeded speed", "", true,  //
+    {"Log by speed", "Auto-log by exceeded speed", "", true,  //
      &onAutoLogSpeedSelect, &onAutoLogSpeedUpdate, &cfg.logMode1.speedIdx},
     {"Log full action", "Behavior when the logger flash is full", "", true,  //
      &onLogFullActionSelect, &onLogFullActionUpdate, &cfg.logMode1.fullStop},
 };
 
-textmenuitem_t cfgLogMode2[] = {
+textmenu_t cfgLogMode2[] = {
     // {caption, descr, valueDescr, enabled, onSelect, valueDescrUpdate}
     {"Back", "Exit this menu", "<<", true, NULL, NULL, NULL},
-    {"Log by distance", "Auto log by moving distance", "", true,  //
+    {"Log by distance", "Auto-log by moved distance", "", true,  //
      &onAutoLogDistSelect, &onAutoLogDistUpdate, &cfg.logMode2.distIdx},
-    {"Log by time", "Auto log by elapsed time", "", true,  //
+    {"Log by time", "Auto-log by elapsed time", "", true,  //
      &onAutoLogTimeSelect, &onAutoLogTimeUpdate, &cfg.logMode2.timeIdx},
-    {"Log by speed", "Auto log by exceeded speed", "", true,  //
+    {"Log by speed", "Auto-log by exceeded speed", "", true,  //
      &onAutoLogSpeedSelect, &onAutoLogSpeedUpdate, &cfg.logMode2.speedIdx},
     {"Log full action", "Behavior when the logger flash is full", "", true,  //
      &onLogFullActionSelect, &onLogFullActionUpdate, &cfg.logMode2.fullStop},
 };
 
+textmenu_t selectPreset[] = {
+    // {caption, descr, valueDescr, onSelect, valueDescrUpdate}
+    {"Preset #1", "update_by_sprintf", "", true, &onSetLogModeSelect2, NULL, &cfg.logMode1},  //
+    {"Preset #2", "update_by_sprintf", "", true, &onSetLogModeSelect2, NULL, &cfg.logMode2},  //
+    {"Cancel", "Return to the main menu", "", true, NULL, NULL, NULL},                        //
+};
+
 // log format settings sub-menu item list
-textmenuitem_t cfgLogFormat[] = {
+textmenu_t cfgLogFormat[] = {
     // {caption, descr, valueDescr, enabled, onSelect, valueDescrUpdate}
     {"Back", "Exit this menu", "<<", true, NULL, NULL},
     {"Load defaults", "Reset to the default format", "", true,  //
@@ -249,10 +257,10 @@ textmenuitem_t cfgLogFormat[] = {
      &onRecordSatSelect, &onRecordSatUpdate, &cfg.logFormat},
 };
 
-textmenuitem_t *cfgResetFormat = &cfgLogFormat[1];
+textmenu_t *cfgResetFormat = &cfgLogFormat[1];
 
 // application settings menu item list
-textmenuitem_t cfgMain[] = {
+textmenu_t cfgMain[] = {
     // {caption, descr, valueDescr, enabled, onSelect, valueDescrUpdate}
     {"Save and exit", "Return to the main menu", "", true, NULL, NULL},
     {"Pairing with a GPS logger", "Discover supported GPS loggers", ">>", true,  //
@@ -272,7 +280,7 @@ textmenuitem_t cfgMain[] = {
      &onPerformFormatSelect, NULL, NULL},
     {"Clear carche file", "Delete the download cache file", "", true,  //
      &onClearCacheFileSelect, NULL, NULL},
-    {"Clear all settings", "Erase the current settings of SmallStep", "", true,  //
+    {"Clear all settings", "Erase the current settings", "", true,  //
      &onClearSettingsSelect, NULL, NULL},
 };
 
@@ -394,7 +402,7 @@ uint16_t makeFilename(char *gpxName, time_t startTime) {
           ltime->tm_min,            // min (0-59)
           ltime->tm_sec);           // sec (0-59)
 
-  // 最初のtrkptの時刻を使ってGPXファイルとBINファイルの保存名を決める
+  // Determine a unique file name
   for (uint16_t i = 1; i <= 65535; i++) {
     sprintf(gpxName, "%s_%02d.gpx", baseName, i);
 
@@ -497,7 +505,7 @@ void onAppInputIdle() {
 /**
  *
  */
-void onDownloadLogSelect(mainmenuitem_t *item) {
+void onDownloadLogSelect(iconmenu_t *item) {
   bool result = runDownloadLog();
   logger.disconnect();
 
@@ -534,7 +542,7 @@ bool runFixRTCtime() {
 /**
  *
  */
-void onFixRTCtimeSelect(mainmenuitem_t *item) {
+void onFixRTCtimeSelect(iconmenu_t *item) {
   bool result = runFixRTCtime();
   logger.disconnect();
 
@@ -545,7 +553,7 @@ void onFixRTCtimeSelect(mainmenuitem_t *item) {
 /**
  *
  */
-void onShowLocationSelect(mainmenuitem_t *item) {
+void onShowLocationSelect(iconmenu_t *item) {
 }
 
 bool runPairWithLogger() {
@@ -608,7 +616,7 @@ bool runPairWithLogger() {
 /**
  *
  */
-void onPairWithLoggerSelect(mainmenuitem_t *item) {
+void onPairWithLoggerSelect(iconmenu_t *item) {
   bool result = runPairWithLogger();
 
   playBeep(result, BEEP_DURATION_LONG);
@@ -662,7 +670,7 @@ bool runClearFlash() {
   return true;
 }
 
-void onClearFlashSelect(mainmenuitem_t *item) {
+void onClearFlashSelect(iconmenu_t *item) {
   bool result = runClearFlash();
   logger.disconnect();
 
@@ -716,7 +724,7 @@ bool runSetLogFormat() {
   return true;
 }
 
-void onSetLogFormatSelect(mainmenuitem_t *item) {
+void onSetLogFormatSelect(iconmenu_t *item) {
   bool result = runSetLogFormat();
   logger.disconnect();
 
@@ -724,7 +732,7 @@ void onSetLogFormatSelect(mainmenuitem_t *item) {
   ui.promptOk();
 }
 
-bool runSetLogMode() {
+bool runSetLogMode(logmodeset_t *lms) {
   // return false if the logger is not paired yet
   if (!isLoggerPaired()) return false;
 
@@ -737,9 +745,9 @@ bool runSetLogMode() {
 
   recordmode_t curRecMode = MODE_FULLSTOP;
   logcriteria_t curLogCri = {0, 0, 0};
-  recordmode_t newRecMode = (cfg.logMode1.fullStop) ? MODE_FULLSTOP : MODE_OVERWRITE;
-  logcriteria_t newLogCri = {LOG_DIST_VALUES[cfg.logMode1.distIdx], LOG_TIME_VALUES[cfg.logMode1.timeIdx],
-                             LOG_SPEED_VALUES[cfg.logMode1.speedIdx]};
+  recordmode_t newRecMode = (lms->fullStop) ? MODE_FULLSTOP : MODE_OVERWRITE;
+  logcriteria_t newLogCri = {LOG_DIST_VALUES[lms->distIdx], LOG_TIME_VALUES[lms->timeIdx],
+                             LOG_SPEED_VALUES[lms->speedIdx]};
 
   ui.drawDialogText(BLUE, 1, "Updating the log mode...");
   if ((!logger.getLogRecordMode(&curRecMode)) || (!logger.getLogCriteria(&curLogCri))) {
@@ -749,13 +757,8 @@ bool runSetLogMode() {
   }
 
   char buf[2][40];
-  if ((newLogCri.time % 10) == 0) {
-    sprintf(buf[0], "Log by : %d meters, %d seconds, %d km/h", (newLogCri.distance / 10), (newLogCri.time / 10),
-            (newLogCri.speed / 10));
-  } else {
-    sprintf(buf[0], "Log by : %d meters, %d.%d seconds, %d km/h", (newLogCri.distance / 10), (newLogCri.time / 10),
-            (newLogCri.time % 10), (newLogCri.speed / 10));
-  }
+  sprintf(buf[0], "Log by: %d meters, %d.%d seconds, %d km/h",  //
+          (newLogCri.distance / 10), (newLogCri.time / 10), (newLogCri.time % 10), (newLogCri.speed / 10));
   if (newRecMode == MODE_FULLSTOP) {
     strcpy(buf[1], "Log full action : Stop logging");
   } else {
@@ -784,30 +787,54 @@ bool runSetLogMode() {
   return true;
 }
 
-void onSetLogModeSelect(mainmenuitem_t *item) {
-  bool result = runSetLogMode();
+void onSetLogModeSelect2(textmenu_t *item) {
+  bool result = runSetLogMode((logmodeset_t *)(item->var));
   logger.disconnect();
 
   playBeep(result, BEEP_DURATION_LONG);
   ui.promptOk();
 }
 
-void onAppSettingSelect(mainmenuitem_t *item) {
+void onSetLogModeSelect(iconmenu_t *item) {
+  logcriteria_t cri1, cri2;
+  char lfact1[10] = "Overwrap";
+  char lfact2[10] = "Overwrap";
+
+  cri1 = {LOG_DIST_VALUES[cfg.logMode1.distIdx],  //
+          LOG_TIME_VALUES[cfg.logMode1.timeIdx],  //
+          LOG_SPEED_VALUES[cfg.logMode1.speedIdx]};
+  if (cfg.logMode1.fullStop) strcpy(lfact1, "Stop log");
+
+  cri2 = {LOG_DIST_VALUES[cfg.logMode2.distIdx],  //
+          LOG_TIME_VALUES[cfg.logMode2.timeIdx],  //
+          LOG_SPEED_VALUES[cfg.logMode2.speedIdx]};
+  if (cfg.logMode2.fullStop) strcpy(lfact2, "Stop log");
+
+  sprintf(selectPreset[0].hintText, "Log by %dm, %d.%dsec, %dkm/h. %s when full",  //
+          (cri1.distance / 10), (cri1.time / 10), (cri1.time % 10), (cri1.speed / 10), lfact1);
+  sprintf(selectPreset[1].hintText, "Log by %dm, %d.%dsec, %dkm/h. %s when full",  //
+          (cri2.distance / 10), (cri2.time / 10), (cri2.time % 10), (cri2.speed / 10), lfact2);
+
+  int8_t itemCount = (sizeof(selectPreset) / sizeof(textmenu_t));
+  ui.openTextMenu("Set Log Mode", selectPreset, itemCount, true);
+}
+
+void onAppSettingSelect(iconmenu_t *item) {
   Serial.printf("SmallStep.onAppSettingSelect: open the app settings menu\n");
 
   // open the configuration menu
-  int8_t itemCount = (sizeof(cfgMain) / sizeof(textmenuitem_t));
-  ui.openTextMenu("Settings", cfgMain, itemCount);
+  int8_t itemCount = (sizeof(cfgMain) / sizeof(textmenu_t));
+  ui.openTextMenu("Settings", cfgMain, itemCount, false);
 
   // save the app configuration after the menu is closed
   saveAppConfig();
 }
 
-void onTrackModeSelect(textmenuitem_t *item) {
+void onTrackModeSelect(textmenu_t *item) {
   cfg.trackMode = (trackmode_t)(((int)cfg.trackMode + 1) % 3);
 }
 
-void onTrackModeUpdate(textmenuitem_t *item) {
+void onTrackModeUpdate(textmenu_t *item) {
   if (cfg.trackMode == TRK_ONE_DAY) {
     strcpy(item->valueDescr, "A track per day");
   } else if (cfg.trackMode == TRK_AS_IS) {
@@ -817,31 +844,31 @@ void onTrackModeUpdate(textmenuitem_t *item) {
   }
 }
 
-void onTimezoneSelect(textmenuitem_t *item) {
+void onTimezoneSelect(textmenu_t *item) {
   uint8_t valCount = sizeof(TIME_OFFSET_VALUES) / sizeof(float);
   cfg.timeOffsetIdx = (cfg.timeOffsetIdx + 1) % valCount;
 }
 
-void onTimezoneUpdate(textmenuitem_t *item) {
+void onTimezoneUpdate(textmenu_t *item) {
   sprintf(item->valueDescr, "UTC%+.1f", TIME_OFFSET_VALUES[cfg.timeOffsetIdx]);
 }
 
-void onPutWayptSelect(textmenuitem_t *item) {
+void onPutWayptSelect(textmenu_t *item) {
   cfg.putWaypt = (!cfg.putWaypt);
 }
 
-void onPutWayptUpdate(textmenuitem_t *item) {
+void onPutWayptUpdate(textmenu_t *item) {
   setBoolDescr(item->valueDescr, cfg.putWaypt);
 }
 
-void onAutoLogDistSelect(textmenuitem_t *item) {
+void onAutoLogDistSelect(textmenu_t *item) {
   uint8_t *cfgVar = (uint8_t *)item->var;
   uint8_t valCount = sizeof(LOG_DIST_VALUES) / sizeof(int16_t);
 
   *cfgVar = max(0, (*cfgVar + 1) % valCount);
 }
 
-void onAutoLogDistUpdate(textmenuitem_t *item) {
+void onAutoLogDistUpdate(textmenu_t *item) {
   uint8_t *cfgVar = (uint8_t *)(item->var);
 
   if (LOG_DIST_VALUES[*cfgVar] == 0) {
@@ -854,14 +881,14 @@ void onAutoLogDistUpdate(textmenuitem_t *item) {
   }
 }
 
-void onAutoLogTimeSelect(textmenuitem_t *item) {
+void onAutoLogTimeSelect(textmenu_t *item) {
   uint8_t *cfgVar = (uint8_t *)(item->var);
   uint8_t valCount = sizeof(LOG_TIME_VALUES) / sizeof(int16_t);
 
   *cfgVar = max(0, (*cfgVar + 1) % valCount);
 }
 
-void onAutoLogTimeUpdate(textmenuitem_t *item) {
+void onAutoLogTimeUpdate(textmenu_t *item) {
   uint8_t *cfgVar = (uint8_t *)(item->var);
 
   if (LOG_TIME_VALUES[*cfgVar] == 0) {
@@ -874,14 +901,14 @@ void onAutoLogTimeUpdate(textmenuitem_t *item) {
   }
 }
 
-void onAutoLogSpeedSelect(textmenuitem_t *item) {
+void onAutoLogSpeedSelect(textmenu_t *item) {
   uint8_t *cfgVar = (uint8_t *)(item->var);
   uint8_t valCount = sizeof(LOG_SPEED_VALUES) / sizeof(int16_t);
 
   *cfgVar = max(0, (*cfgVar + 1) % valCount);
 }
 
-void onAutoLogSpeedUpdate(textmenuitem_t *item) {
+void onAutoLogSpeedUpdate(textmenu_t *item) {
   uint8_t *cfgVar = (uint8_t *)(item->var);
 
   if (LOG_SPEED_VALUES[*cfgVar] == 0) {
@@ -894,12 +921,12 @@ void onAutoLogSpeedUpdate(textmenuitem_t *item) {
   }
 }
 
-void onLogFullActionSelect(textmenuitem_t *item) {
+void onLogFullActionSelect(textmenu_t *item) {
   uint8_t *cfgVar = (uint8_t *)(item->var);
   *cfgVar = (!(*cfgVar));
 }
 
-void onLogFullActionUpdate(textmenuitem_t *item) {
+void onLogFullActionUpdate(textmenu_t *item) {
   bool *cfgVar = (bool *)(item->var);
 
   if (*cfgVar) {
@@ -909,115 +936,115 @@ void onLogFullActionUpdate(textmenuitem_t *item) {
   }
 }
 
-void onLoadDefaultFormatSelect(textmenuitem_t *item) {
+void onLoadDefaultFormatSelect(textmenu_t *item) {
   cfg.logFormat = DEFAULT_CONFIG.logFormat;
 
-  for (int8_t i = 0; i < sizeof(cfgLogFormat) / sizeof(textmenuitem_t); i++) {
-    textmenuitem_t *ci = &cfgLogFormat[i];
+  for (int8_t i = 0; i < sizeof(cfgLogFormat) / sizeof(textmenu_t); i++) {
+    textmenu_t *ci = &cfgLogFormat[i];
     if (ci->onUpdateDescr != NULL) ci->onUpdateDescr(ci);
   }
 }
 
-void onLoadDefaultFormatUpdate(textmenuitem_t *item) {
+void onLoadDefaultFormatUpdate(textmenu_t *item) {
   sprintf(item->valueDescr, "0x%08X", cfg.logFormat);
 }
 
-void onRecordRCRSelect(textmenuitem_t *item) {
+void onRecordRCRSelect(textmenu_t *item) {
   switchBitFlags((uint32_t *)(item->var), FMT_RCR);
   onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
-void onRecordRCRUpdate(textmenuitem_t *item) {
+void onRecordRCRUpdate(textmenu_t *item) {
   setBoolDescr(item->valueDescr, (cfg.logFormat & FMT_RCR));
 }
 
-void onRecordValidSelect(textmenuitem_t *item) {
+void onRecordValidSelect(textmenu_t *item) {
   switchBitFlags((uint32_t *)(item->var), FMT_VALID);
   onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
-void onRecordValidUpdate(textmenuitem_t *item) {
+void onRecordValidUpdate(textmenu_t *item) {
   setBoolDescr(item->valueDescr, (cfg.logFormat & FMT_VALID));
 }
 
-void onRecordMillisSelect(textmenuitem_t *item) {
+void onRecordMillisSelect(textmenu_t *item) {
   switchBitFlags((uint32_t *)(item->var), FMT_MSEC);
   onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
-void onRecordMillisUpdate(textmenuitem_t *item) {
+void onRecordMillisUpdate(textmenu_t *item) {
   setBoolDescr(item->valueDescr, (cfg.logFormat & FMT_MSEC));
 }
 
-void onRecordSpeedSelect(textmenuitem_t *item) {
+void onRecordSpeedSelect(textmenu_t *item) {
   switchBitFlags((uint32_t *)(item->var), FMT_SPEED);
   onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
-void onRecordSpeedUpdate(textmenuitem_t *item) {
+void onRecordSpeedUpdate(textmenu_t *item) {
   setBoolDescr(item->valueDescr, (cfg.logFormat & FMT_SPEED));
 }
 
-void onRecordAltitudeSelect(textmenuitem_t *item) {
+void onRecordAltitudeSelect(textmenu_t *item) {
   switchBitFlags((uint32_t *)(item->var), FMT_HEIGHT);
   onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
-void onRecordAltitudeUpdate(textmenuitem_t *item) {
+void onRecordAltitudeUpdate(textmenu_t *item) {
   setBoolDescr(item->valueDescr, (cfg.logFormat & FMT_HEIGHT));
 }
 
-void onRecordHeadingSelect(textmenuitem_t *item) {
+void onRecordHeadingSelect(textmenu_t *item) {
   switchBitFlags((uint32_t *)(item->var), FMT_TRACK);
   onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
-void onRecordHeadingUpdate(textmenuitem_t *item) {
+void onRecordHeadingUpdate(textmenu_t *item) {
   setBoolDescr(item->valueDescr, (cfg.logFormat & FMT_TRACK));
 }
 
-void onRecordDistanceSelect(textmenuitem_t *item) {
+void onRecordDistanceSelect(textmenu_t *item) {
   switchBitFlags((uint32_t *)(item->var), FMT_DIST);
   onLoadDefaultFormatUpdate(cfgResetFormat);
 }
 
-void onRecordDistanceUpdate(textmenuitem_t *item) {
+void onRecordDistanceUpdate(textmenu_t *item) {
   setBoolDescr(item->valueDescr, (cfg.logFormat & FMT_DIST));
 }
 
-void onRecordDgpsSelect(textmenuitem_t *item) {
+void onRecordDgpsSelect(textmenu_t *item) {
   switchBitFlags((uint32_t *)(item->var), (FMT_DSTA | FMT_DAGE));
   onLoadDefaultFormatUpdate(cfgResetFormat);
 };
 
-void onRecordDgpsUpdate(textmenuitem_t *item) {
+void onRecordDgpsUpdate(textmenu_t *item) {
   setBoolDescr(item->valueDescr, (cfg.logFormat & FMT_DSTA));
 };
 
-void onRecordDopSelect(textmenuitem_t *item) {
+void onRecordDopSelect(textmenu_t *item) {
   switchBitFlags((uint32_t *)item->var, (FMT_PDOP | FMT_HDOP | FMT_VDOP));
   onLoadDefaultFormatUpdate(cfgResetFormat);
 };
 
-void onRecordDopUpdate(textmenuitem_t *item) {
+void onRecordDopUpdate(textmenu_t *item) {
   setBoolDescr(item->valueDescr, (cfg.logFormat & FMT_PDOP));
 };
 
-void onRecordSatSelect(textmenuitem_t *item) {
+void onRecordSatSelect(textmenu_t *item) {
   switchBitFlags((uint32_t *)item->var, (FMT_NSAT | FMT_ELE | FMT_AZI | FMT_SNR));
   onLoadDefaultFormatUpdate(cfgResetFormat);
 };
 
-void onRecordSatUpdate(textmenuitem_t *item) {
+void onRecordSatUpdate(textmenu_t *item) {
   setBoolDescr(item->valueDescr, (cfg.logFormat & FMT_NSAT));
 };
 
-void onPairWithLoggerCfgSelect(textmenuitem_t *item) {
+void onPairWithLoggerCfgSelect(textmenu_t *item) {
   runPairWithLogger();
   ui.promptOk();
 }
 
-void onPairWithLoggerCfgUpdate(textmenuitem_t *item) {
+void onPairWithLoggerCfgUpdate(textmenu_t *item) {
   if (isZeroedBytes(&cfg.loggerAddr, BT_ADDR_LEN)) {
     strcpy(item->valueDescr, "Not paired");
   } else {
@@ -1025,39 +1052,39 @@ void onPairWithLoggerCfgUpdate(textmenuitem_t *item) {
   }
 }
 
-void onOutputSubMenuSelect(textmenuitem_t *item) {
+void onOutputSubMenuSelect(textmenu_t *item) {
   // enter the output settigns sub-menu
-  int8_t itemCount = (sizeof(cfgOutput) / sizeof(textmenuitem_t));
-  ui.openTextMenu("Settings > Output", cfgOutput, itemCount);
+  int8_t itemCount = (sizeof(cfgOutput) / sizeof(textmenu_t));
+  ui.openTextMenu("Settings > Output", cfgOutput, itemCount, false);
 }
 
-void onLogMode1SubMenuSelect(textmenuitem_t *item) {
+void onLogMode1SubMenuSelect(textmenu_t *item) {
   // enter the log mode settings sub-menu
-  int8_t itemCount = (sizeof(cfgLogMode1) / sizeof(textmenuitem_t));
-  ui.openTextMenu("Settings > Log Mode #1", cfgLogMode1, itemCount);
+  int8_t itemCount = (sizeof(cfgLogMode1) / sizeof(textmenu_t));
+  ui.openTextMenu("Settings > Log Mode #1", cfgLogMode1, itemCount, false);
 }
 
-void onLogMode2SubMenuSelect(textmenuitem_t *item) {
+void onLogMode2SubMenuSelect(textmenu_t *item) {
   // enter the log mode settings sub-menu
-  int8_t itemCount = (sizeof(cfgLogMode2) / sizeof(textmenuitem_t));
-  ui.openTextMenu("Settings > Log Mode #2", cfgLogMode2, itemCount);
+  int8_t itemCount = (sizeof(cfgLogMode2) / sizeof(textmenu_t));
+  ui.openTextMenu("Settings > Log Mode #2", cfgLogMode2, itemCount, false);
 }
 
-void onLogFormatSubMenuSelect(textmenuitem_t *item) {
+void onLogFormatSubMenuSelect(textmenu_t *item) {
   // enter the log format settings sub-menu
-  int8_t itemCount = (sizeof(cfgLogFormat) / sizeof(textmenuitem_t));
-  ui.openTextMenu("Settings > Log Format", cfgLogFormat, itemCount);
+  int8_t itemCount = (sizeof(cfgLogFormat) / sizeof(textmenu_t));
+  ui.openTextMenu("Settings > Log Format", cfgLogFormat, itemCount, false);
 }
 
-void onEnableBeepCfgSelect(textmenuitem_t *item) {
+void onEnableBeepCfgSelect(textmenu_t *item) {
   cfg.playBeep = (!cfg.playBeep);
 }
 
-void onEnableBeepCfgUpdate(textmenuitem_t *item) {
+void onEnableBeepCfgUpdate(textmenu_t *item) {
   setBoolDescr(item->valueDescr, cfg.playBeep);
 }
 
-void onClearCacheFileSelect(textmenuitem_t *item) {
+void onClearCacheFileSelect(textmenu_t *item) {
   if (SDcard.exists(TEMP_BIN_NAME)) SDcard.remove(TEMP_BIN_NAME);
   if (SDcard.exists(TEMP_GPX_NAME)) SDcard.remove(TEMP_GPX_NAME);
 
@@ -1068,7 +1095,7 @@ void onClearCacheFileSelect(textmenuitem_t *item) {
   ui.promptOk();
 }
 
-void onPerformFormatSelect(textmenuitem_t *item) {
+void onPerformFormatSelect(textmenu_t *item) {
   ui.drawDialogFrame("Format SD card");
   ui.drawNavBar(NULL);
 
@@ -1102,7 +1129,7 @@ void onPerformFormatSelect(textmenuitem_t *item) {
   M5.Power.reset();
 }
 
-void onClearSettingsSelect(textmenuitem_t *item) {
+void onClearSettingsSelect(textmenu_t *item) {
   ui.drawDialogFrame("Clear Settings");
   ui.drawDialogText(BLUE, 0, "Are you sure to clear all settings?");
   ui.drawDialogText(BLACK, 1, "Note : The log data on the paired GPS logger");
@@ -1258,8 +1285,8 @@ void setup() {
   }
 
   // enter the main menu (infinite loop in ui.openMainMenu)
-  int8_t itemCount = (sizeof(menuMain) / sizeof(mainmenuitem_t));
-  ui.openMainMenu(menuMain, itemCount);
+  int8_t itemCount = (sizeof(menuMain) / sizeof(iconmenu_t));
+  ui.openIconMenu(menuMain, itemCount);
 }
 
 void loop() {

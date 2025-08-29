@@ -9,17 +9,33 @@
 #define CHAR_CR '\r'
 #define CHAR_LF '\n'
 
+/**
+ * @fn NmeaBuffer::NmeaBuffer()
+ * @brief Constructor of NmeaBuffer class
+ * @details This constructor initializes the NmeaBuffer object by allocating the buffer and clear it.
+ */
 NmeaBuffer::NmeaBuffer() {
   // constructor: initialize member variables
   currentPage = allocatePage(&rootPage);
   clear();
 }
 
+/**
+ * @fn NmeaBuffer::~NmeaBuffer()
+ * @brief Destructor of NmeaBuffer class
+ * @details This destructor releases all dynamically allocated pages in the buffer.
+ */
 NmeaBuffer::~NmeaBuffer() {
   // destuctor: release dynamically allocated buffer
   freePages(rootPage);
 }
 
+/**
+ * @fn void NmeaBuffer::freePages(bufferpage_t *pg)
+ * @brief Release all pages from the given page to the last.
+ * @param pg A pointer to the first page to release. If NULL is given, do nothing.
+ * @details This function is used to release all pages in the buffer.
+ */
 void NmeaBuffer::freePages(bufferpage_t *pg) {
   // release all pages from the given to the last
   // if NULL is given, do nothing
@@ -31,24 +47,37 @@ void NmeaBuffer::freePages(bufferpage_t *pg) {
   }
 }
 
+/**
+ * @fn bufferpage_t *NmeaBuffer::allocatePage(bufferpage_t **pg)
+ * @brief Allocate a new page and return its pointer.
+ * @param pg A pointer to a pointer to the page. If it is not NULL, the new page is assigned to it.
+ */
 bufferpage_t *NmeaBuffer::allocatePage(bufferpage_t **pg) {
   // create a new page and fill it with zero
   bufferpage_t *np = (bufferpage_t *)malloc(sizeof(bufferpage_t));
   memset(np, 0, sizeof(bufferpage_t));
 
   // assign the page to the given argment (if it is NOT NULL)
-  if (pg != NULL) {
-    *pg = np;
-  }
+  if (pg != NULL) *pg = np;
 
   // return pointer of the new page
   return np;
 }
 
+/**
+ * @fn char *NmeaBuffer::getBuffer()
+ * @brief Get the pointer to the buffer.
+ * @return Returns a pointer to the buffer.
+ */
 char *NmeaBuffer::getBuffer() {
   return rootPage->buf;
 }
 
+/**
+ * @fn void NmeaBuffer::clear()
+ * @brief Clear the buffer.
+ * @details This function releases all pages except the first one and zero-fills the first page
+ */
 void NmeaBuffer::clear() {
   // release second and subsequent pages, zero-fill the first page
   freePages(rootPage->next);
@@ -63,11 +92,23 @@ void NmeaBuffer::clear() {
   receivedChecksum = 0;
 }
 
+/**
+ * @fn bool NmeaBuffer::isValidChar(char ch)
+ * @brief Check if the given character is valid in PMTK sentence.
+ * @param ch A character to check.
+ * @return Returns true if the character is valid, otherwise false.
+ */
 bool NmeaBuffer::isValidChar(char ch) {
   // return true if the given chars is usable in PMTK sentence
   return ((ch >= ' ') && (ch <= '~'));
 }
 
+/**
+ * @fn uint8_t NmeaBuffer::hexCharToByte(char ch)
+ * @brief Convert a hexadecimal character to a byte value.
+ * @param ch A character to convert.
+ * @return Returns a byte value of the hexadecimal character. Returns 255 if the character is not a valid
+ */
 uint8_t NmeaBuffer::hexCharToByte(char ch) {
   switch (ch) {
   case '0' ... '9':  // return 0-9 for '0'-'9'
@@ -82,6 +123,13 @@ uint8_t NmeaBuffer::hexCharToByte(char ch) {
   return NON_HEXCHAR_VAL;
 }
 
+/**
+ * @fn void NmeaBuffer::appendToBuffer(char ch)
+ * @brief Append a character to the buffer.
+ * @param ch A character to append.
+ * @details This function appends the given character to the current page of the buffer. If the current page is full,
+ * it allocates a new page and set it as the current page.
+ */
 void NmeaBuffer::appendToBuffer(char ch) {
   if (ptr < BP_BUFFER_SIZE) {
     currentPage->buf[ptr] = ch;
@@ -94,6 +142,13 @@ void NmeaBuffer::appendToBuffer(char ch) {
   }
 }
 
+/**
+ * @fn void NmeaBuffer::updateChecksum(char ch)
+ * @brief Update the checksum value with the given character.
+ * @param ch A character to update the checksum.
+ * @details This function updates the expected checksum value with the given character. If the character is not a
+ * valid character, it does nothing.
+ */
 void NmeaBuffer::updateChecksum(char ch) {
   if (columnCount < RB_CCNT_CHKSUM) {  // calculate checksum of sentence text
     if ((ch != '$') && (ch != '*')) {  // exclude '$' and '*' from checksum
@@ -104,6 +159,15 @@ void NmeaBuffer::updateChecksum(char ch) {
   }
 }
 
+/**
+ * @fn bool NmeaBuffer::put(char ch)
+ * @brief Put a character to the buffer.
+ * @param ch A character to put.
+ * @return Returns true if the character is a line feed ('\n', that means the end of the sentence) and the checksum is
+ * valid, otherwise false.
+ * @details This function puts the given character to the buffer. If the character is a line feed ('\n') and the
+ * checksum is valid, it returns true. Otherwise, it returns false.
+ */
 bool NmeaBuffer::put(char ch) {
   switch (ch) {
   case '$':  // begining of a new sentense
@@ -144,6 +208,14 @@ char NmeaBuffer::get() {
   return ch;
 }
 
+/**
+ * @fn bool NmeaBuffer::readColumnAsInt(uint8_t clm, char *buf, uint16_t bufSize)
+ * @brief Read a column of the current sentence as a integer value.
+ * @param clm The column number to read (0-based).
+ * @param buf A pointer to a int variable to store the read value.
+ * @param bool hex A boolean value indicating whether the column is in hexadecimal format.
+ * @return Returns true if the column is read successfully, otherwise false.
+ */
 bool NmeaBuffer::readColumnAsInt(uint8_t clm, int32_t *value, bool hex) {
   if (seekCurToColumn(clm) == false) return false;
 
@@ -162,6 +234,11 @@ bool NmeaBuffer::readColumnAsInt(uint8_t clm, int32_t *value, bool hex) {
   return true;
 }
 
+/**
+ * @fn bool NmeaBuffer::readHexByteFull(byte *by)
+ * @param by
+ *
+ */
 bool NmeaBuffer::readHexByteFull(byte *by) {
   byte upper = hexCharToByte(get());
   byte lower = hexCharToByte(get());

@@ -211,13 +211,12 @@ bool MtkParser::matchBinPattern(const char *ptn, uint8_t len) {
  * @return Returns true if the pattern is matched and the action is applied, otherwise false.
  */
 bool MtkParser::readBinMarkers() {
-  // Special patterns in the MTK binary log data
+  // Special patterns in the MTK binary log data:
   // * Dynamic Settings Pattern (DSP): {0xAA 0xAA 0xAA 0xAA 0xAA 0xAA 0xAA TT VV VV VV 0xBB 0xBB 0xBB 0xBB}
   // * Holux M-241 pattern: "HOLUXGR241LOGGER"
   // * Holux M-241 fw1.13 pattern: "HOLUXGR241LOGGER    "
   // * Sector end pattern: {0xFF 0xFF .. 0xFF (16 bytes)}
 
-  bool match = false;
   size_t startPos = in->mark();
 
   // try to read a DSP from the current position

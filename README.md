@@ -24,7 +24,7 @@ You also need to have a M5Stack Basic that have a SD card run SmallStep. No expa
 2. Clone [SmallStep repositoly](https://github.com/nuruposan/SmallStep) to a local directory
 3. Open the directory using VScode
 4. Edit `SimpleBeep.h` and fix `include <arduino.h>` to `include <Arduino.h>`
-5. Edit `BluetoothSerial.h` and increase `RX_QUEUE_SIZE` from 512 to 4094 (bytes)
+5. Edit `BluetoothSerial.cpp` and increase `RX_QUEUE_SIZE` from 512 to 4094 (bytes)
 6. Connect a M5Stack Basic to the PC
 7. Run "PlatformIO: Upload" task and install SmallStep to the M5Stack
 
@@ -33,7 +33,7 @@ You also need to have a M5Stack Basic that have a SD card run SmallStep. No expa
 Please __don't forget to perform step 4 and step 5__.
 
 `SimpleBeep.h` is in `SmallStep/.pio/libdeps/m5stack-core-esp32/M5Stack_SimpleBeep/src/SimpleBeep.h`.
-`BluetoothSerial.h` is in `$HOME/.platformio/packages/framework-arduinoespressif32/libraries/BluetoothSerial/src/`, **not** in the project directory.
+`BluetoothSerial.cpp` is in `$HOME/.platformio/packages/framework-arduinoespressif32/libraries/BluetoothSerial/src/`, **NOT** in the project directory.
 
 If you don't performt them, an error will occured on compiling or get communication error on downloading data.
 

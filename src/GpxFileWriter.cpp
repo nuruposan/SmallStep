@@ -136,7 +136,7 @@ void GpxFileWriter::endTrackSeg() {
 }
 
 gpxinfo_t GpxFileWriter::endGpx() {
-  if (!inGpx) return gpxInfo;
+if (!inGpx) return gpxInfo;
 
   // close the track (if it is opened)
   endTrack();
