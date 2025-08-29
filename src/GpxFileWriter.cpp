@@ -70,7 +70,7 @@ void GpxFileWriter::beginGpx() {
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
       "<gpx version=\"1.1\" creator=\"" PARSER_DESCR
       "\""
-      " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema"
+      " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema\""
       " xmlns=\"https://www.topografix.com/GPX/1/1/gpx.xsd\">\n");
 
   // initialize the GPX and track information
@@ -136,7 +136,7 @@ void GpxFileWriter::endTrackSeg() {
 }
 
 gpxinfo_t GpxFileWriter::endGpx() {
-if (!inGpx) return gpxInfo;
+  if (!inGpx) return gpxInfo;
 
   // close the track (if it is opened)
   endTrack();

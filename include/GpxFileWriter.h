@@ -5,7 +5,7 @@
 
 #include "CommonTypes.h"
 
-#define PARSER_DESCR "SmallStep/M5Stack v20241019"
+#define PARSER_DESCR "SmallStep/M5Stack v20250829"
 #define MAX_WAYPTS_PER_TRK 250
 
 typedef struct _gpxinfo {
