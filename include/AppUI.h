@@ -36,7 +36,7 @@ typedef struct _mainmenuitem {
 
 typedef struct _textmenuitem {
   const char *caption;
-  char *hintText;
+  char hintText[80];
   char valueDescr[20];
   bool enabled;
   void (*onSelectItem)(_textmenuitem *);
