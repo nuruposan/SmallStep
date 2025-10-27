@@ -21,6 +21,10 @@
 #define BEEP_DURATION_SHORT 120  // 120 msec for short beep
 #define BEEP_DURATION_LONG 600   // 600 msec for long beep
 
+#define LOGGER_NONE "NO LOGGER"
+#define LOGGER_747PRO "747PRO GPS"
+#define LOGGER_M241 "HOLUX_M-241"
+
 #define TEMP_BIN_NAME "download.bin"  // filename for download cache
 #define TEMP_GPX_NAME "download.gpx"  // filename for converting data (before rename)
 
@@ -82,7 +86,7 @@ void onSetLogModeSelect(iconmenu_t*);
 void onSetLogModeSelect2(textmenu_t*);
 void onAppSettingSelect(iconmenu_t*);
 
-/* for output setting menu */
+/* Event handlers for output setting menu */
 void trackModeOnSelect(textmenu_t*);
 void trackModeGetValText(textmenu_t*, char*, size_t);
 void timezoneOnSelect(textmenu_t*);
@@ -90,7 +94,7 @@ void timezoneGetValText(textmenu_t*, char*, size_t);
 void putWayptOnSelect(textmenu_t*);
 void putWayptGetValText(textmenu_t*, char*, size_t);
 
-/* for log mode menu */
+/* Event handlers for log mode preset menus */
 void logByDistOnSelect(textmenu_t*);
 void logByDistGetValText(textmenu_t*, char*, size_t);
 void logByTimeOnSelect(textmenu_t*);
@@ -100,7 +104,7 @@ void logBySpeedGetValText(textmenu_t*, char*, size_t);
 void logFullActionOnSelect(textmenu_t*);
 void logFullActionGetValText(textmenu_t*, char*, size_t);
 
-/* for log format settings menu*/
+/* Event handlers for log format menu */
 void loadDefaultOnSelect(textmenu_t*);
 void loadDefaultGetValText(textmenu_t*, char*, size_t);
 void recordTimeGetValText(textmenu_t*, char*, size_t);
@@ -126,6 +130,7 @@ void recordDopGetValText(textmenu_t*, char*, size_t);
 void recordSatOnSelect(textmenu_t*);
 void recordSatGetValText(textmenu_t*, char*, size_t);
 
+/* Event handlers for app settings menu */
 void pairLoggerOnSelect(textmenu_t*);
 void pairLoggerGetValText(textmenu_t*, char*, size_t);
 void outputSubMenuOnSelect(textmenu_t*);
@@ -139,9 +144,9 @@ void performFormatOnSelect(textmenu_t*);
 void clearSettingsOnSelect(textmenu_t*);
 
 // device settings
-const char* APP_NAME = "SmallStep";  // application title
-const char LCD_BRIGHTNESS = 10;
-const uint32_t IDLE_TIMEOUT = 120000;
+const char* APP_NAME = "SmallStep";    // application title
+const char LCD_BRIGHTNESS = 10;        // LCD brightness (up to 255)
+const uint32_t IDLE_TIMEOUT = 120000;  // idle time for auto power-off in msec
 
 // configuration value lists
 const float TIME_OFFSET_VALUES[] = {
@@ -164,7 +169,7 @@ const appconfig_t DEFAULT_CONFIG = {
     sizeof(appconfig_t),  // length
     true,                 // firstRun
     {0, 0, 0, 0, 0, 0},   // loggerAddr
-    "NO LOGGER",          // loggerName
+    LOGGER_NONE,          // loggerName
     true,                 // playBeep
     TRK_ONE_DAY,          // trackMode
     14,                   // timeOffsetIdx (14 -> UTC+0)
@@ -182,7 +187,7 @@ iconmenu_t menuMain[] = {
     {true, "Erase Log Data", ICON_ERASE_LOG, &onClearFlashSelect},
     {true, "Set Log Mode", ICON_LOG_MODE, &onSetLogModeSelect},
     {true, "Set Log Format", ICON_LOG_FORMAT, &onSetLogFormatSelect},
-    {true, "Show Location", ICON_NAVIGATION, &onShowLocationSelect},
+    // {true, "Show Location", ICON_NAVIGATION, &onShowLocationSelect},
     {true, "Link to Logger", ICON_PAIR_LOGGER, &onPairWithLoggerSelect},
     {true, "App Settings", ICON_APP_SETTINGS, &onAppSettingSelect},
 };
@@ -570,7 +575,7 @@ void onShowLocationSelect(iconmenu_t* item) {
 }
 
 bool runPairWithLogger() {
-  const String DEVICE_NAMES[] = {"747PRO GPS", "HOLUX_M-241"};
+  const String DEVICE_NAMES[] = {LOGGER_747PRO, LOGGER_M241};
   const int8_t DEVICE_COUNT = 2;
 
   // draw a message dialog frame and clear the navigation bar
