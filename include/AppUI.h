@@ -18,30 +18,29 @@ typedef enum {
 } btnid_t;
 
 typedef struct _navitem {
-  const char *caption;
+  const char* caption;
   bool enabled;
 } navitem_t;
 
 typedef struct _navmenu {
   navitem_t items[3];
-  void (*onSelect)(_navmenu *);
+  void (*onSelect)(_navmenu*);
 } navmenu_t;
 
-typedef struct _mainmenuitem {
-  const char *caption;
-  const uint8_t *iconData;
+typedef struct _mainmenu {
   bool enabled;
-  void (*onSelect)(_mainmenuitem *);
+  const char* caption;
+  const uint8_t* iconData;
+  void (*onSelect)(_mainmenu*);
 } iconmenu_t;
 
-typedef struct _textmenuitem {
-  const char *caption;
-  char hintText[80];
-  char valueDescr[20];
+typedef struct _textmenu {
   bool enabled;
-  void (*onSelectItem)(_textmenuitem *);
-  void (*onUpdateDescr)(_textmenuitem *);
-  void *var;
+  const char* caption;
+  char hintText[80];
+  void (*getValueText)(_textmenu*, char*, size_t);
+  void (*onSelect)(_textmenu*);
+  void* variable;
 } textmenu_t;
 
 typedef struct _uiarea {
@@ -71,11 +70,11 @@ class AppUI {
   const static int16_t LOOP_WAIT = 70;
 
   TFT_eSprite sprite = TFT_eSprite(&M5.Lcd);
-  Button *buttons[3];
+  Button* buttons[3];
 
-  const uint8_t *appIcon;
+  const uint8_t* appIcon;
   uint16_t appIconColor;
-  const char *appTitle;
+  const char* appTitle;
   char appHint[2][APP_HINT_LEN];
   void (*idleCallback)();
   uint32_t idleTimeout;
@@ -89,37 +88,37 @@ class AppUI {
   const uiarea_t DIALOG_AREA = {(int16_t)(CLIENT_AREA.w - 8), (int16_t)(CLIENT_AREA.h - 8),
                                 (int16_t)(CLIENT_AREA.x + 4), (int16_t)(CLIENT_AREA.y + 4)};
 
-  btnid_t checkButtonInput(navmenu_t *nav);
-  void drawTextMenu(const char *title, textmenu_t *menu, int8_t itemCount, int8_t top, int8_t select);
-  void drawMainMenu(iconmenu_t *menu, int8_t itemCount, int8_t top, int8_t select);
+  btnid_t checkButtonInput(navmenu_t* nav);
+  void drawTextMenu(const char* title, textmenu_t* menu, int8_t itemCount, int8_t top, int8_t select);
+  void drawMainMenu(iconmenu_t* menu, int8_t itemCount, int8_t top, int8_t select);
   void drawAppIcon(int16_t x, int16_t y);
   void drawBatteryIcon(int16_t x, int16_t y);
-  void drawBitmap(const uint8_t *iconData, int16_t x, int16_t y, int16_t color);
-  void drawBitmap(const uint8_t *iconData, int16_t x, int16_t y);
+  void drawBitmap(const uint8_t* iconData, int16_t x, int16_t y, int16_t color);
+  void drawBitmap(const uint8_t* iconData, int16_t x, int16_t y);
   void drawBluetoothIcon(int16_t x, int16_t y);
   void drawSDcardIcon(int16_t x, int16_t y);
-  uisize_t getBitmapSize(const uint8_t *iconData);
-  uint16_t getBitmapColor(const uint8_t *iconData);
+  uisize_t getBitmapSize(const uint8_t* iconData);
+  uint16_t getBitmapColor(const uint8_t* iconData);
 
  public:
   AppUI();
   ~AppUI();
 
-  void drawDialogFrame(const char *title);
+  void drawDialogFrame(const char* title);
   void drawDialogText(int16_t color, int8_t line, String msg);
   void drawDialogProgress(int32_t current, int32_t max);
   void drawTitleBar();
-  void drawNavBar(navmenu_t *nav);
-  void setAppHints(const char *into1, const char *info2);
-  void setAppIcon(const uint8_t *icon, uint16_t color);
-  void setAppTitle(const char *title);
+  void drawNavBar(navmenu_t* nav);
+  void setAppHints(const char* into1, const char* info2);
+  void setAppIcon(const uint8_t* icon, uint16_t color);
+  void setAppTitle(const char* title);
   void setIconVisible(bool btVisible, bool sdVisible);
   void setSDcardStatus(bool mounted);
   void setBluetoothStatus(bool active);
   void setIdleCallback(void (*callback)(), uint32_t timeout);
-  btnid_t promptCustom(navmenu_t *nav);
+  btnid_t promptCustom(navmenu_t* nav);
   btnid_t promptOk();
   btnid_t promptOkCancel();
-  void openTextMenu(const char *title, textmenu_t *menu, int8_t itemCount, bool runOnce);
-  void openIconMenu(iconmenu_t *menu, int8_t itemCount);
+  void openTextMenu(const char* title, textmenu_t* menu, int8_t itemCount, bool runOnce);
+  void openIconMenu(iconmenu_t* menu, int8_t itemCount);
 };

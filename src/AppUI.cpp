@@ -21,14 +21,14 @@ AppUI::~AppUI() {
   sprite.deleteSprite();
 }
 
-void AppUI::drawBitmap(const uint8_t *iconData, int16_t x, int16_t y) {
+void AppUI::drawBitmap(const uint8_t* iconData, int16_t x, int16_t y) {
   if (iconData == NULL) return;
 
   uint16_t iconColor = getBitmapColor(iconData);
   drawBitmap(iconData, x, y, iconColor);
 }
 
-void AppUI::drawBitmap(const uint8_t *iconData, int16_t x, int16_t y, int16_t color) {
+void AppUI::drawBitmap(const uint8_t* iconData, int16_t x, int16_t y, int16_t color) {
   // icon data format:
   // - 1st byte: uint8_t width
   // - 2nd byte: uint8_t height
@@ -118,7 +118,7 @@ void AppUI::drawDialogText(int16_t color, int8_t row, String line) {
   sprite.deleteSprite();
 }
 
-void AppUI::drawDialogFrame(const char *title) {
+void AppUI::drawDialogFrame(const char* title) {
   uisize_t titleBarSize = {DIALOG_AREA.w, 28};
   uipos_t titlePos = {4, 3};
 
@@ -146,7 +146,7 @@ void AppUI::drawDialogFrame(const char *title) {
  * @param top top item index
  * @param select selected item index
  */
-void AppUI::drawMainMenu(iconmenu_t *menu, int8_t itemCount, int8_t top, int8_t select) {
+void AppUI::drawMainMenu(iconmenu_t* menu, int8_t itemCount, int8_t top, int8_t select) {
   uisize_t border = {8, 8};
   uisize_t margin = {6, 8};
   uipos_t btnPos0 = {(int16_t)(CLIENT_AREA.x + border.w), border.h};
@@ -166,7 +166,7 @@ void AppUI::drawMainMenu(iconmenu_t *menu, int8_t itemCount, int8_t top, int8_t 
     int8_t idx = top + i;
     if (idx >= itemCount) break;
 
-    iconmenu_t *mi = menu + idx;
+    iconmenu_t* mi = menu + idx;
     uipos_t btnPos = {(int16_t)(btnPos0.x + ((btnSize.w + margin.w) * (i % 3))),
                       (int16_t)(btnPos0.y + ((btnSize.h + margin.h) * (i / 3)))};
     uipos_t btnTextPos = {(int16_t)(btnPos.x + (btnSize.w / 2)), (int16_t)(btnPos.y + (btnSize.h - textOffset))};
@@ -197,7 +197,7 @@ void AppUI::drawMainMenu(iconmenu_t *menu, int8_t itemCount, int8_t top, int8_t 
  * Draw the navigation bar at the bottom of the screen.
  * @param navi Navigation menu data
  */
-void AppUI::drawNavBar(navmenu_t *nav) {
+void AppUI::drawNavBar(navmenu_t* nav) {
   int16_t marginX = 8;
   uisize_t navSize = {84, NAV_AREA.h};
   uipos_t navPos0 = {(int16_t)((NAV_AREA.w / 2) - ((navSize.w * 1.5) + marginX)), 0};
@@ -219,7 +219,7 @@ void AppUI::drawNavBar(navmenu_t *nav) {
   // 物理ボタンに対応する操作ナビゲーションボタンを3つ左から描画
   for (int16_t i = 0; i < 3; i++) {
     // 対象のボタンアイテム情報を取得
-    navitem_t *ni = &(nav->items[i]);
+    navitem_t* ni = &(nav->items[i]);
 
     // ボタンの描画位置を計算
     uipos_t navPos = {(int16_t)(navPos0.x + ((marginX + navSize.w) * i)), navPos0.y};
@@ -240,7 +240,7 @@ void AppUI::drawNavBar(navmenu_t *nav) {
   sprite.deleteSprite();
 }
 
-uint16_t AppUI::getBitmapColor(const uint8_t *iconData) {
+uint16_t AppUI::getBitmapColor(const uint8_t* iconData) {
   if (iconData == NULL) return 0;
 
   iconData += 2;  // skip the icon size
@@ -249,7 +249,7 @@ uint16_t AppUI::getBitmapColor(const uint8_t *iconData) {
   return iconColor;
 }
 
-uisize_t AppUI::getBitmapSize(const uint8_t *iconData) {
+uisize_t AppUI::getBitmapSize(const uint8_t* iconData) {
   uisize_t iconSize = {0, 0};
 
   if (iconData == NULL) return iconSize;
@@ -381,7 +381,7 @@ void AppUI::drawBatteryIcon(int16_t x, int16_t y) {
   }
 }
 
-btnid_t AppUI::checkButtonInput(navmenu_t *nav) {
+btnid_t AppUI::checkButtonInput(navmenu_t* nav) {
   // update button status
   M5.update();
   for (int i = 0; i < 3; i++) {
@@ -393,16 +393,16 @@ btnid_t AppUI::checkButtonInput(navmenu_t *nav) {
   return BID_NONE;
 }
 
-void AppUI::setAppTitle(const char *title) {
+void AppUI::setAppTitle(const char* title) {
   appTitle = title;
 }
 
-void AppUI::setAppIcon(const uint8_t *icon, uint16_t color) {
+void AppUI::setAppIcon(const uint8_t* icon, uint16_t color) {
   appIcon = icon;
   appIconColor = color;
 }
 
-void AppUI::setAppHints(const char *hint1, const char *hint2) {
+void AppUI::setAppHints(const char* hint1, const char* hint2) {
   strncpy(appHint[0], "", APP_HINT_LEN);
   strncpy(appHint[1], "", APP_HINT_LEN);
 
@@ -437,7 +437,7 @@ void AppUI::setSDcardStatus(bool mounted) {
   drawTitleBar();
 }
 
-btnid_t AppUI::promptCustom(navmenu_t *nav) {
+btnid_t AppUI::promptCustom(navmenu_t* nav) {
   drawNavBar(nav);
 
   uint32_t idleStart = millis();
@@ -479,7 +479,7 @@ btnid_t AppUI::promptOkCancel() {
   return btn;
 }
 
-void AppUI::drawTextMenu(const char *title, textmenu_t *menu, int8_t itemCount, int8_t top, int8_t select) {
+void AppUI::drawTextMenu(const char* title, textmenu_t* menu, int8_t itemCount, int8_t top, int8_t select) {
   uisize_t border = {6, 6};
   uisize_t margin = {0, 4};
   uiarea_t titleArea = {(int16_t)(CLIENT_AREA.w - (border.w * 2)), 18,  //
@@ -508,7 +508,7 @@ void AppUI::drawTextMenu(const char *title, textmenu_t *menu, int8_t itemCount, 
     int8_t idx = top + i;
     if (idx >= itemCount) break;
 
-    textmenu_t *mi = menu + idx;
+    textmenu_t* mi = menu + idx;
 
     uipos_t menuPos = {menuPos0.x, (int16_t)(menuPos0.y + ((menuSize.h + margin.h) * i))};
     uipos_t captionPos = {(int16_t)(menuPos.x + 4), (int16_t)(menuPos.y + 4)};
@@ -521,9 +521,12 @@ void AppUI::drawTextMenu(const char *title, textmenu_t *menu, int8_t itemCount, 
     sprite.setTextColor(BLACK);
     sprite.drawString(mi->caption, captionPos.x, captionPos.y, 2);
     sprite.drawString(mi->hintText, descrPos.x, descrPos.y, 1);
-    if (mi->valueDescr != NULL) {
-      sprite.setTextColor(BLUE);
-      sprite.drawRightString(mi->valueDescr, valuePos.x, valuePos.y, 2);
+    sprite.setTextColor(BLUE);
+    if (mi->getValueText) {
+      char buf[32];
+      mi->getValueText(mi, buf, sizeof(buf));
+
+      sprite.drawRightString(buf, valuePos.x, valuePos.y, 2);
     }
   }
 
@@ -531,7 +534,7 @@ void AppUI::drawTextMenu(const char *title, textmenu_t *menu, int8_t itemCount, 
   sprite.deleteSprite();
 }
 
-void AppUI::openTextMenu(const char *title, textmenu_t *menu, int8_t itemCount, bool runOnce) {
+void AppUI::openTextMenu(const char* title, textmenu_t* menu, int8_t itemCount, bool runOnce) {
   navmenu_t nav;
   nav.items[0] = {"Prev", true};
   nav.items[1] = {"Next", true};
@@ -542,11 +545,6 @@ void AppUI::openTextMenu(const char *title, textmenu_t *menu, int8_t itemCount, 
   int8_t select = 0;
 
   Serial.printf("openTextMenu: %s\n", title);
-
-  for (int8_t i = 0; i < itemCount; i++) {
-    textmenu_t *ci = &menu[i];
-    if (ci->onUpdateDescr != NULL) ci->onUpdateDescr(&menu[i]);
-  }
 
   bool endFlag = false;
   bool needSave = false;
@@ -581,19 +579,18 @@ void AppUI::openTextMenu(const char *title, textmenu_t *menu, int8_t itemCount, 
       break;
 
     case BID_BTN_C:  // call the onSelect function of the selected item
-      textmenu_t *ci = &menu[select];
+      textmenu_t* ci = &menu[select];
       if (ci->enabled) {
-        if (ci->onSelectItem != NULL) ci->onSelectItem(ci);
-        if (ci->onUpdateDescr != NULL) ci->onUpdateDescr(ci);
+        if (ci->onSelect != NULL) ci->onSelect(ci);
 
-        endFlag = (ci->onSelectItem == NULL) || (runOnce);
+        endFlag = (ci->onSelect == NULL) || (runOnce);
       }
       break;
     }
   }
 }
 
-void AppUI::openIconMenu(iconmenu_t *menu, int8_t itemCount) {
+void AppUI::openIconMenu(iconmenu_t* menu, int8_t itemCount) {
   navmenu_t nav;
   nav.items[0] = {"Prev", true};
   nav.items[1] = {"Next", true};
@@ -619,7 +616,7 @@ void AppUI::openIconMenu(iconmenu_t *menu, int8_t itemCount) {
       break;
 
     case BID_BTN_C:  // call the onSelect function of the selected item
-      iconmenu_t *mi = &menu[select];
+      iconmenu_t* mi = &menu[select];
       if (mi->enabled) {
         if (mi->onSelect != NULL) mi->onSelect(mi);
       }
