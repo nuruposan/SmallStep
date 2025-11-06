@@ -49,7 +49,7 @@ typedef struct _appconfig {
   uint32_t logFormat;               // log format / what fields to be recorded
 } appconfig_t;
 
-// general functions
+/* general functions */
 void saveAppConfig();
 void loadAppConfig(bool);
 bool isZeroedBytes(void*, uint16_t);
@@ -62,7 +62,7 @@ uint16_t makeNewFileName(char*, char*, uint32_t);
 void updateAppHint();
 char* setBoolDescr(char*, bool, size_t);
 
-// application functions
+/* application functions */
 bool runDownloadLog();
 bool runFixRTCtime();
 bool runPairWithLogger();
@@ -70,7 +70,7 @@ bool runClearFlash();
 bool runSetLogFormat();
 bool runSetLogMode(logmodeset_t*);
 
-// system event handler
+/* system event handler */
 void onAppInputIdle();
 void onBTStatusUpdate(esp_spp_cb_event_t, esp_spp_cb_param_t*);
 void onProgressUpdate(int32_t, int32_t);
@@ -85,6 +85,10 @@ void onSetLogFormatSelect(iconmenu_t*);
 void onSetLogModeSelect(iconmenu_t*);
 void onSetLogModeSelect2(textmenu_t*);
 void onAppSettingSelect(iconmenu_t*);
+
+/**/
+void exitMenuGetValText(textmenu_t*, char*, size_t);
+void openSubMenuGetValText(textmenu_t*, char*, size_t);
 
 /* Event handlers for output setting menu */
 void trackModeOnSelect(textmenu_t*);
@@ -195,15 +199,15 @@ iconmenu_t menuMain[] = {
 // preset selection menu
 textmenu_t selectPreset[] = {
     // {enabled, caption, explanation, valueDescr, onSelect, variable}
-    {true, "Preset #1", "update_by_sprintf", NULL, &onSetLogModeSelect2, &cfg.logMode1},
-    {true, "Preset #2", "update_by_sprintf", NULL, &onSetLogModeSelect2, &cfg.logMode2},
-    {true, "Cancel", "Return to the main menu", NULL, NULL, NULL},
+    {true, "Preset #1", "update_by_sprintf", &openSubMenuGetValText, &onSetLogModeSelect2, &cfg.logMode1},
+    {true, "Preset #2", "update_by_sprintf", &openSubMenuGetValText, &onSetLogModeSelect2, &cfg.logMode2},
+    {true, "Cancel", "Return to the main menu", &exitMenuGetValText, NULL, NULL},
 };
 
 // output settings menu
 textmenu_t cfgOutput[] = {
     // {enabled, caption, explanation, valueDescr, onSelect, variable}
-    {true, "Back", "Exit this menu", NULL, NULL, NULL},                     //
+    {true, "Back", "Exit this menu", &exitMenuGetValText, NULL, NULL},      //
     {true, "Track mode", "How to divide tracks in GPX file",                //
      &trackModeGetValText, &trackModeOnSelect, &cfg.trackMode},             //
     {true, "Timezone offset", "UTC offset for 'a track per day' mode",      //
@@ -215,7 +219,7 @@ textmenu_t cfgOutput[] = {
 // log mode settings menu #1
 textmenu_t cfgLogMode1[] = {
     // {enabled, caption, explanation, valueDescr, onSelect, variable}
-    {true, "Back", "Exit this menu", NULL, NULL, NULL},                          //
+    {true, "Back", "Exit this menu", &exitMenuGetValText, NULL, NULL},           //
     {true, "Log by distance", "Auto-log by moved distance",                      //
      &logByDistGetValText, &logByDistOnSelect, &cfg.logMode1.distIdx},           //
     {true, "Log by time", "Auto-log by elapsed time",                            //
@@ -229,7 +233,7 @@ textmenu_t cfgLogMode1[] = {
 // log mode settings menu #2
 textmenu_t cfgLogMode2[] = {
     // {enabled, caption, explanation, valueDescr, onSelect, variable}
-    {true, "Back", "Exit this menu", NULL, NULL, NULL},                    //
+    {true, "Back", "Exit this menu", &exitMenuGetValText, NULL, NULL},     //
     {true, "Log by distance", "Auto-log by moved distance",                //
      &logByDistGetValText, &logByDistOnSelect, &cfg.logMode2.distIdx},     //
     {true, "Log by time", "Auto-log by elapsed time",                      //
@@ -243,7 +247,7 @@ textmenu_t cfgLogMode2[] = {
 // log format settings sub-menu item list
 textmenu_t cfgLogFormat[] = {
     // {enabled, caption, explanation, valueDescr, onSelect, variable}
-    {true, "Back", "Exit this menu", NULL, NULL, NULL},                 //
+    {true, "Back", "Exit this menu", &exitMenuGetValText, NULL, NULL},  //
     {true, "Load defaults", "Reset to the default format",              //
      &loadDefaultGetValText, &loadDefaultOnSelect, &cfg.logFormat},     //
     {false, "TIME (always on)", "Date and time data in seconds",        //
@@ -278,17 +282,18 @@ textmenu_t* cfgResetFormat = &cfgLogFormat[1];
 // application settings menu item list
 textmenu_t cfgMain[] = {
     // {enabled, caption, explanation, valueDescr, onSelect, variable}
-    {true, "Save and exit", "Return to the main menu", NULL, NULL, NULL},
+    {true, "Save and exit", "Return to the main menu",  //
+     &exitMenuGetValText, NULL, NULL},
     {true, "Pairing with a GPS logger", "Discover supported GPS loggers",  //
      NULL, &pairLoggerOnSelect, NULL},
     {true, "Output settings", "GPX log output options",  //
-     NULL, &outputSubMenuOnSelect, NULL},
+     &openSubMenuGetValText, &outputSubMenuOnSelect, NULL},
     {true, "Log mode preset #1", "Auto-log settings of the logger",  //
-     NULL, &logMode1SubMenuOnSelect, NULL},
+     &openSubMenuGetValText, &logMode1SubMenuOnSelect, NULL},
     {true, "Log mode preset #2", "Auto-log settings of the logger",  //
-     NULL, &logMode2SubMenuOnSelect, NULL},
+     &openSubMenuGetValText, &logMode2SubMenuOnSelect, NULL},
     {true, "Log format preset", "Contents to be stored on the logger",  //
-     NULL, &logFormatSubMenuOnSelect, NULL},
+     &openSubMenuGetValText, &logFormatSubMenuOnSelect, NULL},
     {true, "Beep sound", "Play beep sound when a task is finished",  //
      &enableBeepGetValText, &enableBeepOnSelect, NULL},
     {false, "----", "", NULL, NULL, NULL},
@@ -830,6 +835,14 @@ void onAppSettingSelect(iconmenu_t* item) {
 
   // save the app configuration after the menu is closed
   saveAppConfig();
+}
+
+void exitMenuGetValText(textmenu_t* item, char* buf, size_t len) {
+  strncpy(buf, "<<", len);
+}
+
+void openSubMenuGetValText(textmenu_t* item, char* buf, size_t len) {
+  strncpy(buf, ">>", len);
 }
 
 void trackModeOnSelect(textmenu_t* item) {
